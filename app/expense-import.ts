@@ -16,6 +16,21 @@ export const expenseCategories = [
   "Other",
 ] as const;
 
+export const amazonBusinessCsvColumns = [
+  "Order Date", "Order ID", "Account Group", "PO Number", "Order Quantity", "Currency", "Order Subtotal",
+  "Order Shipping & Handling", "Order Promotion", "Order Tax", "Order Net Total", "Order Status", "Approver",
+  "Order Receiving Status", "Order Received Quantity", "Account User", "Account User Email", "Invoice Status",
+  "Total Amount", "Invoice Due Amount", "Invoice Issue Date", "Invoice Due Date", "Payment Reference ID", "Payment Date",
+  "Payment Amount", "Payment Instrument Type", "Payment Identifier", "Amazon-Internal Product Category", "ASIN", "Title",
+  "UNSPSC", "Segment", "Family", "Class", "Commodity", "Brand Code", "Brand", "Manufacturer", "National Stock Number",
+  "Item model number", "Part number", "Product Condition", "Company Compliance", "Listed PPU", "Purchase PPU",
+  "Item Quantity", "Item Subtotal", "Item Shipping & Handling", "Item Promotion", "Item Tax", "Item Net Total",
+  "PO Line Item Id", "Tax Exemption Applied", "Tax Exemption Type", "Tax Exemption Opt Out", "Pricing Savings program",
+  "Pricing Discount Applied", "Receiving Status", "Received Quantity", "Received Date", "Receiver Name", "Receiver Email",
+  "GL Code", "Department", "Cost Center", "Project Code", "Location", "Custom Field 1", "Seller Name",
+  "Seller Credentials", "Seller City", "Seller State", "Seller ZipCode",
+] as const;
+
 export type ExpenseCategory = typeof expenseCategories[number];
 
 export type ImportedExpense = {
@@ -27,15 +42,18 @@ export type ImportedExpense = {
   note: string;
   source: "import";
   importedAt: string;
+  fields: Record<string, string>;
 };
 
 export type ExpenseImportPreview = {
   fileName: string;
   ready: ImportedExpense[];
+  updates: ImportedExpense[];
   duplicates: string[];
   invalid: string[];
   years: number[];
   readyTotal: number;
+  columns: string[];
 };
 
 export const normalizeExpenseKey = (key: string) => key.trim().toLowerCase().replace(/\s+/g, "");
@@ -132,6 +150,7 @@ export function parseExpenseImportText(
   importedAt = new Date().toISOString(),
 ): ExpenseImportPreview {
   let records: Array<Record<string, unknown>> = [];
+  let sourceColumns: Array<{ key: string; label: string }> = [];
   const trimmed = text.trim();
   if (fileName.toLowerCase().endsWith(".json") || trimmed.startsWith("[") || trimmed.startsWith("{")) {
     const parsed = JSON.parse(text) as unknown;
@@ -140,14 +159,18 @@ export function parseExpenseImportText(
       : typeof parsed === "object" && parsed && Array.isArray((parsed as { expenses?: unknown[] }).expenses)
         ? (parsed as { expenses: unknown[] }).expenses
         : [];
-    records = list
-      .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
-      .map(canonicalRecord);
+    const objectRecords = list.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"));
+    const labels = Array.from(new Set(objectRecords.flatMap((record) => Object.keys(record).filter((key) => key !== "fields"))));
+    sourceColumns = labels.map((label) => ({ key: canonicalField(label), label }));
+    records = objectRecords.map((record) => ({ ...canonicalRecord(record), fields: record.fields }));
   } else {
     const rows = parseCsvRows(text);
     if (rows.length > 1) {
-      const headers = rows[0].map(canonicalField);
-      records = rows.slice(1).map((row) => Object.fromEntries(headers.map((header, index) => [header, row[index] ?? ""])));
+      sourceColumns = rows[0].map((header, index) => {
+        const label = header.replace(/^\uFEFF/, "").trim() || `Column ${index + 1}`;
+        return { key: canonicalField(label), label };
+      });
+      records = rows.slice(1).map((row) => Object.fromEntries(sourceColumns.map((column, index) => [column.key, row[index] ?? ""])));
     }
   }
 
@@ -168,6 +191,10 @@ export function parseExpenseImportText(
       const titleNote = titles.slice(0, 3).join("; ");
       const moreItems = titles.length > 3 ? ` (+${titles.length - 3} more items)` : "";
       const categoryNote = amazonCategories[0] ? ` · Amazon category: ${amazonCategories[0]}` : "";
+      const fields = Object.fromEntries(sourceColumns.map((column) => {
+        const values = Array.from(new Set(orderRows.map((record) => String(record[column.key] ?? "").trim()).filter(Boolean)));
+        return [column.label, values.join(" · ")];
+      }));
       return {
         externalkey: orderId,
         vendor: sellers.slice(0, 3).join(", ") || "Amazon",
@@ -175,11 +202,13 @@ export function parseExpenseImportText(
         amount: valueFor(first, ["ordernettotal"]),
         date: valueFor(first, ["orderdate"]),
         note: `${titleNote}${moreItems}${categoryNote}`,
+        fields,
       };
     });
   }
 
   const ready: ImportedExpense[] = [];
+  const updates: ImportedExpense[] = [];
   const duplicates: string[] = [];
   const invalid: string[] = [];
   const existingKeys = new Set(existingExternalKeys.map(normalizeExpenseKey));
@@ -203,12 +232,16 @@ export function parseExpenseImportText(
       invalid.push(`${label}: ${!normalizedKey ? "missing unique key" : !date ? "invalid date" : "invalid amount"}`);
       return;
     }
-    if (existingKeys.has(normalizedKey) || seen.has(normalizedKey)) {
+    if (seen.has(normalizedKey)) {
       duplicates.push(externalKey);
       return;
     }
     seen.add(normalizedKey);
-    ready.push({
+    const nestedFields = record.fields && typeof record.fields === "object" && !Array.isArray(record.fields) ? record.fields as Record<string, unknown> : null;
+    const fields = nestedFields
+      ? Object.fromEntries(Object.entries(nestedFields).map(([key, value]) => [key, String(value ?? "")]))
+      : Object.fromEntries(sourceColumns.map((column) => [column.label, String(record[column.key] ?? "").trim()]));
+    const importedExpense: ImportedExpense = {
       externalKey,
       vendor: String(valueFor(record, aliases.vendor) ?? "Unknown vendor").trim(),
       category: normalizeExpenseCategory(valueFor(record, aliases.category)),
@@ -217,10 +250,14 @@ export function parseExpenseImportText(
       note: String(valueFor(record, aliases.note) ?? "").trim(),
       source: "import",
       importedAt,
-    });
+      fields,
+    };
+    if (existingKeys.has(normalizedKey)) updates.push(importedExpense);
+    else ready.push(importedExpense);
   });
 
-  const years = Array.from(new Set(ready.map((expense) => Number(expense.date.slice(0, 4))))).filter(Number.isFinite).sort((a, b) => b - a);
-  const readyTotal = Math.round(ready.reduce((sum, expense) => sum + expense.amount, 0) * 100) / 100;
-  return { fileName, ready, duplicates, invalid, years, readyTotal };
+  const importable = [...ready, ...updates];
+  const years = Array.from(new Set(importable.map((expense) => Number(expense.date.slice(0, 4))))).filter(Number.isFinite).sort((a, b) => b - a);
+  const readyTotal = Math.round(importable.reduce((sum, expense) => sum + expense.amount, 0) * 100) / 100;
+  return { fileName, ready, updates, duplicates, invalid, years, readyTotal, columns: sourceColumns.map((column) => column.label) };
 }

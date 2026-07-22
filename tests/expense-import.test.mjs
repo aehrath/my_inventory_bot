@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { parseExpenseImportText } from "../app/expense-import.ts";
+import { amazonBusinessCsvColumns, parseExpenseImportText } from "../app/expense-import.ts";
 
 const fixture = new URL("./fixtures/amazon-business-orders.csv", import.meta.url);
 
@@ -18,13 +18,25 @@ test("groups Amazon Business rows into unique order expenses", async () => {
   assert.equal(preview.ready[0].category, "Office equipment");
   assert.match(preview.ready[0].note, /Commercial laminator/);
   assert.match(preview.ready[0].note, /Laminating film/);
+  assert.equal(preview.ready[0].fields["Order ID"], "111-1111111-1111111");
+  assert.equal(Object.keys(preview.ready[0].fields).length, 10);
+  assert.match(preview.ready[0].fields.Title, /Commercial laminator/);
+  assert.match(preview.ready[0].fields.Title, /Laminating film/);
   assert.equal(preview.ready[1].category, "Office supplies");
 });
 
-test("skips an Amazon order that already exists", async () => {
+test("enriches an existing Amazon order without creating a duplicate", async () => {
   const text = await readFile(fixture, "utf8");
   const preview = parseExpenseImportText(text, "orders.csv", [" 111-1111111-1111111 "], "2026-07-22T00:00:00.000Z");
 
   assert.equal(preview.ready.length, 1);
-  assert.deepEqual(preview.duplicates, ["111-1111111-1111111"]);
+  assert.equal(preview.updates.length, 1);
+  assert.equal(preview.updates[0].externalKey, "111-1111111-1111111");
+  assert.deepEqual(preview.duplicates, []);
+});
+
+test("defines every column in the provided Amazon Business export", () => {
+  assert.equal(amazonBusinessCsvColumns.length, 73);
+  assert.equal(amazonBusinessCsvColumns[0], "Order Date");
+  assert.equal(amazonBusinessCsvColumns.at(-1), "Seller ZipCode");
 });
