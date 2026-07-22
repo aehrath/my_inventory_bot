@@ -11,7 +11,7 @@ import type { TaxAddress, TaxRateLookup, TaxRateLookupResponse, TaxSourceStatus 
 type View = "dashboard" | "products" | "activity" | "expenses" | "taxes" | "data" | "changelog";
 type MovementType = "purchase" | "sale" | "personal_use" | "adjustment";
 type Product = {
-  id: string; sku: string; name: string; category: string; quantity: number; unitCost: number;
+  id: string; sku: string; name: string; vendor: string; category: string; quantity: number; unitCost: number;
   salePrice: number; reorderPoint: number; salesTaxPaid: boolean; createdAt: string;
 };
 type Movement = {
@@ -29,7 +29,7 @@ type LocalTaxRule = { id: string; name: string; state: string; city: string; pos
 type AddressTaxRate = TaxRateLookup & { addressKey: string; checkedAt: string };
 type TaxUpdateAudit = { id: string; checkedAt: string; appliedAt: string | null; checkedAddresses: number; availableUpdates: number; appliedUpdates: number; status: "checked" | "applied"; sources: string[] };
 type Settings = { businessName: string; taxYear: number; beginningInventory: number; ownAddress: Address; stateTaxes: Record<string, StateTaxSetting>; localTaxRules: LocalTaxRule[]; addressTaxRates: AddressTaxRate[]; taxUpdateHistory: TaxUpdateAudit[]; expenseColumnOrder: string[]; expenseVisibleColumns: string[] };
-type AppState = { version: 6; products: Product[]; movements: Movement[]; expenses: Expense[]; settings: Settings };
+type AppState = { version: 7; products: Product[]; movements: Movement[]; expenses: Expense[]; settings: Settings };
 type Metrics = { inventoryValue: number; units: number; revenue: number; inventoryCogs: number; additionalCogs: number; cogs: number; salesTax: number; stateSalesTax: number; localSalesTax: number; useTax: number; stateUseTax: number; localUseTax: number; expenses: number; expenseRecordsTotal: number; purchases: number; grossProfit: number; taxableIncome: number };
 type ExpenseColumnDefinition = { key: string; label: string; width: string; field?: string };
 type SortDirection = "asc" | "desc";
@@ -108,13 +108,13 @@ const resolveAddressRate = (address: Address, settings: Settings, liveRate?: Tax
 };
 
 const seed: AppState = {
-  version: 6,
+  version: 7,
   settings: { businessName: "Juniper & Co.", taxYear: nowYear, beginningInventory: 3180, ownAddress: blankAddress("CA"), stateTaxes: defaultStateTaxSettings("CA"), localTaxRules: [], addressTaxRates: [], taxUpdateHistory: [], expenseColumnOrder: defaultExpenseColumnOrder, expenseVisibleColumns: defaultExpenseVisibleColumns },
   products: [
-    { id: "p1", sku: "CER-101", name: "Speckled Ceramic Mug", category: "Home", quantity: 24, unitCost: 8.5, salePrice: 24, reorderPoint: 8, salesTaxPaid: false, createdAt: `${nowYear}-01-05` },
-    { id: "p2", sku: "CAN-204", name: "Cedar + Moss Candle", category: "Wellness", quantity: 7, unitCost: 7.25, salePrice: 22, reorderPoint: 10, salesTaxPaid: true, createdAt: `${nowYear}-01-09` },
-    { id: "p3", sku: "TOT-310", name: "Canvas Market Tote", category: "Accessories", quantity: 31, unitCost: 5.8, salePrice: 18, reorderPoint: 12, salesTaxPaid: false, createdAt: `${nowYear}-02-02` },
-    { id: "p4", sku: "NOT-118", name: "Linen Notebook", category: "Stationery", quantity: 15, unitCost: 4.2, salePrice: 14, reorderPoint: 6, salesTaxPaid: true, createdAt: `${nowYear}-02-18` },
+    { id: "p1", sku: "CER-101", name: "Speckled Ceramic Mug", vendor: "Clay & Kiln Supply", category: "Home", quantity: 24, unitCost: 8.5, salePrice: 24, reorderPoint: 8, salesTaxPaid: false, createdAt: `${nowYear}-01-05` },
+    { id: "p2", sku: "CAN-204", name: "Cedar + Moss Candle", vendor: "North Coast Candle Co.", category: "Wellness", quantity: 7, unitCost: 7.25, salePrice: 22, reorderPoint: 10, salesTaxPaid: true, createdAt: `${nowYear}-01-09` },
+    { id: "p3", sku: "TOT-310", name: "Canvas Market Tote", vendor: "Harbor Canvas Works", category: "Accessories", quantity: 31, unitCost: 5.8, salePrice: 18, reorderPoint: 12, salesTaxPaid: false, createdAt: `${nowYear}-02-02` },
+    { id: "p4", sku: "NOT-118", name: "Linen Notebook", vendor: "Paper & Flax Studio", category: "Stationery", quantity: 15, unitCost: 4.2, salePrice: 14, reorderPoint: 6, salesTaxPaid: true, createdAt: `${nowYear}-02-18` },
   ],
   movements: [
     { id: "m1", productId: "p1", type: "sale", quantity: 3, unitCost: 8.5, unitPrice: 24, salesTax: 5.22, stateTax: 5.22, localTax: 0, taxRate: 7.25, stateTaxRate: 7.25, localTaxRate: 0, taxJurisdiction: "CA", taxCollected: true, customerAddress: { line1: "210 Market St", city: "San Diego", state: "CA", postalCode: "92101" }, date: `${nowYear}-03-04`, note: "Weekend market" },
@@ -286,16 +286,18 @@ function Dashboard({ state, metrics, onView, onUse }: { state: AppState; metrics
 function Metric({ label, value, note, accent }: { label: string; value: string; note: string; accent: string }) { return <article className={`metric ${accent}`}><span>{label}</span><strong>{value}</strong><small>{note}</small></article>; }
 
 function Products({ state, query, setQuery, onEdit, onUse, onDelete }: { state: AppState; query: string; setQuery: (v: string) => void; onEdit: (p: Product) => void; onUse: (p: Product) => void; onDelete: (p: Product) => void }) {
-  type ProductSortKey = "product" | "quantity" | "unitCost" | "retailValue" | "taxStatus";
+  type ProductSortKey = "product" | "vendor" | "quantity" | "unitCost" | "retailValue" | "taxStatus";
   const [sort, setSort] = useState<{ key: ProductSortKey; direction: SortDirection }>({ key: "product", direction: "asc" });
   const columns: Array<{ key: ProductSortKey; label: string }> = [
     { key: "product", label: "Product" },
+    { key: "vendor", label: "Vendor" },
     { key: "quantity", label: "On hand" },
     { key: "unitCost", label: "Unit cost" },
     { key: "retailValue", label: "Retail value" },
     { key: "taxStatus", label: "Tax status" },
   ];
   const productSortValue = (product: Product): SortValue => {
+    if (sort.key === "vendor") return product.vendor;
     if (sort.key === "quantity") return product.quantity;
     if (sort.key === "unitCost") return product.unitCost;
     if (sort.key === "retailValue") return product.quantity * product.salePrice;
@@ -303,12 +305,12 @@ function Products({ state, query, setQuery, onEdit, onUse, onDelete }: { state: 
     return `${product.name} ${product.sku} ${product.category}`;
   };
   const products = state.products
-    .filter((p) => `${p.name} ${p.sku} ${p.category}`.toLowerCase().includes(query.toLowerCase()))
+    .filter((p) => `${p.name} ${p.sku} ${p.vendor} ${p.category}`.toLowerCase().includes(query.toLowerCase()))
     .sort((left, right) => compareSortValues(productSortValue(left), productSortValue(right), sort.direction));
   const changeSort = (key: ProductSortKey) => setSort((current) => ({ key, direction: current.key === key && current.direction === "asc" ? "desc" : "asc" }));
-  return <section className="panel tablePanel"><div className="toolbar"><label className="search"><span>{icons.search}</span><input aria-label="Search products" placeholder="Search products, SKU, or category" value={query} onChange={(e) => setQuery(e.target.value)} /></label><div className="legend"><span className="dot untaxed" /> Resale purchase — no tax paid</div></div>
+  return <section className="panel tablePanel"><div className="toolbar"><label className="search"><span>{icons.search}</span><input aria-label="Search products" placeholder="Search products, vendors, SKU, or category" value={query} onChange={(e) => setQuery(e.target.value)} /></label><div className="legend"><span className="dot untaxed" /> Resale purchase — no tax paid</div></div>
     <div className="productTable"><div className="tableHead">{columns.map((column) => <button role="columnheader" aria-sort={sort.key === column.key ? (sort.direction === "asc" ? "ascending" : "descending") : "none"} type="button" key={column.key} className={`stockHeaderCell ${sort.key === column.key ? `sorted ${sort.direction}` : ""}`} onClick={() => changeSort(column.key)}><span>{column.label}</span><span className="sortPair" aria-hidden="true"><i /><b /></span></button>)}<span className="stockHeaderSpacer" /></div>
-    {products.map((p) => <div className="productRow" key={p.id}><div className="productCell"><div className="productGlyph">{p.name.slice(0, 1)}</div><div><strong>{p.name}</strong><span>{p.sku} · {p.category}</span></div></div><div><strong>{p.quantity}</strong><span className={p.quantity <= p.reorderPoint ? "lowText" : "mutedText"}>{p.quantity <= p.reorderPoint ? "Low stock" : `Min ${p.reorderPoint}`}</span></div><strong>{money.format(p.unitCost)}</strong><strong>{money.format(p.quantity * p.salePrice)}</strong><div>{p.salesTaxPaid ? <span className="pill neutral">Tax paid</span> : <span className="pill taxFree">Untaxed resale</span>}</div><div className="rowActions"><button onClick={() => onUse(p)} disabled={p.quantity < 1}>Use one</button><button onClick={() => onEdit(p)}>Edit</button><button className="dangerText" onClick={() => onDelete(p)}>Delete</button></div></div>)}
+    {products.map((p) => <div className="productRow" key={p.id}><div className="productCell"><div className="productGlyph">{p.name.slice(0, 1)}</div><div><strong>{p.name}</strong><span>{p.sku} · {p.category}</span></div></div><div className="vendorCell" title={p.vendor || "Vendor not set"}><strong>{p.vendor || "—"}</strong></div><div><strong>{p.quantity}</strong><span className={p.quantity <= p.reorderPoint ? "lowText" : "mutedText"}>{p.quantity <= p.reorderPoint ? "Low stock" : `Min ${p.reorderPoint}`}</span></div><strong>{money.format(p.unitCost)}</strong><strong>{money.format(p.quantity * p.salePrice)}</strong><div>{p.salesTaxPaid ? <span className="pill neutral">Tax paid</span> : <span className="pill taxFree">Untaxed resale</span>}</div><div className="rowActions"><button onClick={() => onUse(p)} disabled={p.quantity < 1}>Use one</button><button onClick={() => onEdit(p)}>Edit</button><button className="dangerText" onClick={() => onDelete(p)}>Delete</button></div></div>)}
     {!products.length && <Empty text="No products match your search." />}</div></section>;
 }
 
@@ -642,8 +644,8 @@ function LocalTaxRulesPanel({ rules, onChange }: { rules: LocalTaxRule[]; onChan
 }
 
 function ProductModal({ product, onSave, onClose }: { product: Product | null; onSave: (p: Omit<Product, "id" | "createdAt">) => void; onClose: () => void }) {
-  const [draft, setDraft] = useState({ sku: product?.sku ?? "", name: product?.name ?? "", category: product?.category ?? "", quantity: product?.quantity ?? 0, unitCost: product?.unitCost ?? 0, salePrice: product?.salePrice ?? 0, reorderPoint: product?.reorderPoint ?? 5, salesTaxPaid: product?.salesTaxPaid ?? false });
-  return <Modal title={product ? "Edit product" : "Add a product"} eyebrow="Inventory item" onClose={onClose}><form onSubmit={(e) => { e.preventDefault(); onSave(draft); }}><div className="formGrid"><label className="wide">Product name<input required autoFocus value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Speckled ceramic mug" /></label><label>SKU<input required value={draft.sku} onChange={(e) => setDraft({ ...draft, sku: e.target.value.toUpperCase() })} placeholder="MUG-101" /></label><label>Category<input required value={draft.category} onChange={(e) => setDraft({ ...draft, category: e.target.value })} placeholder="Home" /></label><label>Quantity on hand<input required min="0" type="number" value={draft.quantity} onChange={(e) => setDraft({ ...draft, quantity: Number(e.target.value) })} /></label><label>Reorder point<input required min="0" type="number" value={draft.reorderPoint} onChange={(e) => setDraft({ ...draft, reorderPoint: Number(e.target.value) })} /></label><label>Unit cost<input required min="0" step="0.01" type="number" value={draft.unitCost} onChange={(e) => setDraft({ ...draft, unitCost: Number(e.target.value) })} /></label><label>Sale price<input required min="0" step="0.01" type="number" value={draft.salePrice} onChange={(e) => setDraft({ ...draft, salePrice: Number(e.target.value) })} /></label><label className="wide checkLabel"><input type="checkbox" checked={draft.salesTaxPaid} onChange={(e) => setDraft({ ...draft, salesTaxPaid: e.target.checked })} /><span><strong>Sales tax was paid when purchased</strong><small>Leave unchecked for inventory bought tax-free for resale. Personal-use tax comes from your address in settings.</small></span></label></div><ModalActions onClose={onClose} label={product ? "Save changes" : "Add product"} /></form></Modal>;
+  const [draft, setDraft] = useState({ sku: product?.sku ?? "", name: product?.name ?? "", vendor: product?.vendor ?? "", category: product?.category ?? "", quantity: product?.quantity ?? 0, unitCost: product?.unitCost ?? 0, salePrice: product?.salePrice ?? 0, reorderPoint: product?.reorderPoint ?? 5, salesTaxPaid: product?.salesTaxPaid ?? false });
+  return <Modal title={product ? "Edit product" : "Add a product"} eyebrow="Inventory item" onClose={onClose}><form onSubmit={(e) => { e.preventDefault(); onSave({ ...draft, vendor: draft.vendor.trim() }); }}><div className="formGrid"><label className="wide">Product name<input required autoFocus value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Speckled ceramic mug" /></label><label>SKU<input required value={draft.sku} onChange={(e) => setDraft({ ...draft, sku: e.target.value.toUpperCase() })} placeholder="MUG-101" /></label><label>Category<input required value={draft.category} onChange={(e) => setDraft({ ...draft, category: e.target.value })} placeholder="Home" /></label><label className="wide">Vendor<input value={draft.vendor} onChange={(e) => setDraft({ ...draft, vendor: e.target.value })} placeholder="Supplier or manufacturer" /></label><label>Quantity on hand<input required min="0" type="number" value={draft.quantity} onChange={(e) => setDraft({ ...draft, quantity: Number(e.target.value) })} /></label><label>Reorder point<input required min="0" type="number" value={draft.reorderPoint} onChange={(e) => setDraft({ ...draft, reorderPoint: Number(e.target.value) })} /></label><label>Unit cost<input required min="0" step="0.01" type="number" value={draft.unitCost} onChange={(e) => setDraft({ ...draft, unitCost: Number(e.target.value) })} /></label><label>Sale price<input required min="0" step="0.01" type="number" value={draft.salePrice} onChange={(e) => setDraft({ ...draft, salePrice: Number(e.target.value) })} /></label><label className="wide checkLabel"><input type="checkbox" checked={draft.salesTaxPaid} onChange={(e) => setDraft({ ...draft, salesTaxPaid: e.target.checked })} /><span><strong>Sales tax was paid when purchased</strong><small>Leave unchecked for inventory bought tax-free for resale. Personal-use tax comes from your address in settings.</small></span></label></div><ModalActions onClose={onClose} label={product ? "Save changes" : "Add product"} /></form></Modal>;
 }
 
 function MovementModal({ products, initialProduct, settings, onSave, onClose }: { products: Product[]; initialProduct: Product | null; settings: Settings; onSave: (m: Omit<Movement, "id">) => void; onClose: () => void }) {
@@ -737,9 +739,10 @@ function normalizeState(raw: unknown): AppState {
   const expenseColumnOrder = mergeExpenseColumnOrder(Array.isArray(incoming.settings?.expenseColumnOrder) ? incoming.settings.expenseColumnOrder.filter((key): key is string => typeof key === "string") : defaultExpenseColumnOrder, expenseColumns);
   const expenseColumnKeys = new Set(expenseColumns.map((column) => column.key));
   const savedVisibleColumns = Array.isArray(incoming.settings?.expenseVisibleColumns) ? incoming.settings.expenseVisibleColumns.filter((key): key is string => typeof key === "string" && expenseColumnKeys.has(key)) : [];
+  const products = (Array.isArray(incoming.products) ? incoming.products : seed.products).map((product) => ({ ...product, vendor: typeof product.vendor === "string" ? product.vendor.trim() : "" }));
   return {
-    version: 6,
-    products: Array.isArray(incoming.products) ? incoming.products : seed.products,
+    version: 7,
+    products,
     movements: Array.isArray(incoming.movements) ? incoming.movements : seed.movements,
     expenses,
     settings: {

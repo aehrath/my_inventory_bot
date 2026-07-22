@@ -13,6 +13,26 @@ export type ChangelogRelease = {
 
 export const changelogReleases: readonly ChangelogRelease[] = [
   {
+    version: "0.8.0",
+    date: "July 22, 2026",
+    title: "Vendor tracking for products",
+    summary: "Products can now keep their supplier or manufacturer alongside inventory details.",
+    sections: [
+      {
+        title: "Added",
+        items: [
+          "Added a saved Vendor field to the product editor and backup data.",
+          "Added a sortable Vendor column to the Products table.",
+          "Added vendor names to product search.",
+        ],
+      },
+      {
+        title: "Changed",
+        items: ["Existing products and older backups are upgraded safely with an empty vendor value."],
+      },
+    ],
+  },
+  {
     version: "0.7.0",
     date: "July 22, 2026",
     title: "True Wealth-style sortable tables",

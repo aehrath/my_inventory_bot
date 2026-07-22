@@ -4,6 +4,18 @@ All notable changes to StockBot are documented here.
 
 ## Unreleased
 
+## 0.8.0 - 2026-07-22
+
+### Added
+
+- Added a saved Vendor field to the product editor and backup data.
+- Added a sortable Vendor column to the Products table.
+- Added vendor names to product search.
+
+### Changed
+
+- Existing products and older backups are upgraded safely with an empty vendor value.
+
 ## 0.7.0 - 2026-07-22
 
 ### Added

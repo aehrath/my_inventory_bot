@@ -21,12 +21,24 @@ test("includes a visible release changelog", async () => {
   assert.match(page, /label: "Changelog"/);
   assert.match(page, /What&apos;s new in StockBot/);
   assert.match(page, /changelogReleases\.map/);
+  assert.match(changelog, /version: "0\.8\.0"/);
   assert.match(changelog, /version: "0\.7\.0"/);
   assert.match(changelog, /version: "0\.6\.0"/);
   assert.match(changelog, /version: "0\.1\.0"/);
+  assert.match(markdown, /## 0\.8\.0 - 2026-07-22/);
   assert.match(markdown, /## 0\.7\.0 - 2026-07-22/);
   assert.match(markdown, /## 0\.6\.0 - 2026-07-22/);
   assert.match(markdown, /## 0\.1\.0 - 2026-07-22/);
+});
+
+test("stores and displays product vendors", async () => {
+  const page = await read("app/page.tsx");
+  assert.match(page, /name: string; vendor: string; category: string/);
+  assert.match(page, /key: "vendor", label: "Vendor"/);
+  assert.match(page, /className="vendorCell"/);
+  assert.match(page, /<label className="wide">Vendor<input/);
+  assert.match(page, /product\.vendor\.trim\(\)/);
+  assert.match(page, /Search products, vendors, SKU, or category/);
 });
 
 test("uses True Wealth-style sortable headers on every table", async () => {
