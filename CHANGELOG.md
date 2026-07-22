@@ -4,6 +4,18 @@ All notable changes to StockBot are documented here.
 
 ## Unreleased
 
+## 0.7.0 - 2026-07-22
+
+### Added
+
+- Added ascending and descending sorting to Products, Activity, Recent Activity, and Expenses.
+- Added sorting for every configurable Amazon Business source column.
+
+### Changed
+
+- Matched MyTrueWealthBot's light-gray header bands, green rules, cell dividers, and paired arrow indicators.
+- Kept expense headers draggable for column reordering while making a normal click sort the ledger.
+
 ## 0.6.0 - 2026-07-22
 
 ### Added

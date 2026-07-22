@@ -13,6 +13,28 @@ export type ChangelogRelease = {
 
 export const changelogReleases: readonly ChangelogRelease[] = [
   {
+    version: "0.7.0",
+    date: "July 22, 2026",
+    title: "True Wealth-style sortable tables",
+    summary: "Every StockBot table now shares MyTrueWealthBot’s crisp header treatment and sorting controls.",
+    sections: [
+      {
+        title: "Added",
+        items: [
+          "Added ascending and descending sorting to Products, Activity, Recent Activity, and Expenses.",
+          "Added sorting for every configurable Amazon Business source column.",
+        ],
+      },
+      {
+        title: "Changed",
+        items: [
+          "Matched MyTrueWealthBot’s light-gray header bands, green rules, cell dividers, and paired arrow indicators.",
+          "Kept expense headers draggable for column reordering while making a normal click sort the ledger.",
+        ],
+      },
+    ],
+  },
+  {
     version: "0.6.0",
     date: "July 22, 2026",
     title: "A home for every StockBot update",

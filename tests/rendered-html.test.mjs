@@ -21,10 +21,28 @@ test("includes a visible release changelog", async () => {
   assert.match(page, /label: "Changelog"/);
   assert.match(page, /What&apos;s new in StockBot/);
   assert.match(page, /changelogReleases\.map/);
+  assert.match(changelog, /version: "0\.7\.0"/);
   assert.match(changelog, /version: "0\.6\.0"/);
   assert.match(changelog, /version: "0\.1\.0"/);
+  assert.match(markdown, /## 0\.7\.0 - 2026-07-22/);
   assert.match(markdown, /## 0\.6\.0 - 2026-07-22/);
   assert.match(markdown, /## 0\.1\.0 - 2026-07-22/);
+});
+
+test("uses True Wealth-style sortable headers on every table", async () => {
+  const [page, styles] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/globals.css"),
+  ]);
+  assert.match(page, /className="tableHead"/);
+  assert.match(page, /className="ledgerHead"/);
+  assert.match(page, /className="expenseHead"/);
+  assert.match(page, /className="sortPair"/);
+  assert.match(page, /aria-sort=/);
+  assert.match(page, /changeExpenseSort/);
+  assert.match(styles, /border-bottom:2px solid #2f7d32/);
+  assert.match(styles, /background:#f5f5f5/);
+  assert.match(styles, /stockHeaderCell\.sorted\.asc/);
 });
 
 test("includes preview, approval, protection, and audit controls", async () => {

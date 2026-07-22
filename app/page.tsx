@@ -32,6 +32,8 @@ type Settings = { businessName: string; taxYear: number; beginningInventory: num
 type AppState = { version: 6; products: Product[]; movements: Movement[]; expenses: Expense[]; settings: Settings };
 type Metrics = { inventoryValue: number; units: number; revenue: number; inventoryCogs: number; additionalCogs: number; cogs: number; salesTax: number; stateSalesTax: number; localSalesTax: number; useTax: number; stateUseTax: number; localUseTax: number; expenses: number; expenseRecordsTotal: number; purchases: number; grossProfit: number; taxableIncome: number };
 type ExpenseColumnDefinition = { key: string; label: string; width: string; field?: string };
+type SortDirection = "asc" | "desc";
+type SortValue = string | number | boolean;
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 const whole = new Intl.NumberFormat("en-US");
@@ -41,6 +43,12 @@ const dateOnly = () => new Date().toISOString().slice(0, 10);
 const blankAddress = (state = "CA"): Address => ({ line1: "", city: "", state, postalCode: "" });
 const roundTax = (amount: number, rate: number) => Math.round(amount * rate) / 100;
 const roundRate = (rate: number) => Math.round(rate * 1_000) / 1_000;
+const compareSortValues = (left: SortValue, right: SortValue, direction: SortDirection) => {
+  const comparison = typeof left === "number" && typeof right === "number"
+    ? left - right
+    : String(left).localeCompare(String(right), undefined, { numeric: true, sensitivity: "base" });
+  return comparison * (direction === "asc" ? 1 : -1);
+};
 const expenseCsvColumnKey = (label: string) => `csv:${label}`;
 const expenseBaseColumns: ExpenseColumnDefinition[] = [
   { key: "date", label: "Date", width: "130px" },
@@ -278,16 +286,55 @@ function Dashboard({ state, metrics, onView, onUse }: { state: AppState; metrics
 function Metric({ label, value, note, accent }: { label: string; value: string; note: string; accent: string }) { return <article className={`metric ${accent}`}><span>{label}</span><strong>{value}</strong><small>{note}</small></article>; }
 
 function Products({ state, query, setQuery, onEdit, onUse, onDelete }: { state: AppState; query: string; setQuery: (v: string) => void; onEdit: (p: Product) => void; onUse: (p: Product) => void; onDelete: (p: Product) => void }) {
-  const products = state.products.filter((p) => `${p.name} ${p.sku} ${p.category}`.toLowerCase().includes(query.toLowerCase()));
+  type ProductSortKey = "product" | "quantity" | "unitCost" | "retailValue" | "taxStatus";
+  const [sort, setSort] = useState<{ key: ProductSortKey; direction: SortDirection }>({ key: "product", direction: "asc" });
+  const columns: Array<{ key: ProductSortKey; label: string }> = [
+    { key: "product", label: "Product" },
+    { key: "quantity", label: "On hand" },
+    { key: "unitCost", label: "Unit cost" },
+    { key: "retailValue", label: "Retail value" },
+    { key: "taxStatus", label: "Tax status" },
+  ];
+  const productSortValue = (product: Product): SortValue => {
+    if (sort.key === "quantity") return product.quantity;
+    if (sort.key === "unitCost") return product.unitCost;
+    if (sort.key === "retailValue") return product.quantity * product.salePrice;
+    if (sort.key === "taxStatus") return product.salesTaxPaid ? "Tax paid" : "Untaxed resale";
+    return `${product.name} ${product.sku} ${product.category}`;
+  };
+  const products = state.products
+    .filter((p) => `${p.name} ${p.sku} ${p.category}`.toLowerCase().includes(query.toLowerCase()))
+    .sort((left, right) => compareSortValues(productSortValue(left), productSortValue(right), sort.direction));
+  const changeSort = (key: ProductSortKey) => setSort((current) => ({ key, direction: current.key === key && current.direction === "asc" ? "desc" : "asc" }));
   return <section className="panel tablePanel"><div className="toolbar"><label className="search"><span>{icons.search}</span><input aria-label="Search products" placeholder="Search products, SKU, or category" value={query} onChange={(e) => setQuery(e.target.value)} /></label><div className="legend"><span className="dot untaxed" /> Resale purchase — no tax paid</div></div>
-    <div className="productTable"><div className="tableHead"><span>Product</span><span>On hand</span><span>Unit cost</span><span>Retail value</span><span>Tax status</span><span /></div>
+    <div className="productTable"><div className="tableHead">{columns.map((column) => <button role="columnheader" aria-sort={sort.key === column.key ? (sort.direction === "asc" ? "ascending" : "descending") : "none"} type="button" key={column.key} className={`stockHeaderCell ${sort.key === column.key ? `sorted ${sort.direction}` : ""}`} onClick={() => changeSort(column.key)}><span>{column.label}</span><span className="sortPair" aria-hidden="true"><i /><b /></span></button>)}<span className="stockHeaderSpacer" /></div>
     {products.map((p) => <div className="productRow" key={p.id}><div className="productCell"><div className="productGlyph">{p.name.slice(0, 1)}</div><div><strong>{p.name}</strong><span>{p.sku} · {p.category}</span></div></div><div><strong>{p.quantity}</strong><span className={p.quantity <= p.reorderPoint ? "lowText" : "mutedText"}>{p.quantity <= p.reorderPoint ? "Low stock" : `Min ${p.reorderPoint}`}</span></div><strong>{money.format(p.unitCost)}</strong><strong>{money.format(p.quantity * p.salePrice)}</strong><div>{p.salesTaxPaid ? <span className="pill neutral">Tax paid</span> : <span className="pill taxFree">Untaxed resale</span>}</div><div className="rowActions"><button onClick={() => onUse(p)} disabled={p.quantity < 1}>Use one</button><button onClick={() => onEdit(p)}>Edit</button><button className="dangerText" onClick={() => onDelete(p)}>Delete</button></div></div>)}
     {!products.length && <Empty text="No products match your search." />}</div></section>;
 }
 
 function Activity({ state, onNew }: { state: AppState; onNew: () => void }) { return <section className="panel tablePanel"><div className="panelTitle"><div><p className="eyebrow">Permanent stock trail</p><h3>Inventory ledger</h3></div><button className="primary" onClick={onNew}>+ Record activity</button></div><MovementTable movements={state.movements} products={state.products} /><p className="footnote">Activity entries remain in the ledger even if a product is later removed.</p></section>; }
 
-function MovementTable({ movements, products }: { movements: Movement[]; products: Product[] }) { return <div className="ledger"><div className="ledgerHead"><span>Date</span><span>Product</span><span>Activity</span><span>Qty</span><span>Amount</span><span>Tax</span></div>{movements.map((m) => { const p = products.find((x) => x.id === m.productId); const amount = m.quantity * (m.type === "sale" ? m.unitPrice : m.unitCost); return <div className="ledgerRow" key={m.id}><span>{new Date(`${m.date}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span><div><strong>{p?.name ?? "Removed product"}</strong><small>{m.note || p?.sku}</small></div><span className={`activityTag ${m.type}`}>{m.type.replace("_", " ")}</span><strong>{m.type === "purchase" || (m.type === "adjustment" && m.quantity > 0) ? "+" : "−"}{Math.abs(m.quantity)}</strong><strong>{money.format(amount)}</strong><span className="taxLedger">{m.salesTax ? money.format(m.salesTax) : "—"}{(m.localTax ?? 0) > 0 && <small>{money.format(m.localTax ?? 0)} local</small>}</span></div>})}{!movements.length && <Empty text="No activity has been recorded yet." />}</div>; }
+function MovementTable({ movements, products }: { movements: Movement[]; products: Product[] }) {
+  type MovementSortKey = "date" | "product" | "type" | "quantity" | "amount" | "tax";
+  const [sort, setSort] = useState<{ key: MovementSortKey; direction: SortDirection }>({ key: "date", direction: "desc" });
+  const columns: Array<{ key: MovementSortKey; label: string }> = [
+    { key: "date", label: "Date" }, { key: "product", label: "Product" }, { key: "type", label: "Activity" },
+    { key: "quantity", label: "Qty" }, { key: "amount", label: "Amount" }, { key: "tax", label: "Tax" },
+  ];
+  const productFor = (movement: Movement) => products.find((product) => product.id === movement.productId);
+  const amountFor = (movement: Movement) => movement.quantity * (movement.type === "sale" ? movement.unitPrice : movement.unitCost);
+  const movementSortValue = (movement: Movement): SortValue => {
+    if (sort.key === "product") return productFor(movement)?.name ?? "Removed product";
+    if (sort.key === "type") return movement.type.replace("_", " ");
+    if (sort.key === "quantity") return movement.quantity;
+    if (sort.key === "amount") return amountFor(movement);
+    if (sort.key === "tax") return movement.salesTax;
+    return movement.date;
+  };
+  const sortedMovements = [...movements].sort((left, right) => compareSortValues(movementSortValue(left), movementSortValue(right), sort.direction));
+  const changeSort = (key: MovementSortKey) => setSort((current) => ({ key, direction: current.key === key && current.direction === "asc" ? "desc" : "asc" }));
+  return <div className="ledger"><div className="ledgerHead">{columns.map((column) => <button role="columnheader" aria-sort={sort.key === column.key ? (sort.direction === "asc" ? "ascending" : "descending") : "none"} type="button" key={column.key} className={`stockHeaderCell ${sort.key === column.key ? `sorted ${sort.direction}` : ""}`} onClick={() => changeSort(column.key)}><span>{column.label}</span><span className="sortPair" aria-hidden="true"><i /><b /></span></button>)}</div>{sortedMovements.map((m) => { const p = productFor(m); const amount = amountFor(m); return <div className="ledgerRow" key={m.id}><span>{new Date(`${m.date}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span><div><strong>{p?.name ?? "Removed product"}</strong><small>{m.note || p?.sku}</small></div><span className={`activityTag ${m.type}`}>{m.type.replace("_", " ")}</span><strong>{m.type === "purchase" || (m.type === "adjustment" && m.quantity > 0) ? "+" : "−"}{Math.abs(m.quantity)}</strong><strong>{money.format(amount)}</strong><span className="taxLedger">{m.salesTax ? money.format(m.salesTax) : "—"}{(m.localTax ?? 0) > 0 && <small>{money.format(m.localTax ?? 0)} local</small>}</span></div>})}{!movements.length && <Empty text="No activity has been recorded yet." />}</div>;
+}
 
 function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppState; setState: React.Dispatch<React.SetStateAction<AppState>>; onExpense: () => void; onDeleteExpense: (id: string) => void }) {
   const [expenseQuery, setExpenseQuery] = useState("");
@@ -298,6 +345,8 @@ function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppS
   const [columnConfigOpen, setColumnConfigOpen] = useState(false);
   const [columnQuery, setColumnQuery] = useState("");
   const [draggedExpenseColumn, setDraggedExpenseColumn] = useState<string | null>(null);
+  const [expenseSort, setExpenseSort] = useState<{ key: string; direction: SortDirection }>({ key: "date", direction: "desc" });
+  const expenseColumnWasDragged = useRef(false);
   const expenseFileRef = useRef<HTMLInputElement>(null);
   const columnDefinitions = expenseColumnDefinitionsFor(state.expenses);
   const columnByKey = new Map(columnDefinitions.map((column) => [column.key, column]));
@@ -310,10 +359,34 @@ function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppS
   const columnOptions = orderedColumns.filter((column) => column.label.toLowerCase().includes(columnQuery.toLowerCase()));
   const years = Array.from(new Set(state.expenses.map((expense) => Number(expense.date.slice(0, 4))))).filter(Number.isFinite).sort((a, b) => b - a);
   const selectedExpenses = state.expenses.filter((expense) => expenseYear === "All" || expense.date.startsWith(`${expenseYear}-`));
-  const visibleExpenses = selectedExpenses.filter((expense) => {
+  const filteredExpenses = selectedExpenses.filter((expense) => {
     const matchesCategory = expenseCategory === "All" || expense.category === expenseCategory;
     const haystack = `${expense.vendor} ${expense.externalKey} ${expense.category} ${expense.note} ${Object.values(expense.fields ?? {}).join(" ")}`.toLowerCase();
     return matchesCategory && haystack.includes(expenseQuery.toLowerCase());
+  });
+  const expenseSortValue = (expense: Expense): SortValue => {
+    if (expenseSort.key === "vendor") return expense.vendor;
+    if (expenseSort.key === "note") return expense.note;
+    if (expenseSort.key === "category") return expense.category;
+    if (expenseSort.key === "externalKey") return expense.externalKey;
+    if (expenseSort.key === "amount") return expense.amount;
+    if (expenseSort.key === "source") return expense.source;
+    if (expenseSort.key === "date") return expense.date;
+    const field = columnByKey.get(expenseSort.key)?.field;
+    const raw = field ? expense.fields?.[field] ?? "" : "";
+    if (/date/i.test(field ?? "")) {
+      const timestamp = Date.parse(raw);
+      if (Number.isFinite(timestamp)) return timestamp;
+    }
+    if (/amount|total|tax|promotion|ppu|quantity|price|cost|rate/i.test(field ?? "")) {
+      const numberValue = Number(raw.replace(/[$,%()\s,]/g, ""));
+      if (raw.trim() && Number.isFinite(numberValue)) return numberValue;
+    }
+    return raw;
+  };
+  const visibleExpenses = [...filteredExpenses].sort((left, right) => {
+    const comparison = compareSortValues(expenseSortValue(left), expenseSortValue(right), expenseSort.direction);
+    return comparison || left.externalKey.localeCompare(right.externalKey);
   });
   const categoryTotals = expenseCategories.map((category) => ({ category, total: selectedExpenses.filter((expense) => expense.category === category).reduce((sum, expense) => sum + expense.amount, 0) })).filter((item) => item.total > 0).sort((a, b) => b.total - a.total);
   const expenseTotal = selectedExpenses.reduce((sum, expense) => sum + expense.amount, 0);
@@ -367,6 +440,7 @@ function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppS
   };
   const moveExpenseColumn = (sourceKey: string, targetKey: string) => {
     if (sourceKey === targetKey) return;
+    expenseColumnWasDragged.current = true;
     setState((current) => {
       const order = mergeExpenseColumnOrder(current.settings.expenseColumnOrder, columnDefinitions).filter((key) => key !== sourceKey);
       const targetIndex = order.indexOf(targetKey);
@@ -374,6 +448,7 @@ function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppS
       return { ...current, settings: { ...current.settings, expenseColumnOrder } };
     });
   };
+  const changeExpenseSort = (key: string) => setExpenseSort((current) => ({ key, direction: current.key === key && current.direction === "asc" ? "desc" : "asc" }));
   const selectAllExpenseColumns = () => setState((current) => ({ ...current, settings: { ...current.settings, expenseVisibleColumns: orderedColumnKeys } }));
   const resetExpenseColumns = () => setState((current) => ({ ...current, settings: { ...current.settings, expenseColumnOrder: defaultExpenseColumnOrder, expenseVisibleColumns: defaultExpenseVisibleColumns } }));
   const expenseCell = (expense: Expense, column: ExpenseColumnDefinition) => {
@@ -399,7 +474,7 @@ function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppS
       <p className="settingsCopy">Every record requires a unique external key—such as an Amazon order ID, invoice number, or bank transaction ID. Re-importing enriches existing records with every source column without creating duplicates.</p>
       {columnConfigOpen && <div className="expenseColumnConfig"><div className="expenseColumnConfigHeading"><div><strong>Display columns</strong><small>Check columns to show. Drag visible table headers to reorder them.</small></div><div><button type="button" onClick={selectAllExpenseColumns}>Select all</button><button type="button" onClick={resetExpenseColumns}>Reset</button></div></div><label className="search columnSearch"><span>{icons.search}</span><input aria-label="Search expense columns" placeholder="Find a column" value={columnQuery} onChange={(event) => setColumnQuery(event.target.value)} /></label><div className="expenseColumnChecklist">{columnOptions.map((column) => { const checked = visibleColumnKeys.includes(column.key); return <label className="expenseColumnOption" key={column.key}><input type="checkbox" checked={checked} disabled={checked && visibleColumnKeys.length === 1} onChange={() => toggleExpenseColumn(column.key)} /><span><strong>{column.label}</strong><small>{column.field ? "Imported CSV field" : "StockBot field"}</small></span></label>; })}</div></div>}
       <div className="expenseToolbar"><label className="search"><span>{icons.search}</span><input aria-label="Search expenses" placeholder="Search any displayed or imported field" value={expenseQuery} onChange={(event) => setExpenseQuery(event.target.value)} /></label><label>Year<select aria-label="Expense year" value={expenseYear} onChange={(event) => setExpenseYear(event.target.value)}><option value="All">All years</option>{years.map((year) => <option value={year} key={year}>{year}</option>)}</select></label><label>Category<select value={expenseCategory} onChange={(event) => setExpenseCategory(event.target.value as ExpenseCategory | "All")}><option>All</option>{expenseCategories.map((category) => <option key={category}>{category}</option>)}</select></label></div>
-      <div className="expenseTable"><div className="expenseDataGrid" style={{ "--expense-columns": expenseGridColumns } as CSSProperties}><div className="expenseHead">{visibleColumns.map((column) => <button type="button" key={column.key} className={draggedExpenseColumn === column.key ? "dragging" : ""} onPointerDown={() => setDraggedExpenseColumn(column.key)} onPointerEnter={(event) => { if (draggedExpenseColumn && event.buttons === 1) moveExpenseColumn(draggedExpenseColumn, column.key); }} onPointerUp={() => setDraggedExpenseColumn(null)} title="Drag to reorder"><span>{column.label}</span><i>⋮⋮</i></button>)}<span /></div>{visibleExpenses.map((expense) => <div className="expenseRow" key={expense.id}>{visibleColumns.map((column) => <span key={column.key}>{expenseCell(expense, column)}</span>)}<button aria-label={`Delete expense ${expense.externalKey}`} onClick={() => confirm(`Delete expense ${expense.externalKey}?`) && onDeleteExpense(expense.id)}>×</button></div>)}{!visibleExpenses.length && <Empty text="No expense records match this view." />}</div></div>
+      <div className="expenseTable"><div className="expenseDataGrid" style={{ "--expense-columns": expenseGridColumns } as CSSProperties}><div className="expenseHead">{visibleColumns.map((column) => <button role="columnheader" aria-sort={expenseSort.key === column.key ? (expenseSort.direction === "asc" ? "ascending" : "descending") : "none"} type="button" key={column.key} className={`stockHeaderCell draggable ${expenseSort.key === column.key ? `sorted ${expenseSort.direction}` : ""} ${draggedExpenseColumn === column.key ? "dragging" : ""}`} onPointerDown={() => { expenseColumnWasDragged.current = false; setDraggedExpenseColumn(column.key); }} onPointerEnter={(event) => { if (draggedExpenseColumn && event.buttons === 1) moveExpenseColumn(draggedExpenseColumn, column.key); }} onPointerUp={() => setDraggedExpenseColumn(null)} onPointerCancel={() => setDraggedExpenseColumn(null)} onClick={() => { if (expenseColumnWasDragged.current) { expenseColumnWasDragged.current = false; return; } changeExpenseSort(column.key); }} title="Click to sort; drag to reorder"><span>{column.label}</span><span className="sortPair" aria-hidden="true"><i /><b /></span></button>)}<span className="stockHeaderSpacer" /></div>{visibleExpenses.map((expense) => <div className="expenseRow" key={expense.id}>{visibleColumns.map((column) => <span key={column.key}>{expenseCell(expense, column)}</span>)}<button aria-label={`Delete expense ${expense.externalKey}`} onClick={() => confirm(`Delete expense ${expense.externalKey}?`) && onDeleteExpense(expense.id)}>×</button></div>)}{!visibleExpenses.length && <Empty text="No expense records match this view." />}</div></div>
     </section>
     <div className="disclaimer"><strong>Good records, calmer filing.</strong><span>The Tax center uses the selected tax year for its filing worksheet. This ledger shows all years unless you filter it.</span></div>
     {expenseImport && <Modal title="Review expense import" eyebrow="Duplicate-safe import" onClose={() => setExpenseImport(null)}><div className="importSummary"><article><span>New records</span><strong>{expenseImport.ready.length}</strong></article><article><span>Existing records enriched</span><strong>{expenseImport.updates.length}</strong></article><article><span>Invalid records</span><strong>{expenseImport.invalid.length}</strong></article></div><p className="settingsCopy"><strong>{expenseImport.fileName}</strong> contains {expenseImport.columns.length} source columns. {importPreviewExpenses.length > 0 && <>The importable total is <strong>{money.format(expenseImport.readyTotal)}</strong>{expenseImport.years.length ? ` across ${expenseImport.years.join(", ")}` : ""}. Existing keys receive the source fields but are never duplicated.</>}</p>{importPreviewExpenses.length > 0 && <div className="importPreviewList">{importPreviewExpenses.slice(0, 6).map((expense) => <div key={expense.externalKey}><span><strong>{expense.vendor}</strong><small>{expense.externalKey} · {expense.category} · {expense.date}{expenseImport.updates.some((update) => update.externalKey === expense.externalKey) ? " · existing" : " · new"}</small></span><b>{money.format(expense.amount)}</b></div>)}{importPreviewExpenses.length > 6 && <small>+ {importPreviewExpenses.length - 6} more records</small>}</div>}{expenseImport.duplicates.length > 0 && <details className="importDetails"><summary>{expenseImport.duplicates.length} duplicate row{expenseImport.duplicates.length === 1 ? "" : "s"} inside this file skipped</summary><p>{expenseImport.duplicates.slice(0, 12).join(", ")}</p></details>}{expenseImport.invalid.length > 0 && <details className="importDetails"><summary>{expenseImport.invalid.length} invalid record{expenseImport.invalid.length === 1 ? "" : "s"} skipped</summary>{expenseImport.invalid.slice(0, 12).map((message) => <p key={message}>{message}</p>)}</details>}<div className="modalActions"><button type="button" className="secondary" onClick={() => setExpenseImport(null)}>Cancel</button><button type="button" className="primary" disabled={!importPreviewExpenses.length} onClick={applyExpenseImport}>Save {importPreviewExpenses.length} records</button></div></Modal>}
