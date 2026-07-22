@@ -21,10 +21,12 @@ test("includes a visible release changelog", async () => {
   assert.match(page, /label: "Changelog"/);
   assert.match(page, /What&apos;s new in StockBot/);
   assert.match(page, /changelogReleases\.map/);
+  assert.match(changelog, /version: "0\.9\.0"/);
   assert.match(changelog, /version: "0\.8\.0"/);
   assert.match(changelog, /version: "0\.7\.0"/);
   assert.match(changelog, /version: "0\.6\.0"/);
   assert.match(changelog, /version: "0\.1\.0"/);
+  assert.match(markdown, /## 0\.9\.0 - 2026-07-22/);
   assert.match(markdown, /## 0\.8\.0 - 2026-07-22/);
   assert.match(markdown, /## 0\.7\.0 - 2026-07-22/);
   assert.match(markdown, /## 0\.6\.0 - 2026-07-22/);
@@ -96,6 +98,18 @@ test("deduplicates imported expense records by external key", async () => {
   assert.match(page, /Import CSV or JSON/);
   assert.match(stateRoute, /expenseKeys\.has\(key\)/);
   assert.match(stateRoute, /Duplicate expense key/);
+});
+
+test("uses new expense keys to add imported products and stock exactly once", async () => {
+  const [page, expenseImport] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/expense-import.ts"),
+  ]);
+  assert.match(expenseImport, /expenseQuantities/);
+  assert.match(expenseImport, /ready\.map\(\(expense\) => expense\.externalKey\)/);
+  assert.match(page, /addedExpenseKeys/);
+  assert.match(page, /quantity: product\.quantity \+ importedQuantity\(imported\)/);
+  assert.match(page, /re-imported expenses never add stock twice/);
 });
 
 test("keeps external tax credentials on the server", async () => {

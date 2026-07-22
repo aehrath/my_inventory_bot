@@ -4,6 +4,21 @@ All notable changes to StockBot are documented here.
 
 ## Unreleased
 
+## 0.9.0 - 2026-07-22
+
+### Added
+
+- Added automatic inventory creation from SKU, ASIN, UPC, part-number, and model-number fields in expense imports.
+- Added imported product details including vendor, category, quantity, unit cost, and sales-tax-paid status.
+
+### Changed
+
+- A new expense for an existing product adds its purchased quantity to the current on-hand count.
+
+### Fixed
+
+- Re-importing an expense key that already exists never adds its product quantities again.
+
 ## 0.8.0 - 2026-07-22
 
 ### Added

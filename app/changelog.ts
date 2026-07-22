@@ -13,6 +13,29 @@ export type ChangelogRelease = {
 
 export const changelogReleases: readonly ChangelogRelease[] = [
   {
+    version: "0.9.0",
+    date: "July 22, 2026",
+    title: "Expense purchases flow into inventory",
+    summary: "Imported product lines now create or replenish inventory without counting the same expense twice.",
+    sections: [
+      {
+        title: "Added",
+        items: [
+          "Added automatic inventory creation from SKU, ASIN, UPC, part-number, and model-number fields in expense imports.",
+          "Added imported product details including vendor, category, quantity, unit cost, and sales-tax-paid status.",
+        ],
+      },
+      {
+        title: "Changed",
+        items: ["A new expense for an existing product adds its purchased quantity to the current on-hand count."],
+      },
+      {
+        title: "Fixed",
+        items: ["Re-importing an expense key that already exists never adds its product quantities again."],
+      },
+    ],
+  },
+  {
     version: "0.8.0",
     date: "July 22, 2026",
     title: "Vendor tracking for products",

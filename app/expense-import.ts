@@ -45,6 +45,20 @@ export type ImportedExpense = {
   fields: Record<string, string>;
 };
 
+export type ImportedInventoryProduct = {
+  key: string;
+  sku: string;
+  name: string;
+  vendor?: string;
+  category?: string;
+  quantity: number;
+  unitCost?: number;
+  salesTaxPaid?: boolean;
+  createdAt: string;
+  existing: boolean;
+  expenseQuantities: Record<string, number>;
+};
+
 export type ExpenseImportPreview = {
   fileName: string;
   ready: ImportedExpense[];
@@ -54,9 +68,14 @@ export type ExpenseImportPreview = {
   years: number[];
   readyTotal: number;
   columns: string[];
+  products: ImportedInventoryProduct[];
 };
 
 export const normalizeExpenseKey = (key: string) => key.trim().toLowerCase().replace(/\s+/g, "");
+export const normalizeProductKey = (key: string) => key.trim().toLowerCase().replace(/\s+/g, "");
+export const importedQuantityForExpenseKeys = (product: ImportedInventoryProduct, expenseKeys: ReadonlySet<string>) => Object.entries(product.expenseQuantities)
+  .filter(([expenseKey]) => expenseKeys.has(expenseKey))
+  .reduce((total, [, quantity]) => total + quantity, 0);
 
 export const normalizeExpenseCategory = (value: unknown): ExpenseCategory => {
   const label = String(value ?? "").trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
@@ -143,11 +162,68 @@ const categoryForAmazonOrder = (rows: Array<Record<string, unknown>>): ExpenseCa
   return "Other";
 };
 
+const inventoryProductsFromRecords = (
+  records: Array<Record<string, unknown>>,
+  readyExpenseKeys: readonly string[],
+  existingProductKeys: readonly string[],
+) => {
+  const aliases = {
+    expenseKey: ["externalkey", "amazonorderid", "orderid", "transactionid", "invoiceid", "receiptid", "recordid", "uniqueid", "id"],
+    key: ["sku", "productkey", "productid", "asin", "upc", "partnumber", "itemmodelnumber"],
+    name: ["productname", "title", "itemname", "product", "description", "name"],
+    vendor: ["vendor", "supplier", "manufacturer", "sellername", "seller", "brand"],
+    category: ["productcategory", "amazoninternalproductcategory", "category", "class", "family"],
+    quantity: ["itemquantity", "receivedquantity", "quantity", "qty", "orderquantity"],
+    unitCost: ["purchaseppu", "listedppu", "unitcost", "cost", "purchaseprice", "ppu"],
+    itemTax: ["itemtax", "salestax", "taxamount"],
+    date: ["orderdate", "purchasedate", "date"],
+  } as const;
+  const importableExpenseKeys = new Set(readyExpenseKeys.map(normalizeExpenseKey));
+  const existingKeys = new Set(existingProductKeys.map(normalizeProductKey));
+  const products = new Map<string, ImportedInventoryProduct>();
+  for (const record of records) {
+    const expenseKey = normalizeExpenseKey(String(valueFor(record, aliases.expenseKey) ?? ""));
+    if (!expenseKey || !importableExpenseKeys.has(expenseKey)) continue;
+    const sku = String(valueFor(record, aliases.key) ?? "").trim();
+    const key = normalizeProductKey(sku);
+    const name = String(valueFor(record, aliases.name) ?? "").trim();
+    if (!key || !name) continue;
+    const rawQuantity = parseExpenseAmount(valueFor(record, aliases.quantity));
+    const quantity = Number.isFinite(rawQuantity) && rawQuantity >= 0 ? rawQuantity : 0;
+    const prior = products.get(key);
+    if (prior) {
+      prior.quantity += quantity;
+      prior.expenseQuantities[expenseKey] = (prior.expenseQuantities[expenseKey] ?? 0) + quantity;
+      continue;
+    }
+    const unitCostValue = valueFor(record, aliases.unitCost);
+    const rawUnitCost = parseExpenseAmount(unitCostValue);
+    const unitCost = unitCostValue !== undefined && Number.isFinite(rawUnitCost) && rawUnitCost >= 0 ? rawUnitCost : undefined;
+    const itemTaxValue = valueFor(record, aliases.itemTax);
+    const itemTax = parseExpenseAmount(itemTaxValue);
+    products.set(key, {
+      key,
+      sku,
+      name,
+      vendor: String(valueFor(record, aliases.vendor) ?? "").trim() || undefined,
+      category: String(valueFor(record, aliases.category) ?? "").trim() || undefined,
+      quantity,
+      unitCost,
+      salesTaxPaid: itemTaxValue === undefined ? undefined : Number.isFinite(itemTax) && itemTax > 0,
+      createdAt: normalizeExpenseDate(valueFor(record, aliases.date)) || new Date().toISOString().slice(0, 10),
+      existing: existingKeys.has(key),
+      expenseQuantities: { [expenseKey]: quantity },
+    });
+  }
+  return Array.from(products.values());
+};
+
 export function parseExpenseImportText(
   text: string,
   fileName: string,
   existingExternalKeys: readonly string[],
   importedAt = new Date().toISOString(),
+  existingProductKeys: readonly string[] = [],
 ): ExpenseImportPreview {
   let records: Array<Record<string, unknown>> = [];
   let sourceColumns: Array<{ key: string; label: string }> = [];
@@ -174,6 +250,7 @@ export function parseExpenseImportText(
     }
   }
 
+  const productRecords = records;
   const isAmazonBusinessExport = records.some((record) => valueFor(record, ["orderid"]) && valueFor(record, ["ordernettotal"]) !== undefined);
   if (isAmazonBusinessExport) {
     const orders = new Map<string, Array<Record<string, unknown>>>();
@@ -257,7 +334,8 @@ export function parseExpenseImportText(
   });
 
   const importable = [...ready, ...updates];
+  const products = inventoryProductsFromRecords(productRecords, ready.map((expense) => expense.externalKey), existingProductKeys);
   const years = Array.from(new Set(importable.map((expense) => Number(expense.date.slice(0, 4))))).filter(Number.isFinite).sort((a, b) => b - a);
   const readyTotal = Math.round(importable.reduce((sum, expense) => sum + expense.amount, 0) * 100) / 100;
-  return { fileName, ready, updates, duplicates, invalid, years, readyTotal, columns: sourceColumns.map((column) => column.label) };
+  return { fileName, ready, updates, duplicates, invalid, years, readyTotal, columns: sourceColumns.map((column) => column.label), products };
 }
