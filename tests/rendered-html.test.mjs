@@ -29,6 +29,11 @@ test("deduplicates imported expense records by external key", async () => {
   ]);
   assert.match(page, /Amazon order ID, invoice number, or bank transaction ID/);
   assert.match(page, /amazonorderid/);
+  assert.match(page, /isAmazonBusinessExport/);
+  assert.match(page, /ordernettotal/);
+  assert.match(page, /sellername/);
+  assert.match(page, /amazoninternalproductcategory/);
+  assert.match(page, /orders\.entries\(\)/);
   assert.match(page, /normalizeExpenseKey/);
   assert.match(page, /existingKeys\.has\(normalizedKey\) \|\| seen\.has\(normalizedKey\)/);
   assert.match(page, /if \(keys\.has\(key\)\) continue/);

@@ -15,6 +15,8 @@ receipt_id, vendor, merchant, date, amount, category, note, description
 
 A ready-to-fill CSV template can be downloaded from the expense ledger. JSON imports can be an array of expense objects or an object containing an `expenses` array.
 
+Amazon Business order-history exports are detected automatically. Because those files can repeat one order across several item rows, StockBot groups rows by `Order ID`, imports one expense per order, uses `Order Net Total` once, carries over seller and title details, and derives an initial office-equipment or office-supplies category when the Amazon category data supports it.
+
 ## Local development
 
 Use Node.js 22.13 or newer.

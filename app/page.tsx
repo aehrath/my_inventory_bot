@@ -78,6 +78,8 @@ const normalizeExpenseCategory = (value: unknown): ExpenseCategory => {
 const normalizeExpenseDate = (value: unknown) => {
   const raw = String(value ?? "").trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const usDate = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (usDate) return `${usDate[3]}-${usDate[1].padStart(2, "0")}-${usDate[2].padStart(2, "0")}`;
   const parsed = new Date(raw);
   return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString().slice(0, 10);
 };
@@ -128,6 +130,46 @@ async function parseExpenseImport(file: File, existingExpenses: Expense[]): Prom
     }
   }
 
+  const valueFor = (record: Record<string, unknown>, names: readonly string[]) => {
+    const normalized = new Map(Object.entries(record).map(([key, value]) => [canonicalField(key), value]));
+    return names.map((name) => normalized.get(name)).find((value) => value !== undefined && String(value).trim() !== "");
+  };
+  const isAmazonBusinessExport = records.some((record) => valueFor(record, ["orderid"]) && valueFor(record, ["ordernettotal"]) !== undefined && valueFor(record, ["itemnettotal"]) !== undefined);
+  if (isAmazonBusinessExport) {
+    const orders = new Map<string, Array<Record<string, unknown>>>();
+    for (const record of records) {
+      const orderId = String(valueFor(record, ["orderid"]) ?? "").trim();
+      if (!orderId) continue;
+      orders.set(orderId, [...(orders.get(orderId) ?? []), record]);
+    }
+    records = Array.from(orders.entries()).map(([orderId, orderRows]) => {
+      const first = orderRows[0];
+      const uniqueValues = (fields: readonly string[]) => Array.from(new Set(orderRows.map((record) => String(valueFor(record, fields) ?? "").trim()).filter(Boolean)));
+      const sellers = uniqueValues(["sellername", "vendor", "merchant"]);
+      const titles = uniqueValues(["title", "description"]);
+      const amazonCategories = uniqueValues(["amazoninternalproductcategory", "segment", "family", "class", "commodity"]);
+      const categoryText = amazonCategories.join(" ").toLowerCase();
+      const category: ExpenseCategory = /office equipment|office machine|computer|electronic/.test(categoryText)
+        ? "Office equipment"
+        : /office product|office supplies|stationery/.test(categoryText)
+          ? "Office supplies"
+          : /shipping|postage|mailing/.test(categoryText)
+            ? "Shipping & postage"
+            : "Other";
+      const titleNote = titles.slice(0, 3).join("; ");
+      const moreItems = titles.length > 3 ? ` (+${titles.length - 3} more items)` : "";
+      const categoryNote = amazonCategories[0] ? ` · Amazon category: ${amazonCategories[0]}` : "";
+      return {
+        externalkey: orderId,
+        vendor: sellers.slice(0, 3).join(", ") || "Amazon",
+        category,
+        amount: valueFor(first, ["ordernettotal"]),
+        date: valueFor(first, ["orderdate"]),
+        note: `${titleNote}${moreItems}${categoryNote}`,
+      };
+    });
+  }
+
   const ready: ExpenseDraft[] = [];
   const duplicates: string[] = [];
   const invalid: string[] = [];
@@ -135,16 +177,12 @@ async function parseExpenseImport(file: File, existingExpenses: Expense[]): Prom
   const seen = new Set<string>();
   const aliases = {
     key: ["externalkey", "amazonorderid", "orderid", "transactionid", "invoiceid", "receiptid", "recordid", "uniqueid", "id"],
-    vendor: ["vendor", "merchant", "seller", "supplier", "payee", "store"],
-    category: ["category", "expensecategory", "type", "account"],
-    amount: ["amount", "total", "ordertotal", "charge", "price", "expenseamount"],
+    vendor: ["vendor", "merchant", "sellername", "seller", "supplier", "payee", "store"],
+    category: ["category", "expensecategory", "amazoninternalproductcategory", "type", "account"],
+    amount: ["amount", "ordernettotal", "itemnettotal", "paymentamount", "totalamount", "total", "ordertotal", "charge", "price", "expenseamount"],
     date: ["date", "orderdate", "transactiondate", "purchasedate", "posteddate"],
-    note: ["note", "description", "memo", "item", "product", "details"],
+    note: ["note", "title", "description", "memo", "item", "product", "details"],
   } as const;
-  const valueFor = (record: Record<string, unknown>, names: readonly string[]) => {
-    const normalized = new Map(Object.entries(record).map(([key, value]) => [canonicalField(key), value]));
-    return names.map((name) => normalized.get(name)).find((value) => value !== undefined && String(value).trim() !== "");
-  };
 
   records.forEach((record, index) => {
     const externalKey = String(valueFor(record, aliases.key) ?? "").trim();
