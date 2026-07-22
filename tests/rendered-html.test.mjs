@@ -12,6 +12,21 @@ test("ships StockBot product metadata", async () => {
   assert.doesNotMatch(layout, /Starter Project|codex-preview/);
 });
 
+test("includes a visible release changelog", async () => {
+  const [page, changelog, markdown] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/changelog.ts"),
+    read("CHANGELOG.md"),
+  ]);
+  assert.match(page, /label: "Changelog"/);
+  assert.match(page, /What&apos;s new in StockBot/);
+  assert.match(page, /changelogReleases\.map/);
+  assert.match(changelog, /version: "0\.6\.0"/);
+  assert.match(changelog, /version: "0\.1\.0"/);
+  assert.match(markdown, /## 0\.6\.0 - 2026-07-22/);
+  assert.match(markdown, /## 0\.1\.0 - 2026-07-22/);
+});
+
 test("includes preview, approval, protection, and audit controls", async () => {
   const page = await read("app/page.tsx");
   assert.match(page, /Check for updates/);

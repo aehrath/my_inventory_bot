@@ -2,12 +2,13 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { ChangeEvent, CSSProperties, FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { changelogReleases } from "./changelog";
 import { amazonBusinessCsvColumns, expenseCategories, normalizeExpenseCategory, normalizeExpenseDate, normalizeExpenseKey, parseExpenseImportText } from "./expense-import";
 import type { ExpenseCategory, ExpenseImportPreview } from "./expense-import";
 import { defaultStateTaxSettings, stateName, stateTaxDefaults } from "./tax-data";
 import type { TaxAddress, TaxRateLookup, TaxRateLookupResponse, TaxSourceStatus } from "./tax-rate-types";
 
-type View = "dashboard" | "products" | "activity" | "expenses" | "taxes" | "data";
+type View = "dashboard" | "products" | "activity" | "expenses" | "taxes" | "data" | "changelog";
 type MovementType = "purchase" | "sale" | "personal_use" | "adjustment";
 type Product = {
   id: string; sku: string; name: string; category: string; quantity: number; unitCost: number;
@@ -119,7 +120,7 @@ const seed: AppState = {
 };
 
 const icons: Record<View | "plus" | "search" | "download" | "upload" | "alert" | "arrow", string> = {
-  dashboard: "▦", products: "□", activity: "↕", expenses: "$", taxes: "%", data: "↥", plus: "+", search: "⌕", download: "↓", upload: "↑", alert: "!", arrow: "→",
+  dashboard: "▦", products: "□", activity: "↕", expenses: "$", taxes: "%", data: "↥", changelog: "≡", plus: "+", search: "⌕", download: "↓", upload: "↑", alert: "!", arrow: "→",
 };
 
 export default function Home() {
@@ -189,7 +190,7 @@ export default function Home() {
 
   const openUse = (product: Product) => { setSelectedProduct(product); setMovementModal(true); };
   const nav: { id: View; label: string }[] = [
-    { id: "dashboard", label: "Overview" }, { id: "products", label: "Products" }, { id: "activity", label: "Activity" }, { id: "expenses", label: "Expenses" }, { id: "taxes", label: "Tax center" }, { id: "data", label: "Data & settings" },
+    { id: "dashboard", label: "Overview" }, { id: "products", label: "Products" }, { id: "activity", label: "Activity" }, { id: "expenses", label: "Expenses" }, { id: "taxes", label: "Tax center" }, { id: "data", label: "Data & settings" }, { id: "changelog", label: "Changelog" },
   ];
 
   return (
@@ -210,6 +211,7 @@ export default function Home() {
         {view === "expenses" && <Expenses state={state} setState={setState} onExpense={() => setExpenseModal(true)} onDeleteExpense={(id) => setState((s) => ({ ...s, expenses: s.expenses.filter((e) => e.id !== id) }))} />}
         {view === "taxes" && <TaxCenter state={state} metrics={metrics} setState={setState} />}
         {view === "data" && <DataSettings state={state} setState={setState} fileRef={fileRef} onImport={(e) => importState(e, setState)} />}
+        {view === "changelog" && <Changelog />}
       </main>
 
       {productModal && <ProductModal product={selectedProduct} onSave={saveProduct} onClose={() => { setProductModal(false); setSelectedProduct(null); }} />}
@@ -224,6 +226,27 @@ export default function Home() {
       }} onClose={() => setExpenseModal(false)} />}
     </div>
   );
+}
+
+function Changelog() {
+  const latest = changelogReleases[0];
+  return <div className="changelogLayout">
+    <section className="changelogHero">
+      <div><span className="pill good">StockBot {latest.version}</span><h2>What&apos;s new in StockBot</h2><p>Every useful addition, workflow improvement, and important fix—kept in one tidy timeline.</p></div>
+      <img src="/robot.svg" alt="StockBot robot presenting the changelog" />
+    </section>
+    <section className="releaseTimeline" aria-label="StockBot release history">
+      {changelogReleases.map((release, index) => <article className={`releaseCard${index === 0 ? " latest" : ""}`} key={release.version}>
+        <div className="releaseMarker"><span>{index === 0 ? "New" : ""}</span></div>
+        <div className="releaseContent">
+          <header><div><p className="eyebrow">Version {release.version} · {release.date}</p><h3>{release.title}</h3><p>{release.summary}</p></div>{index === 0 && <span className="pill good">Latest release</span>}</header>
+          <div className="releaseSections">
+            {release.sections.map((section) => <section key={section.title}><strong className={`changeType ${section.title.toLowerCase()}`}>{section.title}</strong><ul>{section.items.map((item) => <li key={item}>{item}</li>)}</ul></section>)}
+          </div>
+        </div>
+      </article>)}
+    </section>
+  </div>;
 }
 
 function Dashboard({ state, metrics, onView, onUse }: { state: AppState; metrics: Metrics; onView: (v: View) => void; onUse: (p: Product) => void }) {
