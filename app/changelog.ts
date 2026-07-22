@@ -13,6 +13,22 @@ export type ChangelogRelease = {
 
 export const changelogReleases: readonly ChangelogRelease[] = [
   {
+    version: "0.10.0",
+    date: "July 22, 2026",
+    title: "Pack sizes become real inventory units",
+    summary: "Expense descriptions such as “200 PCS” now produce the correct individual-unit quantity and product name.",
+    sections: [
+      {
+        title: "Changed",
+        items: [
+          "Moved PCS and PIECES pack sizes out of imported product descriptions and into inventory quantities.",
+          "Multiplied pack size by the number of packages purchased.",
+          "Converted the package price to a per-piece unit cost so inventory value and COGS remain accurate.",
+        ],
+      },
+    ],
+  },
+  {
     version: "0.9.0",
     date: "July 22, 2026",
     title: "Expense purchases flow into inventory",

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { amazonBusinessCsvColumns, importedQuantityForExpenseKeys, parseExpenseImportText } from "../app/expense-import.ts";
+import { amazonBusinessCsvColumns, importedQuantityForExpenseKeys, parseExpenseImportText, parseProductPackSize } from "../app/expense-import.ts";
 
 const fixture = new URL("./fixtures/amazon-business-orders.csv", import.meta.url);
 
@@ -77,4 +77,27 @@ test("re-importing an existing expense never offers inventory quantity again", (
   assert.equal(preview.ready.length, 0);
   assert.equal(preview.updates.length, 1);
   assert.deepEqual(preview.products, []);
+});
+
+test("moves PCS and PIECES pack sizes from product names into inventory quantity", () => {
+  assert.deepEqual(parseProductPackSize("Blue widgets (200 PCS)"), { name: "Blue widgets", packSize: 200 });
+  assert.deepEqual(parseProductPackSize("100 Pieces of red widgets"), { name: "red widgets", packSize: 100 });
+  assert.deepEqual(parseProductPackSize("Fasteners, 2,300PCS, zinc"), { name: "Fasteners, zinc", packSize: 2300 });
+  assert.deepEqual(parseProductPackSize("420pcs screws, Contains 20pcs anchors"), { name: "screws, Contains anchors", packSize: 420 });
+  assert.deepEqual(parseProductPackSize("Claw Clasp 100pcs+Key Ring 100pcs"), { name: "Claw Clasp + Key Ring", packSize: 100 });
+  assert.deepEqual(parseProductPackSize("One-piece tool"), { name: "One-piece tool", packSize: 1 });
+
+  const csv = [
+    "Order Date,Order ID,Order Net Total,ASIN,Title,Item Quantity,Purchase PPU",
+    "01/10/2026,PACK-1,80.00,PACK-A,Blue widgets (200 PCS),2,40.00",
+    "01/11/2026,PACK-2,10.00,PACK-B,100 Pieces of red widgets,1,10.00",
+  ].join("\n");
+  const preview = parseExpenseImportText(csv, "orders.csv", [], "2026-07-22T00:00:00.000Z");
+
+  assert.equal(preview.products[0].name, "Blue widgets");
+  assert.equal(preview.products[0].quantity, 400);
+  assert.equal(preview.products[0].unitCost, 0.2);
+  assert.equal(preview.products[1].name, "red widgets");
+  assert.equal(preview.products[1].quantity, 100);
+  assert.equal(preview.products[1].unitCost, 0.1);
 });

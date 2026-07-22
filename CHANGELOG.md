@@ -4,6 +4,14 @@ All notable changes to StockBot are documented here.
 
 ## Unreleased
 
+## 0.10.0 - 2026-07-22
+
+### Changed
+
+- Moved PCS and PIECES pack sizes out of imported product descriptions and into inventory quantities.
+- Multiplied pack size by the number of packages purchased.
+- Converted the package price to a per-piece unit cost so inventory value and COGS remain accurate.
+
 ## 0.9.0 - 2026-07-22
 
 ### Added

@@ -76,6 +76,26 @@ export const normalizeProductKey = (key: string) => key.trim().toLowerCase().rep
 export const importedQuantityForExpenseKeys = (product: ImportedInventoryProduct, expenseKeys: ReadonlySet<string>) => Object.entries(product.expenseQuantities)
   .filter(([expenseKey]) => expenseKeys.has(expenseKey))
   .reduce((total, [, quantity]) => total + quantity, 0);
+export const parseProductPackSize = (description: string) => {
+  const originalName = description.trim();
+  const matches = Array.from(originalName.matchAll(/\b(\d[\d,]*)\s*(?:pcs|pieces)\b/gi));
+  const match = matches[0];
+  const packSize = match ? Number(match[1].replace(/,/g, "")) : 1;
+  if (!match || !Number.isSafeInteger(packSize) || packSize < 1) return { name: originalName, packSize: 1 };
+  const leadingPackSize = match.index === 0;
+  let name = originalName
+    .replace(/\b\d[\d,]*\s*(?:pcs|pieces)\b/gi, " ")
+    .replace(/\(\s*\)|\[\s*\]|\{\s*\}/g, " ")
+    .replace(/([,;:])\s*(?=[,;:])/g, "")
+    .replace(/\s*\+\s*/g, " + ")
+    .replace(/\s+/g, " ")
+    .replace(/\(\s+/g, "(")
+    .replace(/\s+\)/g, ")")
+    .replace(/^[\s,;:–—+&-]+|[\s,;:–—+&-]+$/g, "")
+    .trim();
+  if (leadingPackSize) name = name.replace(/^of\s+/i, "");
+  return { name: name || originalName, packSize };
+};
 
 export const normalizeExpenseCategory = (value: unknown): ExpenseCategory => {
   const label = String(value ?? "").trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
@@ -186,10 +206,12 @@ const inventoryProductsFromRecords = (
     if (!expenseKey || !importableExpenseKeys.has(expenseKey)) continue;
     const sku = String(valueFor(record, aliases.key) ?? "").trim();
     const key = normalizeProductKey(sku);
-    const name = String(valueFor(record, aliases.name) ?? "").trim();
-    if (!key || !name) continue;
+    const rawName = String(valueFor(record, aliases.name) ?? "").trim();
+    const { name, packSize } = parseProductPackSize(rawName);
+    if (!key || !rawName) continue;
     const rawQuantity = parseExpenseAmount(valueFor(record, aliases.quantity));
-    const quantity = Number.isFinite(rawQuantity) && rawQuantity >= 0 ? rawQuantity : 0;
+    const packageQuantity = Number.isFinite(rawQuantity) && rawQuantity >= 0 ? rawQuantity : 0;
+    const quantity = packSize > 1 ? packSize * (packageQuantity || 1) : packageQuantity;
     const prior = products.get(key);
     if (prior) {
       prior.quantity += quantity;
@@ -198,7 +220,7 @@ const inventoryProductsFromRecords = (
     }
     const unitCostValue = valueFor(record, aliases.unitCost);
     const rawUnitCost = parseExpenseAmount(unitCostValue);
-    const unitCost = unitCostValue !== undefined && Number.isFinite(rawUnitCost) && rawUnitCost >= 0 ? rawUnitCost : undefined;
+    const unitCost = unitCostValue !== undefined && Number.isFinite(rawUnitCost) && rawUnitCost >= 0 ? rawUnitCost / packSize : undefined;
     const itemTaxValue = valueFor(record, aliases.itemTax);
     const itemTax = parseExpenseAmount(itemTaxValue);
     products.set(key, {
