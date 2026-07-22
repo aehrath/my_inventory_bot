@@ -2,6 +2,19 @@
 
 StockBot is a TypeScript inventory and tax workspace for a small business. It stores inventory, activity, expenses, tax settings, address-rate caches, and tax-update audit history in the server's D1 database. JSON import/export provides portable backups.
 
+## Expense imports
+
+The Tax Center includes a categorized expense ledger and accepts CSV or JSON records. Every imported row must provide a stable unique key, such as an Amazon order ID, invoice ID, receipt ID, or bank transaction ID. StockBot normalizes key casing and whitespace, rejects keys already in the database, rejects duplicates within the same file, previews the result, and performs the duplicate check again when the user applies the import.
+
+Supported CSV headers include:
+
+```text
+external_key, amazon_order_id, order_id, transaction_id, invoice_id,
+receipt_id, vendor, merchant, date, amount, category, note, description
+```
+
+A ready-to-fill CSV template can be downloaded from the expense ledger. JSON imports can be an array of expense objects or an object containing an `expenses` array.
+
 ## Local development
 
 Use Node.js 22.13 or newer.

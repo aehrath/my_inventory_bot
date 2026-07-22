@@ -27,6 +27,16 @@ export async function PUT(request: Request) {
     if (!state || typeof state !== "object" || !Array.isArray(state.products) || !Array.isArray(state.movements)) {
       return Response.json({ error: "This is not a valid inventory backup." }, { status: 400 });
     }
+    if (!Array.isArray(state.expenses)) {
+      return Response.json({ error: "Expense records are missing." }, { status: 400 });
+    }
+    const expenseKeys = new Set<string>();
+    for (const expense of state.expenses) {
+      const key = String(expense?.externalKey ?? "").trim().toLowerCase().replace(/\s+/g, "");
+      if (!key) return Response.json({ error: "Every expense needs a unique external key." }, { status: 400 });
+      if (expenseKeys.has(key)) return Response.json({ error: `Duplicate expense key: ${expense.externalKey}` }, { status: 409 });
+      expenseKeys.add(key);
+    }
     const db = await ensureTable();
     const updatedAt = new Date().toISOString();
     await db.prepare(`

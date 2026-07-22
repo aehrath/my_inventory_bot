@@ -22,6 +22,21 @@ test("includes preview, approval, protection, and audit controls", async () => {
   assert.match(page, /addressTaxRates/);
 });
 
+test("deduplicates imported expense records by external key", async () => {
+  const [page, stateRoute] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/api/state/route.ts"),
+  ]);
+  assert.match(page, /Amazon order ID, invoice number, or bank transaction ID/);
+  assert.match(page, /amazonorderid/);
+  assert.match(page, /normalizeExpenseKey/);
+  assert.match(page, /existingKeys\.has\(normalizedKey\) \|\| seen\.has\(normalizedKey\)/);
+  assert.match(page, /if \(keys\.has\(key\)\) continue/);
+  assert.match(page, /Import CSV or JSON/);
+  assert.match(stateRoute, /expenseKeys\.has\(key\)/);
+  assert.match(stateRoute, /Duplicate expense key/);
+});
+
 test("keeps external tax credentials on the server", async () => {
   const [route, example] = await Promise.all([
     read("app/api/tax-rates/route.ts"),
