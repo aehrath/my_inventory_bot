@@ -2,28 +2,12 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { expenseCategories, normalizeExpenseCategory, normalizeExpenseDate, normalizeExpenseKey, parseExpenseImportText } from "./expense-import";
+import type { ExpenseCategory, ExpenseImportPreview } from "./expense-import";
 import { defaultStateTaxSettings, stateName, stateTaxDefaults } from "./tax-data";
 import type { TaxAddress, TaxRateLookup, TaxRateLookupResponse, TaxSourceStatus } from "./tax-rate-types";
 
-const expenseCategories = [
-  "Cost of goods",
-  "Utilities",
-  "Rent",
-  "Office equipment",
-  "Office supplies",
-  "Advertising & marketing",
-  "Shipping & postage",
-  "Insurance",
-  "Professional services",
-  "Repairs & maintenance",
-  "Travel",
-  "Meals",
-  "Taxes & licenses",
-  "Bank & processing fees",
-  "Other",
-] as const;
-
-type View = "dashboard" | "products" | "activity" | "taxes" | "data";
+type View = "dashboard" | "products" | "activity" | "expenses" | "taxes" | "data";
 type MovementType = "purchase" | "sale" | "personal_use" | "adjustment";
 type Product = {
   id: string; sku: string; name: string; category: string; quantity: number; unitCost: number;
@@ -35,10 +19,8 @@ type Movement = {
   stateTax?: number; localTax?: number; stateTaxRate?: number; localTaxRate?: number;
   taxJurisdiction?: string; localJurisdiction?: string; taxCollected?: boolean; customerAddress?: Address;
 };
-type ExpenseCategory = typeof expenseCategories[number];
 type Expense = { id: string; externalKey: string; vendor: string; category: ExpenseCategory; amount: number; date: string; note: string; source: "manual" | "import"; importedAt?: string };
 type ExpenseDraft = Omit<Expense, "id">;
-type ExpenseImportPreview = { fileName: string; ready: ExpenseDraft[]; duplicates: string[]; invalid: string[] };
 type Address = TaxAddress;
 type RateMetadata = { manualOverride?: boolean; sourceName?: string; sourceUrl?: string; checkedAt?: string; effectiveDate?: string | null };
 type StateTaxSetting = { enabled: boolean; rate: number } & RateMetadata;
@@ -57,159 +39,8 @@ const dateOnly = () => new Date().toISOString().slice(0, 10);
 const blankAddress = (state = "CA"): Address => ({ line1: "", city: "", state, postalCode: "" });
 const roundTax = (amount: number, rate: number) => Math.round(amount * rate) / 100;
 const roundRate = (rate: number) => Math.round(rate * 1_000) / 1_000;
-const normalizeExpenseKey = (key: string) => key.trim().toLowerCase().replace(/\s+/g, "");
-const normalizeExpenseCategory = (value: unknown): ExpenseCategory => {
-  const label = String(value ?? "").trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
-  const aliases: Record<string, ExpenseCategory> = {
-    cogs: "Cost of goods", "cost of goods sold": "Cost of goods", inventory: "Cost of goods", merchandise: "Cost of goods",
-    utility: "Utilities", utilities: "Utilities", electric: "Utilities", electricity: "Utilities", internet: "Utilities", phone: "Utilities",
-    rent: "Rent", lease: "Rent", equipment: "Office equipment", "office equipment": "Office equipment", computer: "Office equipment",
-    office: "Office supplies", supplies: "Office supplies", "office supplies": "Office supplies",
-    advertising: "Advertising & marketing", marketing: "Advertising & marketing", "advertising marketing": "Advertising & marketing",
-    shipping: "Shipping & postage", postage: "Shipping & postage", freight: "Shipping & postage", "shipping postage": "Shipping & postage",
-    insurance: "Insurance", legal: "Professional services", accounting: "Professional services", "professional services": "Professional services",
-    repairs: "Repairs & maintenance", maintenance: "Repairs & maintenance", "repairs maintenance": "Repairs & maintenance",
-    travel: "Travel", meals: "Meals", food: "Meals", taxes: "Taxes & licenses", licenses: "Taxes & licenses", "taxes licenses": "Taxes & licenses",
-    fees: "Bank & processing fees", banking: "Bank & processing fees", "bank fees": "Bank & processing fees", "processing fees": "Bank & processing fees",
-    other: "Other",
-  };
-  return expenseCategories.find((category) => category.toLowerCase() === label) ?? aliases[label] ?? "Other";
-};
-const normalizeExpenseDate = (value: unknown) => {
-  const raw = String(value ?? "").trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
-  const usDate = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (usDate) return `${usDate[3]}-${usDate[1].padStart(2, "0")}-${usDate[2].padStart(2, "0")}`;
-  const parsed = new Date(raw);
-  return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString().slice(0, 10);
-};
-const parseExpenseAmount = (value: unknown) => {
-  if (typeof value === "number") return value;
-  const raw = String(value ?? "").trim();
-  const negative = /^\(.*\)$/.test(raw);
-  const parsed = Number(raw.replace(/[,$()\s]/g, ""));
-  return negative ? -parsed : parsed;
-};
-const canonicalField = (value: string) => value.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
-const parseCsvRows = (text: string) => {
-  const rows: string[][] = [];
-  let row: string[] = [];
-  let value = "";
-  let quoted = false;
-  for (let index = 0; index < text.length; index += 1) {
-    const character = text[index];
-    if (character === '"') {
-      if (quoted && text[index + 1] === '"') { value += '"'; index += 1; }
-      else quoted = !quoted;
-    } else if (character === "," && !quoted) {
-      row.push(value); value = "";
-    } else if ((character === "\n" || character === "\r") && !quoted) {
-      if (character === "\r" && text[index + 1] === "\n") index += 1;
-      row.push(value); value = "";
-      if (row.some((cell) => cell.trim())) rows.push(row);
-      row = [];
-    } else value += character;
-  }
-  row.push(value);
-  if (row.some((cell) => cell.trim())) rows.push(row);
-  return rows;
-};
-
 async function parseExpenseImport(file: File, existingExpenses: Expense[]): Promise<ExpenseImportPreview> {
-  const text = await file.text();
-  let records: Array<Record<string, unknown>> = [];
-  if (file.name.toLowerCase().endsWith(".json") || text.trim().startsWith("[") || text.trim().startsWith("{")) {
-    const parsed = JSON.parse(text) as unknown;
-    const list = Array.isArray(parsed) ? parsed : typeof parsed === "object" && parsed && Array.isArray((parsed as { expenses?: unknown[] }).expenses) ? (parsed as { expenses: unknown[] }).expenses : [];
-    records = list.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"));
-  } else {
-    const rows = parseCsvRows(text);
-    if (rows.length > 1) {
-      const headers = rows[0].map(canonicalField);
-      records = rows.slice(1).map((row) => Object.fromEntries(headers.map((header, index) => [header, row[index] ?? ""])));
-    }
-  }
-
-  const valueFor = (record: Record<string, unknown>, names: readonly string[]) => {
-    const normalized = new Map(Object.entries(record).map(([key, value]) => [canonicalField(key), value]));
-    return names.map((name) => normalized.get(name)).find((value) => value !== undefined && String(value).trim() !== "");
-  };
-  const isAmazonBusinessExport = records.some((record) => valueFor(record, ["orderid"]) && valueFor(record, ["ordernettotal"]) !== undefined && valueFor(record, ["itemnettotal"]) !== undefined);
-  if (isAmazonBusinessExport) {
-    const orders = new Map<string, Array<Record<string, unknown>>>();
-    for (const record of records) {
-      const orderId = String(valueFor(record, ["orderid"]) ?? "").trim();
-      if (!orderId) continue;
-      orders.set(orderId, [...(orders.get(orderId) ?? []), record]);
-    }
-    records = Array.from(orders.entries()).map(([orderId, orderRows]) => {
-      const first = orderRows[0];
-      const uniqueValues = (fields: readonly string[]) => Array.from(new Set(orderRows.map((record) => String(valueFor(record, fields) ?? "").trim()).filter(Boolean)));
-      const sellers = uniqueValues(["sellername", "vendor", "merchant"]);
-      const titles = uniqueValues(["title", "description"]);
-      const amazonCategories = uniqueValues(["amazoninternalproductcategory", "segment", "family", "class", "commodity"]);
-      const categoryText = amazonCategories.join(" ").toLowerCase();
-      const category: ExpenseCategory = /office equipment|office machine|computer|electronic/.test(categoryText)
-        ? "Office equipment"
-        : /office product|office supplies|stationery/.test(categoryText)
-          ? "Office supplies"
-          : /shipping|postage|mailing/.test(categoryText)
-            ? "Shipping & postage"
-            : "Other";
-      const titleNote = titles.slice(0, 3).join("; ");
-      const moreItems = titles.length > 3 ? ` (+${titles.length - 3} more items)` : "";
-      const categoryNote = amazonCategories[0] ? ` · Amazon category: ${amazonCategories[0]}` : "";
-      return {
-        externalkey: orderId,
-        vendor: sellers.slice(0, 3).join(", ") || "Amazon",
-        category,
-        amount: valueFor(first, ["ordernettotal"]),
-        date: valueFor(first, ["orderdate"]),
-        note: `${titleNote}${moreItems}${categoryNote}`,
-      };
-    });
-  }
-
-  const ready: ExpenseDraft[] = [];
-  const duplicates: string[] = [];
-  const invalid: string[] = [];
-  const existingKeys = new Set(existingExpenses.map((expense) => normalizeExpenseKey(expense.externalKey)));
-  const seen = new Set<string>();
-  const aliases = {
-    key: ["externalkey", "amazonorderid", "orderid", "transactionid", "invoiceid", "receiptid", "recordid", "uniqueid", "id"],
-    vendor: ["vendor", "merchant", "sellername", "seller", "supplier", "payee", "store"],
-    category: ["category", "expensecategory", "amazoninternalproductcategory", "type", "account"],
-    amount: ["amount", "ordernettotal", "itemnettotal", "paymentamount", "totalamount", "total", "ordertotal", "charge", "price", "expenseamount"],
-    date: ["date", "orderdate", "transactiondate", "purchasedate", "posteddate"],
-    note: ["note", "title", "description", "memo", "item", "product", "details"],
-  } as const;
-
-  records.forEach((record, index) => {
-    const externalKey = String(valueFor(record, aliases.key) ?? "").trim();
-    const normalizedKey = normalizeExpenseKey(externalKey);
-    const amount = parseExpenseAmount(valueFor(record, aliases.amount));
-    const date = normalizeExpenseDate(valueFor(record, aliases.date));
-    if (!normalizedKey || !Number.isFinite(amount) || amount <= 0 || !date) {
-      invalid.push(`Row ${index + 2}: ${!normalizedKey ? "missing unique key" : !date ? "invalid date" : "invalid amount"}`);
-      return;
-    }
-    if (existingKeys.has(normalizedKey) || seen.has(normalizedKey)) {
-      duplicates.push(externalKey);
-      return;
-    }
-    seen.add(normalizedKey);
-    ready.push({
-      externalKey,
-      vendor: String(valueFor(record, aliases.vendor) ?? "Unknown vendor").trim(),
-      category: normalizeExpenseCategory(valueFor(record, aliases.category)),
-      amount,
-      date,
-      note: String(valueFor(record, aliases.note) ?? "").trim(),
-      source: "import",
-      importedAt: new Date().toISOString(),
-    });
-  });
-  return { fileName: file.name, ready, duplicates, invalid };
+  return parseExpenseImportText(await file.text(), file.name, existingExpenses.map((expense) => expense.externalKey));
 }
 const addressKey = (address: Address) => [address.line1, address.city, address.state, address.postalCode.slice(0, 5)].map((part) => part.trim().toLowerCase()).join("|");
 const isCompleteAddress = (address: Address) => Boolean(address.line1.trim() && address.city.trim() && address.state && /^\d{5}(?:-\d{4})?$/.test(address.postalCode.trim()));
@@ -258,7 +89,7 @@ const seed: AppState = {
 };
 
 const icons: Record<View | "plus" | "search" | "download" | "upload" | "alert" | "arrow", string> = {
-  dashboard: "▦", products: "□", activity: "↕", taxes: "%", data: "↥", plus: "+", search: "⌕", download: "↓", upload: "↑", alert: "!", arrow: "→",
+  dashboard: "▦", products: "□", activity: "↕", expenses: "$", taxes: "%", data: "↥", plus: "+", search: "⌕", download: "↓", upload: "↑", alert: "!", arrow: "→",
 };
 
 export default function Home() {
@@ -328,7 +159,7 @@ export default function Home() {
 
   const openUse = (product: Product) => { setSelectedProduct(product); setMovementModal(true); };
   const nav: { id: View; label: string }[] = [
-    { id: "dashboard", label: "Overview" }, { id: "products", label: "Products" }, { id: "activity", label: "Activity" }, { id: "taxes", label: "Tax center" }, { id: "data", label: "Data & settings" },
+    { id: "dashboard", label: "Overview" }, { id: "products", label: "Products" }, { id: "activity", label: "Activity" }, { id: "expenses", label: "Expenses" }, { id: "taxes", label: "Tax center" }, { id: "data", label: "Data & settings" },
   ];
 
   return (
@@ -346,7 +177,8 @@ export default function Home() {
         {view === "dashboard" && <Dashboard state={state} metrics={metrics} onView={setView} onUse={openUse} />}
         {view === "products" && <Products state={state} query={query} setQuery={setQuery} onEdit={(p) => { setSelectedProduct(p); setProductModal(true); }} onUse={openUse} onDelete={(p) => confirm(`Delete ${p.name}? Its activity history will remain.`) && setState((s) => ({ ...s, products: s.products.filter((x) => x.id !== p.id) }))} />}
         {view === "activity" && <Activity state={state} onNew={() => setMovementModal(true)} />}
-        {view === "taxes" && <TaxCenter state={state} metrics={metrics} setState={setState} onExpense={() => setExpenseModal(true)} onDeleteExpense={(id) => setState((s) => ({ ...s, expenses: s.expenses.filter((e) => e.id !== id) }))} />}
+        {view === "expenses" && <Expenses state={state} setState={setState} onExpense={() => setExpenseModal(true)} onDeleteExpense={(id) => setState((s) => ({ ...s, expenses: s.expenses.filter((e) => e.id !== id) }))} />}
+        {view === "taxes" && <TaxCenter state={state} metrics={metrics} setState={setState} />}
         {view === "data" && <DataSettings state={state} setState={setState} fileRef={fileRef} onImport={(e) => importState(e, setState)} />}
       </main>
 
@@ -404,39 +236,39 @@ function Activity({ state, onNew }: { state: AppState; onNew: () => void }) { re
 
 function MovementTable({ movements, products }: { movements: Movement[]; products: Product[] }) { return <div className="ledger"><div className="ledgerHead"><span>Date</span><span>Product</span><span>Activity</span><span>Qty</span><span>Amount</span><span>Tax</span></div>{movements.map((m) => { const p = products.find((x) => x.id === m.productId); const amount = m.quantity * (m.type === "sale" ? m.unitPrice : m.unitCost); return <div className="ledgerRow" key={m.id}><span>{new Date(`${m.date}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span><div><strong>{p?.name ?? "Removed product"}</strong><small>{m.note || p?.sku}</small></div><span className={`activityTag ${m.type}`}>{m.type.replace("_", " ")}</span><strong>{m.type === "purchase" || (m.type === "adjustment" && m.quantity > 0) ? "+" : "−"}{Math.abs(m.quantity)}</strong><strong>{money.format(amount)}</strong><span className="taxLedger">{m.salesTax ? money.format(m.salesTax) : "—"}{(m.localTax ?? 0) > 0 && <small>{money.format(m.localTax ?? 0)} local</small>}</span></div>})}{!movements.length && <Empty text="No activity has been recorded yet." />}</div>; }
 
-function TaxCenter({ state, metrics, setState, onExpense, onDeleteExpense }: { state: AppState; metrics: Metrics; setState: React.Dispatch<React.SetStateAction<AppState>>; onExpense: () => void; onDeleteExpense: (id: string) => void }) {
+function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppState; setState: React.Dispatch<React.SetStateAction<AppState>>; onExpense: () => void; onDeleteExpense: (id: string) => void }) {
   const [expenseQuery, setExpenseQuery] = useState("");
   const [expenseCategory, setExpenseCategory] = useState<ExpenseCategory | "All">("All");
+  const [expenseYear, setExpenseYear] = useState<string>("All");
   const [expenseImport, setExpenseImport] = useState<ExpenseImportPreview | null>(null);
+  const [importing, setImporting] = useState(false);
   const expenseFileRef = useRef<HTMLInputElement>(null);
-  const rows = [
-    ["Gross sales", metrics.revenue, "Total product sales before sales tax"],
-    ["Returns & allowances", 0, "No returns recorded"],
-    ["Inventory-ledger COGS", metrics.inventoryCogs, "Unit cost captured when each sale was recorded"],
-    ["Additional COGS records", metrics.additionalCogs, "Imported or manually entered costs not already in product unit cost"],
-    ["Gross profit", metrics.grossProfit, "Gross sales minus both COGS sources"],
-    ["Operating expenses", metrics.expenses, "Expense records outside cost of goods"],
-    ["Estimated net business income", metrics.taxableIncome, "Before owner-specific deductions and income taxes"],
-  ] as const;
-  const taxMovements = state.movements.filter((movement) => movement.type === "sale" && new Date(`${movement.date}T12:00:00`).getFullYear() === state.settings.taxYear);
-  const yearExpenses = state.expenses.filter((expense) => new Date(`${expense.date}T12:00:00`).getFullYear() === state.settings.taxYear);
-  const visibleExpenses = yearExpenses.filter((expense) => {
+  const years = Array.from(new Set(state.expenses.map((expense) => Number(expense.date.slice(0, 4))))).filter(Number.isFinite).sort((a, b) => b - a);
+  const selectedExpenses = state.expenses.filter((expense) => expenseYear === "All" || expense.date.startsWith(`${expenseYear}-`));
+  const visibleExpenses = selectedExpenses.filter((expense) => {
     const matchesCategory = expenseCategory === "All" || expense.category === expenseCategory;
     const haystack = `${expense.vendor} ${expense.externalKey} ${expense.category} ${expense.note}`.toLowerCase();
     return matchesCategory && haystack.includes(expenseQuery.toLowerCase());
   });
-  const categoryTotals = expenseCategories.map((category) => ({ category, total: yearExpenses.filter((expense) => expense.category === category).reduce((sum, expense) => sum + expense.amount, 0) })).filter((item) => item.total > 0).sort((a, b) => b.total - a.total);
-  const taxByState = Object.entries(taxMovements.reduce<Record<string, { sales: number; stateTax: number; localTax: number }>>((totals, movement) => { const code = movement.taxJurisdiction ?? movement.customerAddress?.state ?? "Unassigned"; const current = totals[code] ?? { sales: 0, stateTax: 0, localTax: 0 }; totals[code] = { sales: current.sales + movement.quantity * movement.unitPrice, stateTax: current.stateTax + (movement.stateTax ?? movement.salesTax), localTax: current.localTax + (movement.localTax ?? 0) }; return totals; }, {})).sort(([a], [b]) => a.localeCompare(b));
-  const localByJurisdiction = Object.entries(taxMovements.reduce<Record<string, { state: string; sales: number; tax: number; rate: number }>>((totals, movement) => { const localTax = movement.localTax ?? 0; if (!localTax) return totals; const key = movement.localJurisdiction ?? `${movement.customerAddress?.city || "Local"}, ${movement.customerAddress?.state || ""}`; const current = totals[key] ?? { state: movement.customerAddress?.state ?? "", sales: 0, tax: 0, rate: movement.localTaxRate ?? 0 }; totals[key] = { ...current, sales: current.sales + movement.quantity * movement.unitPrice, tax: current.tax + localTax }; return totals; }, {})).sort(([a], [b]) => a.localeCompare(b));
+  const categoryTotals = expenseCategories.map((category) => ({ category, total: selectedExpenses.filter((expense) => expense.category === category).reduce((sum, expense) => sum + expense.amount, 0) })).filter((item) => item.total > 0).sort((a, b) => b.total - a.total);
+  const expenseTotal = selectedExpenses.reduce((sum, expense) => sum + expense.amount, 0);
+  const cogsTotal = selectedExpenses.filter((expense) => expense.category === "Cost of goods").reduce((sum, expense) => sum + expense.amount, 0);
+  const operatingTotal = expenseTotal - cogsTotal;
   const openExpenseImport = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+    input.value = "";
     if (!file) return;
+    setImporting(true);
     try { setExpenseImport(await parseExpenseImport(file, state.expenses)); }
-    catch { setExpenseImport({ fileName: file.name, ready: [], duplicates: [], invalid: ["The file could not be read. Use a CSV or JSON expense export."] }); }
-    event.target.value = "";
+    catch (caught) {
+      const message = caught instanceof Error ? caught.message : "The file could not be read.";
+      setExpenseImport({ fileName: file.name, ready: [], duplicates: [], invalid: [`${message} Use a CSV or JSON expense export.`], years: [], readyTotal: 0 });
+    } finally { setImporting(false); }
   };
   const applyExpenseImport = () => {
     if (!expenseImport?.ready.length) return;
+    const importedYears = expenseImport.years;
     setState((current) => {
       const keys = new Set(current.expenses.map((expense) => normalizeExpenseKey(expense.externalKey)));
       const additions: Expense[] = [];
@@ -447,18 +279,42 @@ function TaxCenter({ state, metrics, setState, onExpense, onDeleteExpense }: { s
       }
       return { ...current, expenses: [...additions, ...current.expenses] };
     });
+    setExpenseYear(importedYears.length === 1 ? String(importedYears[0]) : "All");
+    setExpenseCategory("All");
+    setExpenseQuery("");
     setExpenseImport(null);
   };
+  return <div className="expenseLayout">
+    <section className="expenseHero"><div><p className="eyebrow">Business spending</p><h2>Every expense, easy to find.</h2><p>Import purchase history or add a record by hand. StockBot keeps unique keys, categories, and tax-year totals organized.</p></div><div className="expenseHeroTotal"><span>{expenseYear === "All" ? "All recorded years" : expenseYear}</span><strong>{money.format(expenseTotal)}</strong><small>{selectedExpenses.length} unique records</small></div></section>
+    <div className="taxCards expenseCards"><Metric label="Total expenses" value={money.format(expenseTotal)} note={expenseYear === "All" ? "Across every recorded year" : `Dated in ${expenseYear}`} accent="green" /><Metric label="Operating expenses" value={money.format(operatingTotal)} note="Excludes cost-of-goods records" accent="blue" /><Metric label="Additional COGS" value={money.format(cogsTotal)} note="Costs not already in product unit cost" accent="sand" /><Metric label="Unique records" value={whole.format(selectedExpenses.length)} note={`${years.length} year${years.length === 1 ? "" : "s"} represented`} accent="coral" /></div>
+    <div className="taxColumns expenseColumns"><section className="panel expenseCategories"><div className="panelTitle"><div><p className="eyebrow">Expense summary</p><h3>Spending by category</h3></div><span className="pill neutral">{selectedExpenses.length} records</span></div><div className="categoryTotals">{categoryTotals.map((item) => <button className={expenseCategory === item.category ? "active" : ""} key={item.category} onClick={() => setExpenseCategory(item.category)}><span><strong>{item.category}</strong><small>{selectedExpenses.filter((expense) => expense.category === item.category).length} records</small></span><b>{money.format(item.total)}</b></button>)}{!categoryTotals.length && <Empty text="No expenses recorded for this period." />}</div><div className="expenseGrandTotal"><span>Total expense records</span><strong>{money.format(expenseTotal)}</strong></div></section>
+    <section className="panel expenseGuide"><div className="panelTitle"><div><p className="eyebrow">Import guide</p><h3>Amazon Business exports</h3></div></div><p>StockBot groups multi-item rows into one expense per Amazon Order ID and uses Order Net Total, so the same order is not counted twice.</p><div className="importFacts"><span><strong>Unique key</strong><small>Amazon Order ID</small></span><span><strong>Expense amount</strong><small>Order Net Total</small></span><span><strong>Imported years</strong><small>Shown automatically after import</small></span></div></section></div>
+    <section className="panel expenseLedger"><div className="panelTitle"><div><p className="eyebrow">Deduplicated records</p><h3>Expense ledger</h3></div><div className="expenseActions"><button className="secondary" onClick={downloadExpenseTemplate}>↓ CSV template</button><button className="secondary" disabled={importing} onClick={() => expenseFileRef.current?.click()}>{importing ? "Reading file…" : "↑ Import CSV or JSON"}</button><button className="primary" onClick={onExpense}>+ Add expense</button><input ref={expenseFileRef} hidden type="file" accept="text/csv,.csv,application/json,.json" onChange={openExpenseImport} /></div></div><p className="settingsCopy">Every record requires a unique external key—such as an Amazon order ID, invoice number, or bank transaction ID. The same key can never be imported twice.</p><div className="expenseToolbar"><label className="search"><span>{icons.search}</span><input aria-label="Search expenses" placeholder="Search vendor, order ID, category, or note" value={expenseQuery} onChange={(event) => setExpenseQuery(event.target.value)} /></label><label>Year<select aria-label="Expense year" value={expenseYear} onChange={(event) => setExpenseYear(event.target.value)}><option value="All">All years</option>{years.map((year) => <option value={year} key={year}>{year}</option>)}</select></label><label>Category<select value={expenseCategory} onChange={(event) => setExpenseCategory(event.target.value as ExpenseCategory | "All")}><option>All</option>{expenseCategories.map((category) => <option key={category}>{category}</option>)}</select></label></div><div className="expenseTable"><div className="expenseHead"><span>Date</span><span>Vendor & description</span><span>Category</span><span>Unique key</span><span>Amount</span><span /></div>{visibleExpenses.map((expense) => <div className="expenseRow" key={expense.id}><span>{expense.date}</span><span><strong>{expense.vendor}</strong><small>{expense.note || (expense.source === "import" ? "Imported record" : "Manual record")}</small></span><span><b>{expense.category}</b></span><span><code>{expense.externalKey}</code><small>{expense.source}</small></span><strong>{money.format(expense.amount)}</strong><button aria-label={`Delete expense ${expense.externalKey}`} onClick={() => confirm(`Delete expense ${expense.externalKey}?`) && onDeleteExpense(expense.id)}>×</button></div>)}{!visibleExpenses.length && <Empty text="No expense records match this view." />}</div></section>
+    <div className="disclaimer"><strong>Good records, calmer filing.</strong><span>The Tax center uses the selected tax year for its filing worksheet. This ledger shows all years unless you filter it.</span></div>
+    {expenseImport && <Modal title="Review expense import" eyebrow="Duplicate-safe import" onClose={() => setExpenseImport(null)}><div className="importSummary"><article><span>Ready to import</span><strong>{expenseImport.ready.length}</strong></article><article><span>Duplicates skipped</span><strong>{expenseImport.duplicates.length}</strong></article><article><span>Invalid records</span><strong>{expenseImport.invalid.length}</strong></article></div><p className="settingsCopy"><strong>{expenseImport.fileName}</strong> was checked against saved records and against itself. {expenseImport.ready.length > 0 && <>The ready total is <strong>{money.format(expenseImport.readyTotal)}</strong>{expenseImport.years.length ? ` across ${expenseImport.years.join(", ")}` : ""}.</>}</p>{expenseImport.ready.length > 0 && <div className="importPreviewList">{expenseImport.ready.slice(0, 6).map((expense) => <div key={expense.externalKey}><span><strong>{expense.vendor}</strong><small>{expense.externalKey} · {expense.category} · {expense.date}</small></span><b>{money.format(expense.amount)}</b></div>)}{expenseImport.ready.length > 6 && <small>+ {expenseImport.ready.length - 6} more ready records</small>}</div>}{expenseImport.duplicates.length > 0 && <details className="importDetails"><summary>{expenseImport.duplicates.length} duplicate key{expenseImport.duplicates.length === 1 ? "" : "s"} skipped</summary><p>{expenseImport.duplicates.slice(0, 12).join(", ")}</p></details>}{expenseImport.invalid.length > 0 && <details className="importDetails"><summary>{expenseImport.invalid.length} invalid record{expenseImport.invalid.length === 1 ? "" : "s"} skipped</summary>{expenseImport.invalid.slice(0, 12).map((message) => <p key={message}>{message}</p>)}</details>}<div className="modalActions"><button type="button" className="secondary" onClick={() => setExpenseImport(null)}>Cancel</button><button type="button" className="primary" disabled={!expenseImport.ready.length} onClick={applyExpenseImport}>Import {expenseImport.ready.length} records</button></div></Modal>}
+  </div>;
+}
+
+function TaxCenter({ state, metrics, setState }: { state: AppState; metrics: Metrics; setState: React.Dispatch<React.SetStateAction<AppState>> }) {
+  const rows = [
+    ["Gross sales", metrics.revenue, "Total product sales before sales tax"],
+    ["Returns & allowances", 0, "No returns recorded"],
+    ["Inventory-ledger COGS", metrics.inventoryCogs, "Unit cost captured when each sale was recorded"],
+    ["Additional COGS records", metrics.additionalCogs, "Imported or manually entered costs not already in product unit cost"],
+    ["Gross profit", metrics.grossProfit, "Gross sales minus both COGS sources"],
+    ["Operating expenses", metrics.expenses, "Expense records outside cost of goods"],
+    ["Estimated net business income", metrics.taxableIncome, "Before owner-specific deductions and income taxes"],
+  ] as const;
+  const taxMovements = state.movements.filter((movement) => movement.type === "sale" && new Date(`${movement.date}T12:00:00`).getFullYear() === state.settings.taxYear);
+  const taxByState = Object.entries(taxMovements.reduce<Record<string, { sales: number; stateTax: number; localTax: number }>>((totals, movement) => { const code = movement.taxJurisdiction ?? movement.customerAddress?.state ?? "Unassigned"; const current = totals[code] ?? { sales: 0, stateTax: 0, localTax: 0 }; totals[code] = { sales: current.sales + movement.quantity * movement.unitPrice, stateTax: current.stateTax + (movement.stateTax ?? movement.salesTax), localTax: current.localTax + (movement.localTax ?? 0) }; return totals; }, {})).sort(([a], [b]) => a.localeCompare(b));
+  const localByJurisdiction = Object.entries(taxMovements.reduce<Record<string, { state: string; sales: number; tax: number; rate: number }>>((totals, movement) => { const localTax = movement.localTax ?? 0; if (!localTax) return totals; const key = movement.localJurisdiction ?? `${movement.customerAddress?.city || "Local"}, ${movement.customerAddress?.state || ""}`; const current = totals[key] ?? { state: movement.customerAddress?.state ?? "", sales: 0, tax: 0, rate: movement.localTaxRate ?? 0 }; totals[key] = { ...current, sales: current.sales + movement.quantity * movement.unitPrice, tax: current.tax + localTax }; return totals; }, {})).sort(([a], [b]) => a.localeCompare(b));
   return <div className="taxLayout"><section className="taxHero"><div><p className="eyebrow">Filing worksheet</p><h2>{state.settings.taxYear} numbers, gathered.</h2><p>Choose a tax year and keep your books current. StockBot does the arithmetic; your tax professional makes the filing decisions.</p></div><label>Tax year<select value={state.settings.taxYear} onChange={(e) => setState((s) => ({ ...s, settings: { ...s.settings, taxYear: Number(e.target.value) } }))}>{[nowYear - 2, nowYear - 1, nowYear, nowYear + 1].map((y) => <option key={y}>{y}</option>)}</select></label></section>
     <div className="taxCards"><Metric label="State sales tax" value={money.format(metrics.stateSalesTax)} note="State portion collected from customers" accent="blue" /><Metric label="Local sales tax" value={money.format(metrics.localSalesTax)} note="City, county, and district portion" accent="sand" /><Metric label="Personal-use tax due" value={money.format(metrics.useTax)} note={`${money.format(metrics.localUseTax)} is local use tax`} accent="coral" /><Metric label="Total tax set-aside" value={money.format(metrics.salesTax + metrics.useTax)} note="State and local sales/use tax" accent="green" /></div>
     <TaxRateUpdater state={state} setState={setState} />
     <section className="panel stateSummary"><div className="panelTitle"><div><p className="eyebrow">Destination summary</p><h3>Sales tax by customer state</h3></div></div><div className="stateSummaryGrid">{taxByState.map(([code, total]) => <div key={code}><span><strong>{code === "Unassigned" ? code : stateName(code)}</strong><small>{money.format(total.sales)} taxable sales</small></span><span className="taxSplit"><small>State {money.format(total.stateTax)}</small><b>Local {money.format(total.localTax)}</b></span></div>)}{!taxByState.length && <Empty text="No customer sales in this tax year." />}</div></section>
     <section className="panel localSummary"><div className="panelTitle"><div><p className="eyebrow">Local filing detail</p><h3>Tax by city, county, or district</h3></div><span className="pill neutral">{localByJurisdiction.length} jurisdictions</span></div><div className="localSummaryGrid">{localByJurisdiction.map(([name, total]) => <div key={name}><span><strong>{name}</strong><small>{stateName(total.state)} · {total.rate}% local · {money.format(total.sales)} sales</small></span><b>{money.format(total.tax)}</b></div>)}{!localByJurisdiction.length && <Empty text="No local tax has been collected yet. Add local rules in Data & settings." />}</div></section>
-    <div className="taxColumns"><section className="panel"><div className="panelTitle"><div><p className="eyebrow">Income summary</p><h3>Profit & COGS worksheet</h3></div><button className="secondary" onClick={() => window.print()}>Print</button></div><div className="taxRows">{rows.map(([label, value, note], index) => <div className={index === rows.length - 1 ? "total" : ""} key={label}><span><strong>{label}</strong><small>{note}</small></span><strong>{money.format(value)}</strong></div>)}</div><div className="formula"><strong>Inventory formula reference</strong><span>Beginning inventory {money.format(state.settings.beginningInventory)} + inventory purchases {money.format(metrics.purchases)} − ending inventory {money.format(metrics.inventoryValue)}</span><b>{money.format(state.settings.beginningInventory + metrics.purchases - metrics.inventoryValue)}</b></div><p className="footnote">Do not categorize a purchase as additional COGS if its cost is already included in a product&apos;s unit cost.</p></section>
-    <section className="panel expenseCategories"><div className="panelTitle"><div><p className="eyebrow">Expense summary</p><h3>Spending by category</h3></div><span className="pill neutral">{yearExpenses.length} records</span></div><div className="categoryTotals">{categoryTotals.map((item) => <button key={item.category} onClick={() => setExpenseCategory(item.category)}><span><strong>{item.category}</strong><small>{yearExpenses.filter((expense) => expense.category === item.category).length} records</small></span><b>{money.format(item.total)}</b></button>)}{!categoryTotals.length && <Empty text="No expenses recorded for this tax year." />}</div><div className="expenseGrandTotal"><span>Total expense records</span><strong>{money.format(metrics.expenseRecordsTotal)}</strong></div></section></div>
-    <section className="panel expenseLedger"><div className="panelTitle"><div><p className="eyebrow">Deduplicated records</p><h3>Expense ledger</h3></div><div className="expenseActions"><button className="secondary" onClick={downloadExpenseTemplate}>↓ CSV template</button><button className="secondary" onClick={() => expenseFileRef.current?.click()}>↑ Import CSV or JSON</button><button className="primary" onClick={onExpense}>+ Add expense</button><input ref={expenseFileRef} hidden type="file" accept="text/csv,.csv,application/json,.json" onChange={openExpenseImport} /></div></div><p className="settingsCopy">Every record requires a unique external key—such as an Amazon order ID, invoice number, or bank transaction ID. The same key can never be imported twice.</p><div className="expenseToolbar"><label className="search"><span>{icons.search}</span><input aria-label="Search expenses" placeholder="Search vendor, order ID, category, or note" value={expenseQuery} onChange={(event) => setExpenseQuery(event.target.value)} /></label><label>Category<select value={expenseCategory} onChange={(event) => setExpenseCategory(event.target.value as ExpenseCategory | "All")}><option>All</option>{expenseCategories.map((category) => <option key={category}>{category}</option>)}</select></label></div><div className="expenseTable"><div className="expenseHead"><span>Date</span><span>Vendor & description</span><span>Category</span><span>Unique key</span><span>Amount</span><span /></div>{visibleExpenses.map((expense) => <div className="expenseRow" key={expense.id}><span>{expense.date}</span><span><strong>{expense.vendor}</strong><small>{expense.note || (expense.source === "import" ? "Imported record" : "Manual record")}</small></span><span><b>{expense.category}</b></span><span><code>{expense.externalKey}</code><small>{expense.source}</small></span><strong>{money.format(expense.amount)}</strong><button aria-label={`Delete expense ${expense.externalKey}`} onClick={() => confirm(`Delete expense ${expense.externalKey}?`) && onDeleteExpense(expense.id)}>×</button></div>)}{!visibleExpenses.length && <Empty text="No expense records match this view." />}</div></section>
+    <section className="panel taxWorksheet"><div className="panelTitle"><div><p className="eyebrow">Income summary</p><h3>Profit & COGS worksheet</h3></div><button className="secondary" onClick={() => window.print()}>Print</button></div><div className="taxRows">{rows.map(([label, value, note], index) => <div className={index === rows.length - 1 ? "total" : ""} key={label}><span><strong>{label}</strong><small>{note}</small></span><strong>{money.format(value)}</strong></div>)}</div><div className="formula"><strong>Inventory formula reference</strong><span>Beginning inventory {money.format(state.settings.beginningInventory)} + inventory purchases {money.format(metrics.purchases)} − ending inventory {money.format(metrics.inventoryValue)}</span><b>{money.format(state.settings.beginningInventory + metrics.purchases - metrics.inventoryValue)}</b></div><p className="footnote">Expense totals come from the separate Expenses section. Do not categorize a purchase as additional COGS if its cost is already included in a product&apos;s unit cost.</p></section>
     <div className="disclaimer"><strong>Good records, calmer filing.</strong><span>This worksheet is an organizational estimate, not tax or legal advice. Equipment and other purchases may require special tax treatment.</span></div>
-    {expenseImport && <Modal title="Review expense import" eyebrow="Duplicate-safe import" onClose={() => setExpenseImport(null)}><div className="importSummary"><article><span>Ready to import</span><strong>{expenseImport.ready.length}</strong></article><article><span>Duplicates skipped</span><strong>{expenseImport.duplicates.length}</strong></article><article><span>Invalid rows</span><strong>{expenseImport.invalid.length}</strong></article></div><p className="settingsCopy"><strong>{expenseImport.fileName}</strong> was checked against saved records and against itself. A final key check runs again when you import.</p>{expenseImport.ready.length > 0 && <div className="importPreviewList">{expenseImport.ready.slice(0, 6).map((expense) => <div key={expense.externalKey}><span><strong>{expense.vendor}</strong><small>{expense.externalKey} · {expense.category} · {expense.date}</small></span><b>{money.format(expense.amount)}</b></div>)}{expenseImport.ready.length > 6 && <small>+ {expenseImport.ready.length - 6} more ready records</small>}</div>}{expenseImport.duplicates.length > 0 && <details className="importDetails"><summary>{expenseImport.duplicates.length} duplicate key{expenseImport.duplicates.length === 1 ? "" : "s"} skipped</summary><p>{expenseImport.duplicates.slice(0, 12).join(", ")}</p></details>}{expenseImport.invalid.length > 0 && <details className="importDetails"><summary>{expenseImport.invalid.length} invalid row{expenseImport.invalid.length === 1 ? "" : "s"} skipped</summary>{expenseImport.invalid.slice(0, 12).map((message) => <p key={message}>{message}</p>)}</details>}<div className="modalActions"><button type="button" className="secondary" onClick={() => setExpenseImport(null)}>Cancel</button><button type="button" className="primary" disabled={!expenseImport.ready.length} onClick={applyExpenseImport}>Import {expenseImport.ready.length} records</button></div></Modal>}
   </div>;
 }
 

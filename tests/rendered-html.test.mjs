@@ -23,19 +23,23 @@ test("includes preview, approval, protection, and audit controls", async () => {
 });
 
 test("deduplicates imported expense records by external key", async () => {
-  const [page, stateRoute] = await Promise.all([
+  const [page, expenseImport, stateRoute] = await Promise.all([
     read("app/page.tsx"),
+    read("app/expense-import.ts"),
     read("app/api/state/route.ts"),
   ]);
   assert.match(page, /Amazon order ID, invoice number, or bank transaction ID/);
-  assert.match(page, /amazonorderid/);
-  assert.match(page, /isAmazonBusinessExport/);
-  assert.match(page, /ordernettotal/);
-  assert.match(page, /sellername/);
-  assert.match(page, /amazoninternalproductcategory/);
-  assert.match(page, /orders\.entries\(\)/);
+  assert.match(page, /label: "Expenses"/);
+  assert.match(page, /All years/);
+  assert.match(page, /Imported years/);
+  assert.match(expenseImport, /amazonorderid/);
+  assert.match(expenseImport, /isAmazonBusinessExport/);
+  assert.match(expenseImport, /ordernettotal/);
+  assert.match(expenseImport, /sellername/);
+  assert.match(expenseImport, /amazoninternalproductcategory/);
+  assert.match(expenseImport, /orders\.entries\(\)/);
   assert.match(page, /normalizeExpenseKey/);
-  assert.match(page, /existingKeys\.has\(normalizedKey\) \|\| seen\.has\(normalizedKey\)/);
+  assert.match(expenseImport, /existingKeys\.has\(normalizedKey\) \|\| seen\.has\(normalizedKey\)/);
   assert.match(page, /if \(keys\.has\(key\)\) continue/);
   assert.match(page, /Import CSV or JSON/);
   assert.match(stateRoute, /expenseKeys\.has\(key\)/);
