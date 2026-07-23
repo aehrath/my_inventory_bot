@@ -13,6 +13,27 @@ export type ChangelogRelease = {
 
 export const changelogReleases: readonly ChangelogRelease[] = [
   {
+    version: "0.13.0",
+    date: "July 22, 2026",
+    title: "Item-level COGS tracking",
+    summary: "Sold inventory costs and production allocations now have a dedicated, traceable workspace.",
+    sections: [
+      {
+        title: "Added",
+        items: [
+          "Added a dedicated COGS page with sold-item cost, revenue, gross profit, and production-use summaries.",
+          "Added sortable item-level COGS records with quantity, unit cost, total cost, revenue, and final-product association.",
+          "Added a Used in final product activity that reduces component inventory and records its finished-product destination.",
+          "Added durable product-name and SKU snapshots to new inventory activity records.",
+        ],
+      },
+      {
+        title: "Changed",
+        items: ["Kept production-use costs separate from recognized customer-sale COGS to prevent tax-report double counting."],
+      },
+    ],
+  },
+  {
     version: "0.12.0",
     date: "July 22, 2026",
     title: "Pack descriptions split correctly",

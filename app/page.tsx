@@ -8,8 +8,8 @@ import type { ExpenseCategory, ExpenseImportPreview } from "./expense-import";
 import { defaultStateTaxSettings, stateName, stateTaxDefaults } from "./tax-data";
 import type { TaxAddress, TaxRateLookup, TaxRateLookupResponse, TaxSourceStatus } from "./tax-rate-types";
 
-type View = "dashboard" | "products" | "activity" | "expenses" | "taxes" | "data" | "changelog";
-type MovementType = "purchase" | "sale" | "personal_use" | "adjustment";
+type View = "dashboard" | "products" | "activity" | "cogs" | "expenses" | "taxes" | "data" | "changelog";
+type MovementType = "purchase" | "sale" | "production_use" | "personal_use" | "adjustment";
 type Product = {
   id: string; sku: string; name: string; vendor: string; category: string; quantity: number; unitCost: number;
   salePrice: number; reorderPoint: number; salesTaxPaid: boolean; createdAt: string;
@@ -19,6 +19,7 @@ type Movement = {
   unitPrice: number; salesTax: number; date: string; note: string; taxRate?: number;
   stateTax?: number; localTax?: number; stateTaxRate?: number; localTaxRate?: number;
   taxJurisdiction?: string; localJurisdiction?: string; taxCollected?: boolean; customerAddress?: Address;
+  productName?: string; productSku?: string; finalProductId?: string; finalProductName?: string;
 };
 type Expense = { id: string; externalKey: string; vendor: string; category: ExpenseCategory; amount: number; date: string; note: string; source: "manual" | "import"; importedAt?: string; fields?: Record<string, string> };
 type ExpenseDraft = Omit<Expense, "id">;
@@ -29,7 +30,7 @@ type LocalTaxRule = { id: string; name: string; state: string; city: string; pos
 type AddressTaxRate = TaxRateLookup & { addressKey: string; checkedAt: string };
 type TaxUpdateAudit = { id: string; checkedAt: string; appliedAt: string | null; checkedAddresses: number; availableUpdates: number; appliedUpdates: number; status: "checked" | "applied"; sources: string[] };
 type Settings = { businessName: string; taxYear: number; beginningInventory: number; ownAddress: Address; stateTaxes: Record<string, StateTaxSetting>; localTaxRules: LocalTaxRule[]; addressTaxRates: AddressTaxRate[]; taxUpdateHistory: TaxUpdateAudit[]; expenseColumnOrder: string[]; expenseVisibleColumns: string[] };
-type AppState = { version: 7; products: Product[]; movements: Movement[]; expenses: Expense[]; settings: Settings };
+type AppState = { version: 8; products: Product[]; movements: Movement[]; expenses: Expense[]; settings: Settings };
 type Metrics = { inventoryValue: number; units: number; revenue: number; inventoryCogs: number; additionalCogs: number; cogs: number; salesTax: number; stateSalesTax: number; localSalesTax: number; useTax: number; stateUseTax: number; localUseTax: number; expenses: number; expenseRecordsTotal: number; purchases: number; grossProfit: number; taxableIncome: number };
 type ExpenseColumnDefinition = { key: string; label: string; width: string; field?: string };
 type SortDirection = "asc" | "desc";
@@ -108,7 +109,7 @@ const resolveAddressRate = (address: Address, settings: Settings, liveRate?: Tax
 };
 
 const seed: AppState = {
-  version: 7,
+  version: 8,
   settings: { businessName: "Juniper & Co.", taxYear: nowYear, beginningInventory: 3180, ownAddress: blankAddress("CA"), stateTaxes: defaultStateTaxSettings("CA"), localTaxRules: [], addressTaxRates: [], taxUpdateHistory: [], expenseColumnOrder: defaultExpenseColumnOrder, expenseVisibleColumns: defaultExpenseVisibleColumns },
   products: [
     { id: "p1", sku: "CER-101", name: "Speckled Ceramic Mug", vendor: "Clay & Kiln Supply", category: "Home", quantity: 24, unitCost: 8.5, salePrice: 24, reorderPoint: 8, salesTaxPaid: false, createdAt: `${nowYear}-01-05` },
@@ -117,9 +118,10 @@ const seed: AppState = {
     { id: "p4", sku: "NOT-118", name: "Linen Notebook", vendor: "Paper & Flax Studio", category: "Stationery", quantity: 15, unitCost: 4.2, salePrice: 14, reorderPoint: 6, salesTaxPaid: true, createdAt: `${nowYear}-02-18` },
   ],
   movements: [
-    { id: "m1", productId: "p1", type: "sale", quantity: 3, unitCost: 8.5, unitPrice: 24, salesTax: 5.22, stateTax: 5.22, localTax: 0, taxRate: 7.25, stateTaxRate: 7.25, localTaxRate: 0, taxJurisdiction: "CA", taxCollected: true, customerAddress: { line1: "210 Market St", city: "San Diego", state: "CA", postalCode: "92101" }, date: `${nowYear}-03-04`, note: "Weekend market" },
-    { id: "m2", productId: "p3", type: "sale", quantity: 4, unitCost: 5.8, unitPrice: 18, salesTax: 5.22, stateTax: 5.22, localTax: 0, taxRate: 7.25, stateTaxRate: 7.25, localTaxRate: 0, taxJurisdiction: "CA", taxCollected: true, customerAddress: { line1: "48 Hill Ave", city: "Los Angeles", state: "CA", postalCode: "90012" }, date: `${nowYear}-03-04`, note: "Weekend market" },
-    { id: "m3", productId: "p2", type: "purchase", quantity: 12, unitCost: 7.25, unitPrice: 0, salesTax: 7.61, date: `${nowYear}-02-20`, note: "Spring restock" },
+    { id: "m1", productId: "p1", productName: "Speckled Ceramic Mug", productSku: "CER-101", finalProductId: "p1", finalProductName: "Speckled Ceramic Mug", type: "sale", quantity: 3, unitCost: 8.5, unitPrice: 24, salesTax: 5.22, stateTax: 5.22, localTax: 0, taxRate: 7.25, stateTaxRate: 7.25, localTaxRate: 0, taxJurisdiction: "CA", taxCollected: true, customerAddress: { line1: "210 Market St", city: "San Diego", state: "CA", postalCode: "92101" }, date: `${nowYear}-03-04`, note: "Weekend market" },
+    { id: "m2", productId: "p3", productName: "Canvas Market Tote", productSku: "TOT-310", finalProductId: "p3", finalProductName: "Canvas Market Tote", type: "sale", quantity: 4, unitCost: 5.8, unitPrice: 18, salesTax: 5.22, stateTax: 5.22, localTax: 0, taxRate: 7.25, stateTaxRate: 7.25, localTaxRate: 0, taxJurisdiction: "CA", taxCollected: true, customerAddress: { line1: "48 Hill Ave", city: "Los Angeles", state: "CA", postalCode: "90012" }, date: `${nowYear}-03-04`, note: "Weekend market" },
+    { id: "m3", productId: "p2", productName: "Cedar + Moss Candle", productSku: "CAN-204", type: "purchase", quantity: 12, unitCost: 7.25, unitPrice: 0, salesTax: 7.61, date: `${nowYear}-02-20`, note: "Spring restock" },
+    { id: "m4", productId: "p4", productName: "Linen Notebook", productSku: "NOT-118", finalProductName: "Stationery Gift Set", type: "production_use", quantity: 2, unitCost: 4.2, unitPrice: 0, salesTax: 0, date: `${nowYear}-03-02`, note: "Gift set assembly" },
   ],
   expenses: [
     { id: "e1", externalKey: "seed-flyer-001", vendor: "Town Print Shop", category: "Advertising & marketing", amount: 95, date: `${nowYear}-02-12`, note: "Local market flyer", source: "manual" },
@@ -128,7 +130,7 @@ const seed: AppState = {
 };
 
 const icons: Record<View | "plus" | "search" | "download" | "upload" | "alert" | "arrow", string> = {
-  dashboard: "▦", products: "□", activity: "↕", expenses: "$", taxes: "%", data: "↥", changelog: "≡", plus: "+", search: "⌕", download: "↓", upload: "↑", alert: "!", arrow: "→",
+  dashboard: "▦", products: "□", activity: "↕", cogs: "∑", expenses: "$", taxes: "%", data: "↥", changelog: "≡", plus: "+", search: "⌕", download: "↓", upload: "↑", alert: "!", arrow: "→",
 };
 
 export default function Home() {
@@ -139,6 +141,7 @@ export default function Home() {
   const [query, setQuery] = useState("");
   const [productModal, setProductModal] = useState(false);
   const [movementModal, setMovementModal] = useState(false);
+  const [movementType, setMovementType] = useState<MovementType | null>(null);
   const [expenseModal, setExpenseModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -193,12 +196,12 @@ export default function Home() {
   const recordMovement = (draft: Omit<Movement, "id">) => {
     const delta = draft.type === "purchase" ? draft.quantity : draft.type === "adjustment" ? draft.quantity : -draft.quantity;
     setState((s) => ({ ...s, movements: [{ ...draft, id: uid() }, ...s.movements], products: s.products.map((p) => p.id === draft.productId ? { ...p, quantity: Math.max(0, p.quantity + delta), unitCost: draft.type === "purchase" ? draft.unitCost : p.unitCost } : p) }));
-    setMovementModal(false);
+    setMovementModal(false); setMovementType(null); setSelectedProduct(null);
   };
 
-  const openUse = (product: Product) => { setSelectedProduct(product); setMovementModal(true); };
+  const openUse = (product: Product) => { setSelectedProduct(product); setMovementType("personal_use"); setMovementModal(true); };
   const nav: { id: View; label: string }[] = [
-    { id: "dashboard", label: "Overview" }, { id: "products", label: "Products" }, { id: "activity", label: "Activity" }, { id: "expenses", label: "Expenses" }, { id: "taxes", label: "Tax center" }, { id: "data", label: "Data & settings" }, { id: "changelog", label: "Changelog" },
+    { id: "dashboard", label: "Overview" }, { id: "products", label: "Products" }, { id: "activity", label: "Activity" }, { id: "cogs", label: "COGS" }, { id: "expenses", label: "Expenses" }, { id: "taxes", label: "Tax center" }, { id: "data", label: "Data & settings" }, { id: "changelog", label: "Changelog" },
   ];
 
   return (
@@ -211,11 +214,12 @@ export default function Home() {
       </aside>
 
       <main>
-        <header className="topbar"><div><p className="eyebrow">{state.settings.businessName} · {state.settings.taxYear}</p><h1>{nav.find((n) => n.id === view)?.label}</h1></div><div className="topActions"><button className="secondary" onClick={() => setMovementModal(true)}>{icons.arrow} Record activity</button><button className="primary" onClick={() => { setSelectedProduct(null); setProductModal(true); }}>{icons.plus} Add product</button></div></header>
+        <header className="topbar"><div><p className="eyebrow">{state.settings.businessName} · {state.settings.taxYear}</p><h1>{nav.find((n) => n.id === view)?.label}</h1></div><div className="topActions"><button className="secondary" onClick={() => { setMovementType(null); setMovementModal(true); }}>{icons.arrow} Record activity</button><button className="primary" onClick={() => { setSelectedProduct(null); setProductModal(true); }}>{icons.plus} Add product</button></div></header>
 
         {view === "dashboard" && <Dashboard state={state} metrics={metrics} onView={setView} onUse={openUse} />}
         {view === "products" && <Products state={state} query={query} setQuery={setQuery} onEdit={(p) => { setSelectedProduct(p); setProductModal(true); }} onUse={openUse} onDelete={(p) => confirm(`Delete ${p.name}? Its activity history will remain.`) && setState((s) => ({ ...s, products: s.products.filter((x) => x.id !== p.id) }))} />}
         {view === "activity" && <Activity state={state} onNew={() => setMovementModal(true)} />}
+        {view === "cogs" && <CogsCenter state={state} onProductionUse={() => { setSelectedProduct(null); setMovementType("production_use"); setMovementModal(true); }} />}
         {view === "expenses" && <Expenses state={state} setState={setState} onExpense={() => setExpenseModal(true)} onDeleteExpense={(id) => setState((s) => ({ ...s, expenses: s.expenses.filter((e) => e.id !== id) }))} />}
         {view === "taxes" && <TaxCenter state={state} metrics={metrics} setState={setState} />}
         {view === "data" && <DataSettings state={state} setState={setState} fileRef={fileRef} onImport={(e) => importState(e, setState)} />}
@@ -223,7 +227,7 @@ export default function Home() {
       </main>
 
       {productModal && <ProductModal product={selectedProduct} onSave={saveProduct} onClose={() => { setProductModal(false); setSelectedProduct(null); }} />}
-      {movementModal && <MovementModal products={state.products} initialProduct={selectedProduct} settings={state.settings} onSave={recordMovement} onClose={() => { setMovementModal(false); setSelectedProduct(null); }} />}
+      {movementModal && <MovementModal products={state.products} initialProduct={selectedProduct} initialType={movementType} settings={state.settings} onSave={recordMovement} onClose={() => { setMovementModal(false); setMovementType(null); setSelectedProduct(null); }} />}
       {expenseModal && <ExpenseModal onSave={(expense) => {
         const key = normalizeExpenseKey(expense.externalKey);
         if (state.expenses.some((existing) => normalizeExpenseKey(existing.externalKey) === key)) {
@@ -316,6 +320,58 @@ function Products({ state, query, setQuery, onEdit, onUse, onDelete }: { state: 
 
 function Activity({ state, onNew }: { state: AppState; onNew: () => void }) { return <section className="panel tablePanel"><div className="panelTitle"><div><p className="eyebrow">Permanent stock trail</p><h3>Inventory ledger</h3></div><button className="primary" onClick={onNew}>+ Record activity</button></div><MovementTable movements={state.movements} products={state.products} /><p className="footnote">Activity entries remain in the ledger even if a product is later removed.</p></section>; }
 
+function CogsCenter({ state, onProductionUse }: { state: AppState; onProductionUse: () => void }) {
+  type CogsSortKey = "date" | "product" | "type" | "quantity" | "unitCost" | "totalCost" | "revenue" | "finalProduct";
+  const [query, setQuery] = useState("");
+  const [year, setYear] = useState(String(state.settings.taxYear));
+  const [kind, setKind] = useState<"all" | "sale" | "production_use">("all");
+  const [sort, setSort] = useState<{ key: CogsSortKey; direction: SortDirection }>({ key: "date", direction: "desc" });
+  const productFor = (movement: Movement) => state.products.find((product) => product.id === movement.productId);
+  const productNameFor = (movement: Movement) => movement.productName || productFor(movement)?.name || "Removed product";
+  const productSkuFor = (movement: Movement) => movement.productSku || productFor(movement)?.sku || "No SKU snapshot";
+  const finalProductFor = (movement: Movement) => movement.finalProductName?.trim() || (movement.type === "sale" ? productNameFor(movement) : "Unassigned");
+  const cogsEntries = state.movements.filter((movement) => movement.type === "sale" || movement.type === "production_use");
+  const years = Array.from(new Set([state.settings.taxYear, ...cogsEntries.map((movement) => Number(movement.date.slice(0, 4)))]))
+    .filter(Number.isFinite)
+    .sort((left, right) => right - left);
+  const yearEntries = cogsEntries.filter((movement) => year === "All" || movement.date.startsWith(`${year}-`));
+  const soldEntries = yearEntries.filter((movement) => movement.type === "sale");
+  const productionEntries = yearEntries.filter((movement) => movement.type === "production_use");
+  const soldCogs = soldEntries.reduce((total, movement) => total + movement.quantity * movement.unitCost, 0);
+  const revenue = soldEntries.reduce((total, movement) => total + movement.quantity * movement.unitPrice, 0);
+  const productionCost = productionEntries.reduce((total, movement) => total + movement.quantity * movement.unitCost, 0);
+  const filteredEntries = yearEntries.filter((movement) => {
+    if (kind !== "all" && movement.type !== kind) return false;
+    const haystack = `${productNameFor(movement)} ${productSkuFor(movement)} ${finalProductFor(movement)} ${movement.note}`.toLowerCase();
+    return haystack.includes(query.toLowerCase());
+  });
+  const sortValue = (movement: Movement): SortValue => {
+    if (sort.key === "product") return `${productNameFor(movement)} ${productSkuFor(movement)}`;
+    if (sort.key === "type") return movement.type;
+    if (sort.key === "quantity") return movement.quantity;
+    if (sort.key === "unitCost") return movement.unitCost;
+    if (sort.key === "totalCost") return movement.quantity * movement.unitCost;
+    if (sort.key === "revenue") return movement.type === "sale" ? movement.quantity * movement.unitPrice : -1;
+    if (sort.key === "finalProduct") return finalProductFor(movement);
+    return movement.date;
+  };
+  const entries = [...filteredEntries].sort((left, right) => compareSortValues(sortValue(left), sortValue(right), sort.direction));
+  const columns: Array<{ key: CogsSortKey; label: string }> = [
+    { key: "date", label: "Date" }, { key: "product", label: "Cost item" }, { key: "type", label: "Source" },
+    { key: "quantity", label: "Qty" }, { key: "unitCost", label: "Unit cost" }, { key: "totalCost", label: "Total cost" },
+    { key: "revenue", label: "Revenue" }, { key: "finalProduct", label: "Used in final product" },
+  ];
+  const changeSort = (key: CogsSortKey) => setSort((current) => ({ key, direction: current.key === key && current.direction === "asc" ? "desc" : "asc" }));
+  return <div className="cogsLayout">
+    <section className="cogsHero"><div><p className="eyebrow">Cost trail</p><h2>Every cost, tied to what you sell.</h2><p>Customer sales recognize COGS. Production-use entries show which component costs were allocated to a finished product before sale.</p></div><button className="dark" onClick={onProductionUse}>+ Use item in final product</button></section>
+    <section className="metricGrid cogsMetrics"><Metric label="Sold-item COGS" value={money.format(soldCogs)} note={`${whole.format(soldEntries.reduce((total, movement) => total + movement.quantity, 0))} units sold`} accent="sand" /><Metric label="Sales revenue" value={money.format(revenue)} note={`${soldEntries.length} sales entries`} accent="blue" /><Metric label="Gross profit" value={money.format(revenue - soldCogs)} note={revenue ? `${Math.round(((revenue - soldCogs) / revenue) * 100)}% margin` : "No sales in this view"} accent="green" /><Metric label="Production-use cost" value={money.format(productionCost)} note="Allocated, not yet sale COGS" accent="coral" /></section>
+    <section className="panel cogsPanel"><div className="panelTitle"><div><p className="eyebrow">Item-level detail</p><h3>COGS and production allocations</h3></div><span className="pill neutral">{entries.length} entries</span></div><div className="cogsToolbar"><label className="search"><span>{icons.search}</span><input aria-label="Search COGS records" placeholder="Search cost item, SKU, note, or final product" value={query} onChange={(event) => setQuery(event.target.value)} /></label><label>Year<select value={year} onChange={(event) => setYear(event.target.value)}><option value="All">All years</option>{years.map((value) => <option value={value} key={value}>{value}</option>)}</select></label><label>Entry type<select value={kind} onChange={(event) => setKind(event.target.value as typeof kind)}><option value="all">All cost entries</option><option value="sale">Customer sales</option><option value="production_use">Production use</option></select></label></div>
+      <div className="cogsTable"><div className="ledgerHead cogsHead">{columns.map((column) => <button role="columnheader" aria-sort={sort.key === column.key ? (sort.direction === "asc" ? "ascending" : "descending") : "none"} type="button" key={column.key} className={`stockHeaderCell ${sort.key === column.key ? `sorted ${sort.direction}` : ""}`} onClick={() => changeSort(column.key)}><span>{column.label}</span><span className="sortPair" aria-hidden="true"><i /><b /></span></button>)}</div>{entries.map((movement) => { const totalCost = movement.quantity * movement.unitCost; const itemName = productNameFor(movement); const finalProduct = finalProductFor(movement); return <div className="cogsRow" key={movement.id}><span>{new Date(`${movement.date}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span><div className="cogsName"><strong title={itemName}>{itemName}</strong><small>{productSkuFor(movement)}{movement.note ? ` · ${movement.note}` : ""}</small></div><span className={`activityTag ${movement.type}`}>{movement.type === "sale" ? "Sold" : "Production use"}</span><strong>{whole.format(movement.quantity)}</strong><strong>{money.format(movement.unitCost)}</strong><strong>{money.format(totalCost)}</strong><strong>{movement.type === "sale" ? money.format(movement.quantity * movement.unitPrice) : "—"}</strong><div className="cogsFinal"><strong title={finalProduct}>{finalProduct}</strong>{movement.finalProductId && <small>Linked product</small>}</div></div>; })}{!entries.length && <Empty text="No COGS entries match this view." />}</div>
+      <p className="footnote">Production-use cost reduces component inventory but is shown separately from recognized sale COGS to prevent double counting on tax reports.</p>
+    </section>
+  </div>;
+}
+
 function MovementTable({ movements, products }: { movements: Movement[]; products: Product[] }) {
   type MovementSortKey = "date" | "product" | "type" | "quantity" | "amount" | "tax";
   const [sort, setSort] = useState<{ key: MovementSortKey; direction: SortDirection }>({ key: "date", direction: "desc" });
@@ -326,8 +382,8 @@ function MovementTable({ movements, products }: { movements: Movement[]; product
   const productFor = (movement: Movement) => products.find((product) => product.id === movement.productId);
   const amountFor = (movement: Movement) => movement.quantity * (movement.type === "sale" ? movement.unitPrice : movement.unitCost);
   const movementSortValue = (movement: Movement): SortValue => {
-    if (sort.key === "product") return productFor(movement)?.name ?? "Removed product";
-    if (sort.key === "type") return movement.type.replace("_", " ");
+    if (sort.key === "product") return movement.productName || productFor(movement)?.name || "Removed product";
+    if (sort.key === "type") return movement.type.replaceAll("_", " ");
     if (sort.key === "quantity") return movement.quantity;
     if (sort.key === "amount") return amountFor(movement);
     if (sort.key === "tax") return movement.salesTax;
@@ -335,7 +391,7 @@ function MovementTable({ movements, products }: { movements: Movement[]; product
   };
   const sortedMovements = [...movements].sort((left, right) => compareSortValues(movementSortValue(left), movementSortValue(right), sort.direction));
   const changeSort = (key: MovementSortKey) => setSort((current) => ({ key, direction: current.key === key && current.direction === "asc" ? "desc" : "asc" }));
-  return <div className="ledger"><div className="ledgerHead">{columns.map((column) => <button role="columnheader" aria-sort={sort.key === column.key ? (sort.direction === "asc" ? "ascending" : "descending") : "none"} type="button" key={column.key} className={`stockHeaderCell ${sort.key === column.key ? `sorted ${sort.direction}` : ""}`} onClick={() => changeSort(column.key)}><span>{column.label}</span><span className="sortPair" aria-hidden="true"><i /><b /></span></button>)}</div>{sortedMovements.map((m) => { const p = productFor(m); const amount = amountFor(m); return <div className="ledgerRow" key={m.id}><span>{new Date(`${m.date}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span><div><strong>{p?.name ?? "Removed product"}</strong><small>{m.note || p?.sku}</small></div><span className={`activityTag ${m.type}`}>{m.type.replace("_", " ")}</span><strong>{m.type === "purchase" || (m.type === "adjustment" && m.quantity > 0) ? "+" : "−"}{Math.abs(m.quantity)}</strong><strong>{money.format(amount)}</strong><span className="taxLedger">{m.salesTax ? money.format(m.salesTax) : "—"}{(m.localTax ?? 0) > 0 && <small>{money.format(m.localTax ?? 0)} local</small>}</span></div>})}{!movements.length && <Empty text="No activity has been recorded yet." />}</div>;
+  return <div className="ledger"><div className="ledgerHead">{columns.map((column) => <button role="columnheader" aria-sort={sort.key === column.key ? (sort.direction === "asc" ? "ascending" : "descending") : "none"} type="button" key={column.key} className={`stockHeaderCell ${sort.key === column.key ? `sorted ${sort.direction}` : ""}`} onClick={() => changeSort(column.key)}><span>{column.label}</span><span className="sortPair" aria-hidden="true"><i /><b /></span></button>)}</div>{sortedMovements.map((m) => { const p = productFor(m); const amount = amountFor(m); return <div className="ledgerRow" key={m.id}><span>{new Date(`${m.date}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span><div><strong>{m.productName || p?.name || "Removed product"}</strong><small>{m.note || m.productSku || p?.sku}</small></div><span className={`activityTag ${m.type}`}>{m.type.replaceAll("_", " ")}</span><strong>{m.type === "purchase" || (m.type === "adjustment" && m.quantity > 0) ? "+" : "−"}{Math.abs(m.quantity)}</strong><strong>{money.format(amount)}</strong><span className="taxLedger">{m.salesTax ? money.format(m.salesTax) : "—"}{(m.localTax ?? 0) > 0 && <small>{money.format(m.localTax ?? 0)} local</small>}</span></div>})}{!movements.length && <Empty text="No activity has been recorded yet." />}</div>;
 }
 
 function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppState; setState: React.Dispatch<React.SetStateAction<AppState>>; onExpense: () => void; onDeleteExpense: (id: string) => void }) {
@@ -692,14 +748,15 @@ function ProductModal({ product, onSave, onClose }: { product: Product | null; o
   return <Modal title={product ? "Edit product" : "Add a product"} eyebrow="Inventory item" onClose={onClose}><form onSubmit={(e) => { e.preventDefault(); onSave({ ...draft, vendor: draft.vendor.trim() }); }}><div className="formGrid"><label className="wide">Product name<input required autoFocus value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Speckled ceramic mug" /></label><label>SKU<input required value={draft.sku} onChange={(e) => setDraft({ ...draft, sku: e.target.value.toUpperCase() })} placeholder="MUG-101" /></label><label>Category<input required value={draft.category} onChange={(e) => setDraft({ ...draft, category: e.target.value })} placeholder="Home" /></label><label className="wide">Vendor<input value={draft.vendor} onChange={(e) => setDraft({ ...draft, vendor: e.target.value })} placeholder="Supplier or manufacturer" /></label><label>Quantity on hand<input required min="0" type="number" value={draft.quantity} onChange={(e) => setDraft({ ...draft, quantity: Number(e.target.value) })} /></label><label>Reorder point<input required min="0" type="number" value={draft.reorderPoint} onChange={(e) => setDraft({ ...draft, reorderPoint: Number(e.target.value) })} /></label><label>Unit cost<input required min="0" step="0.01" type="number" value={draft.unitCost} onChange={(e) => setDraft({ ...draft, unitCost: Number(e.target.value) })} /></label><label>Sale price<input required min="0" step="0.01" type="number" value={draft.salePrice} onChange={(e) => setDraft({ ...draft, salePrice: Number(e.target.value) })} /></label><label className="wide checkLabel"><input type="checkbox" checked={draft.salesTaxPaid} onChange={(e) => setDraft({ ...draft, salesTaxPaid: e.target.checked })} /><span><strong>Sales tax was paid when purchased</strong><small>Leave unchecked for inventory bought tax-free for resale. Personal-use tax comes from your address in settings.</small></span></label></div><ModalActions onClose={onClose} label={product ? "Save changes" : "Add product"} /></form></Modal>;
 }
 
-function MovementModal({ products, initialProduct, settings, onSave, onClose }: { products: Product[]; initialProduct: Product | null; settings: Settings; onSave: (m: Omit<Movement, "id">) => void; onClose: () => void }) {
+function MovementModal({ products, initialProduct, initialType, settings, onSave, onClose }: { products: Product[]; initialProduct: Product | null; initialType: MovementType | null; settings: Settings; onSave: (m: Omit<Movement, "id">) => void; onClose: () => void }) {
   const first = initialProduct ?? products[0];
-  const [draft, setDraft] = useState({ productId: first?.id ?? "", type: initialProduct ? "personal_use" as MovementType : "sale" as MovementType, quantity: 1, date: dateOnly(), note: "", customerAddress: blankAddress(settings.ownAddress.state) });
+  const defaultType: MovementType = initialType ?? (initialProduct ? "personal_use" : "sale");
+  const [draft, setDraft] = useState({ productId: first?.id ?? "", type: defaultType, quantity: 1, date: dateOnly(), note: "", finalProductName: defaultType === "sale" ? first?.name ?? "" : "", customerAddress: blankAddress(settings.ownAddress.state) });
   const [liveRate, setLiveRate] = useState<TaxRateLookup | null>(null);
   const [lookupStatus, setLookupStatus] = useState<"idle" | "checking" | "error">("idle");
   const [lookupMessage, setLookupMessage] = useState("");
   const product = products.find((p) => p.id === draft.productId);
-  const isOut = draft.type === "sale" || draft.type === "personal_use";
+  const isOut = draft.type === "sale" || draft.type === "production_use" || draft.type === "personal_use";
   const customerSetting = settings.stateTaxes[draft.customerAddress.state] ?? { enabled: false, rate: 0 };
   const customerResolved = resolveAddressRate(draft.customerAddress, settings, liveRate);
   const ownResolved = resolveAddressRate(settings.ownAddress, settings);
@@ -716,6 +773,11 @@ function MovementModal({ products, initialProduct, settings, onSave, onClose }: 
     setDraft((current) => ({ ...current, customerAddress: { ...current.customerAddress, [field]: value } }));
     setLiveRate(null); setLookupStatus("idle"); setLookupMessage("");
   };
+  const changeProduct = (productId: string) => {
+    const nextProduct = products.find((candidate) => candidate.id === productId);
+    setDraft((current) => ({ ...current, productId, finalProductName: current.type === "sale" ? nextProduct?.name ?? "" : current.finalProductName }));
+  };
+  const changeType = (type: MovementType) => setDraft((current) => ({ ...current, type, finalProductName: type === "sale" ? product?.name ?? "" : type === "production_use" ? "" : "" }));
   const lookupCustomerRate = async () => {
     if (!isCompleteAddress(draft.customerAddress)) {
       setLookupStatus("error"); setLookupMessage("Complete the street, city, state, and ZIP first."); return;
@@ -735,10 +797,24 @@ function MovementModal({ products, initialProduct, settings, onSave, onClose }: 
     e.preventDefault();
     if (!product) return;
     if (isOut && draft.quantity > product.quantity) return alert("There is not enough stock for this activity.");
+    const tracksFinalProduct = draft.type === "sale" || draft.type === "production_use";
+    const finalProductName = tracksFinalProduct ? draft.finalProductName.trim() : undefined;
+    if (tracksFinalProduct && !finalProductName) return alert("Choose or enter the final product for this cost.");
+    const finalProduct = products.find((candidate) => candidate.name.trim().toLowerCase() === finalProductName?.toLowerCase());
     const customerAddress = draft.type === "sale" ? draft.customerAddress : undefined;
-    onSave({ ...draft, customerAddress, unitCost: product.unitCost, unitPrice: product.salePrice, salesTax: tax, stateTax, localTax, taxRate: appliedRate, stateTaxRate: stateRate, localTaxRate: localRate, taxJurisdiction: draft.type === "personal_use" ? settings.ownAddress.state : draft.type === "sale" ? draft.customerAddress.state : undefined, localJurisdiction: selectedRate.jurisdiction, taxCollected: draft.type === "sale" ? customerSetting.enabled : false });
+    onSave({ ...draft, finalProductName, finalProductId: finalProduct?.id, productName: product.name, productSku: product.sku, customerAddress, unitCost: product.unitCost, unitPrice: draft.type === "production_use" ? 0 : product.salePrice, salesTax: tax, stateTax, localTax, taxRate: appliedRate, stateTaxRate: stateRate, localTaxRate: localRate, taxJurisdiction: draft.type === "personal_use" ? settings.ownAddress.state : draft.type === "sale" ? draft.customerAddress.state : undefined, localJurisdiction: draft.type === "sale" || draft.type === "personal_use" ? selectedRate.jurisdiction : undefined, taxCollected: draft.type === "sale" ? customerSetting.enabled : false });
   };
-  return <Modal title={draft.type === "personal_use" ? "Mark inventory as used" : "Record inventory activity"} eyebrow="Stock ledger" onClose={onClose}><form onSubmit={submit}><div className="formGrid"><label className="wide">Product<select required value={draft.productId} onChange={(e) => setDraft({ ...draft, productId: e.target.value })}>{products.map((p) => <option value={p.id} key={p.id}>{p.name} · {p.quantity} on hand</option>)}</select></label><label>Activity<select value={draft.type} onChange={(e) => setDraft({ ...draft, type: e.target.value as MovementType })}><option value="sale">Customer sale</option><option value="purchase">Stock purchase</option><option value="personal_use">Personal use</option><option value="adjustment">Count adjustment (+/−)</option></select></label><label>Quantity<input required type="number" min={draft.type === "adjustment" ? undefined : 1} value={draft.quantity} onChange={(e) => setDraft({ ...draft, quantity: Number(e.target.value) })} /></label><label>Date<input required type="date" value={draft.date} onChange={(e) => setDraft({ ...draft, date: e.target.value })} /></label>{draft.type === "sale" && <><div className="addressHeading wide"><span>Customer delivery address</span><small>Destination state, city, and ZIP select your configured tax layers.</small></div><label className="wide">Street address<input required value={draft.customerAddress.line1} onChange={(e) => updateCustomerAddress("line1", e.target.value)} placeholder="Customer delivery address" /></label><label>City<input required value={draft.customerAddress.city} onChange={(e) => updateCustomerAddress("city", e.target.value)} /></label><label>State<select required value={draft.customerAddress.state} onChange={(e) => updateCustomerAddress("state", e.target.value)}>{stateTaxDefaults.map((item) => <option value={item.code} key={item.code}>{item.name}</option>)}</select></label><label>ZIP code<input required inputMode="numeric" value={draft.customerAddress.postalCode} onChange={(e) => updateCustomerAddress("postalCode", e.target.value)} /></label>{customerSetting.enabled && <div className="lookupRow wide"><button type="button" className="secondary" onClick={lookupCustomerRate} disabled={lookupStatus === "checking"}>{lookupStatus === "checking" ? "Checking official source…" : "↻ Look up exact address rate"}</button><span className={lookupStatus === "error" ? "lookupError" : ""}>{lookupMessage || (findAddressTaxRate(draft.customerAddress, settings.addressTaxRates) ? "Using the last saved address update." : "Optional, but recommended before recording the sale.")}</span></div>}</>}<label className="wide">Note<input value={draft.note} onChange={(e) => setDraft({ ...draft, note: e.target.value })} placeholder="Optional detail" /></label></div>{draft.type === "sale" && <div className={customerSetting.enabled ? "taxPreview layered" : "taxPreview off"}><span><strong>{customerSetting.enabled ? `Collecting ${appliedRate}% combined tax` : `Not collecting tax in ${stateName(draft.customerAddress.state)}`}</strong><small>{customerSetting.enabled ? `${stateName(draft.customerAddress.state)} ${stateRate}% (${money.format(stateTax)})${localRate ? ` + ${selectedRate.jurisdiction || "local"} ${localRate}% (${money.format(localTax)})` : " + no local rate found"}${selectedRate.sourceName ? ` · ${selectedRate.sourceName}` : ""}` : "This state is not checked in Data & settings."}</small></span><b>{money.format(tax)}</b></div>}{draft.type === "personal_use" && <div className="taxPreview layered"><span><strong>{product?.salesTaxPaid ? "No additional use tax" : `Use tax for your ${stateName(settings.ownAddress.state)} address`}</strong><small>{product?.salesTaxPaid ? "Sales tax was already paid on this product." : `${stateRate}% state (${money.format(stateTax)})${localRate ? ` + ${selectedRate.jurisdiction || "local"} ${localRate}% (${money.format(localTax)})` : " + no local rate found"}${selectedRate.sourceName ? ` · ${selectedRate.sourceName}` : ""}`}</small></span><b>{money.format(tax)}</b></div>}<ModalActions onClose={onClose} label="Record activity" /></form></Modal>;
+  const modalTitle = draft.type === "personal_use" ? "Mark inventory as used" : draft.type === "production_use" ? "Use inventory in a final product" : "Record inventory activity";
+  return <Modal title={modalTitle} eyebrow="Stock ledger" onClose={onClose}><form onSubmit={submit}><div className="formGrid">
+    <label className="wide">{draft.type === "production_use" ? "Cost item from inventory" : "Product"}<select required value={draft.productId} onChange={(event) => changeProduct(event.target.value)}>{products.map((candidate) => <option value={candidate.id} key={candidate.id}>{candidate.name} · {candidate.quantity} on hand</option>)}</select></label>
+    <label>Activity<select value={draft.type} onChange={(event) => changeType(event.target.value as MovementType)}><option value="sale">Customer sale</option><option value="production_use">Used in final product</option><option value="purchase">Stock purchase</option><option value="personal_use">Personal use</option><option value="adjustment">Count adjustment (+/−)</option></select></label>
+    <label>Quantity<input required type="number" min={draft.type === "adjustment" ? undefined : 1} value={draft.quantity} onChange={(event) => setDraft({ ...draft, quantity: Number(event.target.value) })} /></label>
+    <label>Date<input required type="date" value={draft.date} onChange={(event) => setDraft({ ...draft, date: event.target.value })} /></label>
+    {(draft.type === "sale" || draft.type === "production_use") && <label className="wide">{draft.type === "sale" ? "Final product sold" : "Used in final product"}<input required list="final-product-options" value={draft.finalProductName} onChange={(event) => setDraft({ ...draft, finalProductName: event.target.value })} placeholder="Choose an existing product or enter a finished-product name" /><small>{draft.type === "sale" ? "Defaults to the sold item; change it when this cost belongs to a bundle or another finished product." : "This links the component cost to the item you are producing."}</small><datalist id="final-product-options">{products.map((candidate) => <option value={candidate.name} key={candidate.id} />)}</datalist></label>}
+    {draft.type === "sale" && <><div className="addressHeading wide"><span>Customer delivery address</span><small>Destination state, city, and ZIP select your configured tax layers.</small></div><label className="wide">Street address<input required value={draft.customerAddress.line1} onChange={(event) => updateCustomerAddress("line1", event.target.value)} placeholder="Customer delivery address" /></label><label>City<input required value={draft.customerAddress.city} onChange={(event) => updateCustomerAddress("city", event.target.value)} /></label><label>State<select required value={draft.customerAddress.state} onChange={(event) => updateCustomerAddress("state", event.target.value)}>{stateTaxDefaults.map((item) => <option value={item.code} key={item.code}>{item.name}</option>)}</select></label><label>ZIP code<input required inputMode="numeric" value={draft.customerAddress.postalCode} onChange={(event) => updateCustomerAddress("postalCode", event.target.value)} /></label>{customerSetting.enabled && <div className="lookupRow wide"><button type="button" className="secondary" onClick={lookupCustomerRate} disabled={lookupStatus === "checking"}>{lookupStatus === "checking" ? "Checking official source…" : "↻ Look up exact address rate"}</button><span className={lookupStatus === "error" ? "lookupError" : ""}>{lookupMessage || (findAddressTaxRate(draft.customerAddress, settings.addressTaxRates) ? "Using the last saved address update." : "Optional, but recommended before recording the sale.")}</span></div>}</>}
+    <label className="wide">Note<input value={draft.note} onChange={(event) => setDraft({ ...draft, note: event.target.value })} placeholder="Optional detail" /></label>
+    {draft.type === "production_use" && <div className="formNotice wide"><strong>Production allocation</strong><span>This reduces the component&apos;s on-hand quantity. The cost stays separate from recognized sale COGS until a customer sale is recorded.</span></div>}
+  </div>{draft.type === "sale" && <div className={customerSetting.enabled ? "taxPreview layered" : "taxPreview off"}><span><strong>{customerSetting.enabled ? `Collecting ${appliedRate}% combined tax` : `Not collecting tax in ${stateName(draft.customerAddress.state)}`}</strong><small>{customerSetting.enabled ? `${stateName(draft.customerAddress.state)} ${stateRate}% (${money.format(stateTax)})${localRate ? ` + ${selectedRate.jurisdiction || "local"} ${localRate}% (${money.format(localTax)})` : " + no local rate found"}${selectedRate.sourceName ? ` · ${selectedRate.sourceName}` : ""}` : "This state is not checked in Data & settings."}</small></span><b>{money.format(tax)}</b></div>}{draft.type === "personal_use" && <div className="taxPreview layered"><span><strong>{product?.salesTaxPaid ? "No additional use tax" : `Use tax for your ${stateName(settings.ownAddress.state)} address`}</strong><small>{product?.salesTaxPaid ? "Sales tax was already paid on this product." : `${stateRate}% state (${money.format(stateTax)})${localRate ? ` + ${selectedRate.jurisdiction || "local"} ${localRate}% (${money.format(localTax)})` : " + no local rate found"}${selectedRate.sourceName ? ` · ${selectedRate.sourceName}` : ""}`}</small></span><b>{money.format(tax)}</b></div>}<ModalActions onClose={onClose} label={draft.type === "production_use" ? "Allocate cost" : "Record activity"} /></form></Modal>;
 }
 
 function ExpenseModal({ onSave, onClose }: { onSave: (expense: ExpenseDraft) => void; onClose: () => void }) {
@@ -784,10 +860,19 @@ function normalizeState(raw: unknown): AppState {
   const expenseColumnKeys = new Set(expenseColumns.map((column) => column.key));
   const savedVisibleColumns = Array.isArray(incoming.settings?.expenseVisibleColumns) ? incoming.settings.expenseVisibleColumns.filter((key): key is string => typeof key === "string" && expenseColumnKeys.has(key)) : [];
   const products = (Array.isArray(incoming.products) ? incoming.products : seed.products).map((product) => ({ ...product, vendor: typeof product.vendor === "string" ? product.vendor.trim() : "" }));
+  const movementTypes: MovementType[] = ["purchase", "sale", "production_use", "personal_use", "adjustment"];
+  const movements = (Array.isArray(incoming.movements) ? incoming.movements : seed.movements).map((movement): Movement => {
+    const product = products.find((candidate) => candidate.id === movement.productId);
+    const type = movementTypes.includes(movement.type) ? movement.type : "adjustment";
+    const productName = typeof movement.productName === "string" && movement.productName.trim() ? movement.productName.trim() : product?.name;
+    const productSku = typeof movement.productSku === "string" && movement.productSku.trim() ? movement.productSku.trim() : product?.sku;
+    const savedFinalProductName = typeof movement.finalProductName === "string" ? movement.finalProductName.trim() : "";
+    return { ...movement, type, productName, productSku, finalProductId: typeof movement.finalProductId === "string" ? movement.finalProductId : undefined, finalProductName: savedFinalProductName || (type === "sale" ? productName : undefined) };
+  });
   return {
-    version: 7,
+    version: 8,
     products,
-    movements: Array.isArray(incoming.movements) ? incoming.movements : seed.movements,
+    movements,
     expenses,
     settings: {
       businessName: incoming.settings?.businessName ?? seed.settings.businessName,

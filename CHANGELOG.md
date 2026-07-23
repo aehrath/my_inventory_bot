@@ -4,6 +4,19 @@ All notable changes to StockBot are documented here.
 
 ## Unreleased
 
+## 0.13.0 - 2026-07-22
+
+### Added
+
+- Added a dedicated COGS page with sold-item cost, revenue, gross profit, and production-use summaries.
+- Added sortable item-level COGS records with quantity, unit cost, total cost, revenue, and final-product association.
+- Added a Used in final product activity that reduces component inventory and records its finished-product destination.
+- Added durable product-name and SKU snapshots to new inventory activity records.
+
+### Changed
+
+- Kept production-use costs separate from recognized customer-sale COGS to prevent tax-report double counting.
+
 ## 0.12.0 - 2026-07-22
 
 ### Fixed

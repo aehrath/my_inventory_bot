@@ -21,6 +21,7 @@ test("includes a visible release changelog", async () => {
   assert.match(page, /label: "Changelog"/);
   assert.match(page, /What&apos;s new in StockBot/);
   assert.match(page, /changelogReleases\.map/);
+  assert.match(changelog, /version: "0\.13\.0"/);
   assert.match(changelog, /version: "0\.12\.0"/);
   assert.match(changelog, /version: "0\.11\.0"/);
   assert.match(changelog, /version: "0\.10\.0"/);
@@ -29,6 +30,7 @@ test("includes a visible release changelog", async () => {
   assert.match(changelog, /version: "0\.7\.0"/);
   assert.match(changelog, /version: "0\.6\.0"/);
   assert.match(changelog, /version: "0\.1\.0"/);
+  assert.match(markdown, /## 0\.13\.0 - 2026-07-22/);
   assert.match(markdown, /## 0\.12\.0 - 2026-07-22/);
   assert.match(markdown, /## 0\.11\.0 - 2026-07-22/);
   assert.match(markdown, /## 0\.10\.0 - 2026-07-22/);
@@ -58,6 +60,26 @@ test("truncates long product descriptions and exposes the full text on hover", a
   assert.match(page, /<strong title=\{p\.name\}>\{p\.name\}<\/strong>/);
   assert.match(styles, /\.productDescription\{min-width:0\}/);
   assert.match(styles, /white-space:nowrap;overflow:hidden;text-overflow:ellipsis/);
+});
+
+test("includes item-level COGS and final-product tracking", async () => {
+  const [page, styles] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/globals.css"),
+  ]);
+  assert.match(page, /label: "COGS"/);
+  assert.match(page, /function CogsCenter/);
+  assert.match(page, /Sold-item COGS/);
+  assert.match(page, /Used in final product/);
+  assert.match(page, /production_use/);
+  assert.match(page, /productName\?: string; productSku\?: string; finalProductId\?: string; finalProductName\?: string/);
+  assert.match(page, /quantity \* movement\.unitCost/);
+  assert.match(page, /Production-use cost/);
+  assert.match(page, /Allocated, not yet sale COGS/);
+  assert.match(page, /productName: product\.name, productSku: product\.sku/);
+  assert.match(page, /version: 8/);
+  assert.match(styles, /\.cogsHead,.cogsRow/);
+  assert.match(styles, /activityTag\.production_use/);
 });
 
 test("uses True Wealth-style sortable headers on every table", async () => {
