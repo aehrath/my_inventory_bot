@@ -21,6 +21,7 @@ test("includes a visible release changelog", async () => {
   assert.match(page, /label: "Changelog"/);
   assert.match(page, /What&apos;s new in StockBot/);
   assert.match(page, /changelogReleases\.map/);
+  assert.match(changelog, /version: "0\.12\.0"/);
   assert.match(changelog, /version: "0\.11\.0"/);
   assert.match(changelog, /version: "0\.10\.0"/);
   assert.match(changelog, /version: "0\.9\.0"/);
@@ -28,6 +29,7 @@ test("includes a visible release changelog", async () => {
   assert.match(changelog, /version: "0\.7\.0"/);
   assert.match(changelog, /version: "0\.6\.0"/);
   assert.match(changelog, /version: "0\.1\.0"/);
+  assert.match(markdown, /## 0\.12\.0 - 2026-07-22/);
   assert.match(markdown, /## 0\.11\.0 - 2026-07-22/);
   assert.match(markdown, /## 0\.10\.0 - 2026-07-22/);
   assert.match(markdown, /## 0\.9\.0 - 2026-07-22/);

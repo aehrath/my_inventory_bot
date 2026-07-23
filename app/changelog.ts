@@ -13,6 +13,21 @@ export type ChangelogRelease = {
 
 export const changelogReleases: readonly ChangelogRelease[] = [
   {
+    version: "0.12.0",
+    date: "July 22, 2026",
+    title: "Pack descriptions split correctly",
+    summary: "Descriptions such as “10 pack” now import as ten individual inventory units per package.",
+    sections: [
+      {
+        title: "Fixed",
+        items: [
+          "Recognized 10 pack, 10-pack, 10pack, and Pack of 10 description formats during expense import.",
+          "Removed the pack phrase, multiplied the inventory count, and converted package cost to per-piece cost.",
+        ],
+      },
+    ],
+  },
+  {
     version: "0.11.0",
     date: "July 22, 2026",
     title: "Long product names stay tidy",

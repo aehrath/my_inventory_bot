@@ -4,6 +4,13 @@ All notable changes to StockBot are documented here.
 
 ## Unreleased
 
+## 0.12.0 - 2026-07-22
+
+### Fixed
+
+- Recognized `10 pack`, `10-pack`, `10pack`, and `Pack of 10` description formats during expense import.
+- Removed the pack phrase, multiplied the inventory count, and converted package cost to per-piece cost.
+
 ## 0.11.0 - 2026-07-22
 
 ### Changed

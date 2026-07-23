@@ -85,6 +85,10 @@ test("moves PCS and PIECES pack sizes from product names into inventory quantity
   assert.deepEqual(parseProductPackSize("Fasteners, 2,300PCS, zinc"), { name: "Fasteners, zinc", packSize: 2300 });
   assert.deepEqual(parseProductPackSize("420pcs screws, Contains 20pcs anchors"), { name: "screws, Contains anchors", packSize: 420 });
   assert.deepEqual(parseProductPackSize("Claw Clasp 100pcs+Key Ring 100pcs"), { name: "Claw Clasp + Key Ring", packSize: 100 });
+  assert.deepEqual(parseProductPackSize("Replacement filters 10 pack"), { name: "Replacement filters", packSize: 10 });
+  assert.deepEqual(parseProductPackSize("10-Pack replacement filters"), { name: "replacement filters", packSize: 10 });
+  assert.deepEqual(parseProductPackSize("10Pack replacement filters"), { name: "replacement filters", packSize: 10 });
+  assert.deepEqual(parseProductPackSize("Replacement filters (Pack of 10)"), { name: "Replacement filters", packSize: 10 });
   assert.deepEqual(parseProductPackSize("One-piece tool"), { name: "One-piece tool", packSize: 1 });
 
   const csv = [
@@ -100,4 +104,16 @@ test("moves PCS and PIECES pack sizes from product names into inventory quantity
   assert.equal(preview.products[1].name, "red widgets");
   assert.equal(preview.products[1].quantity, 100);
   assert.equal(preview.products[1].unitCost, 0.1);
+});
+
+test("divides PACK descriptions into individual inventory units", () => {
+  const csv = [
+    "Order Date,Order ID,Order Net Total,ASIN,Title,Item Quantity,Purchase PPU",
+    "01/10/2026,PACK-10,150.00,PACK-TEN,Replacement filters 10 pack,3,50.00",
+  ].join("\n");
+  const preview = parseExpenseImportText(csv, "orders.csv", [], "2026-07-22T00:00:00.000Z");
+
+  assert.equal(preview.products[0].name, "Replacement filters");
+  assert.equal(preview.products[0].quantity, 30);
+  assert.equal(preview.products[0].unitCost, 5);
 });

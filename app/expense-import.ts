@@ -78,13 +78,13 @@ export const importedQuantityForExpenseKeys = (product: ImportedInventoryProduct
   .reduce((total, [, quantity]) => total + quantity, 0);
 export const parseProductPackSize = (description: string) => {
   const originalName = description.trim();
-  const matches = Array.from(originalName.matchAll(/\b(\d[\d,]*)\s*(?:pcs|pieces)\b/gi));
+  const matches = Array.from(originalName.matchAll(/\b(?:(\d[\d,]*)\s*(?:[-–—]\s*)?(?:pcs|pieces|packs?)|packs?\s+of\s+(\d[\d,]*))\b/gi));
   const match = matches[0];
-  const packSize = match ? Number(match[1].replace(/,/g, "")) : 1;
+  const packSize = match ? Number((match[1] ?? match[2]).replace(/,/g, "")) : 1;
   if (!match || !Number.isSafeInteger(packSize) || packSize < 1) return { name: originalName, packSize: 1 };
   const leadingPackSize = match.index === 0;
   let name = originalName
-    .replace(/\b\d[\d,]*\s*(?:pcs|pieces)\b/gi, " ")
+    .replace(/\b(?:\d[\d,]*\s*(?:[-–—]\s*)?(?:pcs|pieces|packs?)|packs?\s+of\s+\d[\d,]*)\b/gi, " ")
     .replace(/\(\s*\)|\[\s*\]|\{\s*\}/g, " ")
     .replace(/([,;:])\s*(?=[,;:])/g, "")
     .replace(/\s*\+\s*/g, " + ")
