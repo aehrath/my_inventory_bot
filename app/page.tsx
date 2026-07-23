@@ -5,10 +5,12 @@ import { ChangeEvent, CSSProperties, FormEvent, useEffect, useMemo, useRef, useS
 import { changelogReleases } from "./changelog";
 import { amazonBusinessCsvColumns, expenseCategories, normalizeExpenseCategory, normalizeExpenseDate, normalizeExpenseKey, parseExpenseImportText } from "./expense-import";
 import type { ExpenseCategory, ExpenseImportPreview } from "./expense-import";
+import { normalizeCustomerKey, normalizeInvoiceKey, normalizeProductIdentifier, parseInvoiceImportText } from "./invoice-import";
+import type { InvoiceImportPreview } from "./invoice-import";
 import { defaultStateTaxSettings, stateName, stateTaxDefaults } from "./tax-data";
 import type { TaxAddress, TaxRateLookup, TaxRateLookupResponse, TaxSourceStatus } from "./tax-rate-types";
 
-type View = "dashboard" | "products" | "activity" | "cogs" | "expenses" | "taxes" | "data" | "changelog";
+type View = "dashboard" | "products" | "customers" | "activity" | "cogs" | "expenses" | "taxes" | "data" | "changelog";
 type MovementType = "purchase" | "sale" | "production_use" | "personal_use" | "adjustment";
 type Product = {
   id: string; sku: string; name: string; vendor: string; category: string; quantity: number; unitCost: number;
@@ -20,17 +22,19 @@ type Movement = {
   stateTax?: number; localTax?: number; stateTaxRate?: number; localTaxRate?: number;
   taxJurisdiction?: string; localJurisdiction?: string; taxCollected?: boolean; customerAddress?: Address;
   productName?: string; productSku?: string; finalProductId?: string; finalProductName?: string;
+  sourceKey?: string; invoiceNumber?: string; customerId?: string; customerName?: string;
 };
 type Expense = { id: string; externalKey: string; vendor: string; category: ExpenseCategory; amount: number; date: string; note: string; source: "manual" | "import"; importedAt?: string; fields?: Record<string, string> };
 type ExpenseDraft = Omit<Expense, "id">;
 type Address = TaxAddress;
+type Customer = { id: string; externalKey: string; name: string; email: string; phone: string; address: Address; createdAt: string; updatedAt: string };
 type RateMetadata = { manualOverride?: boolean; sourceName?: string; sourceUrl?: string; checkedAt?: string; effectiveDate?: string | null };
 type StateTaxSetting = { enabled: boolean; rate: number } & RateMetadata;
 type LocalTaxRule = { id: string; name: string; state: string; city: string; postalCode: string; rate: number; enabled: boolean } & RateMetadata;
 type AddressTaxRate = TaxRateLookup & { addressKey: string; checkedAt: string };
 type TaxUpdateAudit = { id: string; checkedAt: string; appliedAt: string | null; checkedAddresses: number; availableUpdates: number; appliedUpdates: number; status: "checked" | "applied"; sources: string[] };
 type Settings = { businessName: string; taxYear: number; beginningInventory: number; ownAddress: Address; stateTaxes: Record<string, StateTaxSetting>; localTaxRules: LocalTaxRule[]; addressTaxRates: AddressTaxRate[]; taxUpdateHistory: TaxUpdateAudit[]; expenseColumnOrder: string[]; expenseVisibleColumns: string[] };
-type AppState = { version: 8; products: Product[]; movements: Movement[]; expenses: Expense[]; settings: Settings };
+type AppState = { version: 9; products: Product[]; movements: Movement[]; expenses: Expense[]; customers: Customer[]; settings: Settings };
 type Metrics = { inventoryValue: number; units: number; revenue: number; inventoryCogs: number; additionalCogs: number; cogs: number; salesTax: number; stateSalesTax: number; localSalesTax: number; useTax: number; stateUseTax: number; localUseTax: number; expenses: number; expenseRecordsTotal: number; purchases: number; grossProfit: number; taxableIncome: number };
 type ExpenseColumnDefinition = { key: string; label: string; width: string; field?: string };
 type SortDirection = "asc" | "desc";
@@ -109,7 +113,7 @@ const resolveAddressRate = (address: Address, settings: Settings, liveRate?: Tax
 };
 
 const seed: AppState = {
-  version: 8,
+  version: 9,
   settings: { businessName: "Juniper & Co.", taxYear: nowYear, beginningInventory: 3180, ownAddress: blankAddress("CA"), stateTaxes: defaultStateTaxSettings("CA"), localTaxRules: [], addressTaxRates: [], taxUpdateHistory: [], expenseColumnOrder: defaultExpenseColumnOrder, expenseVisibleColumns: defaultExpenseVisibleColumns },
   products: [
     { id: "p1", sku: "CER-101", name: "Speckled Ceramic Mug", vendor: "Clay & Kiln Supply", category: "Home", quantity: 24, unitCost: 8.5, salePrice: 24, reorderPoint: 8, salesTaxPaid: false, createdAt: `${nowYear}-01-05` },
@@ -117,9 +121,13 @@ const seed: AppState = {
     { id: "p3", sku: "TOT-310", name: "Canvas Market Tote", vendor: "Harbor Canvas Works", category: "Accessories", quantity: 31, unitCost: 5.8, salePrice: 18, reorderPoint: 12, salesTaxPaid: false, createdAt: `${nowYear}-02-02` },
     { id: "p4", sku: "NOT-118", name: "Linen Notebook", vendor: "Paper & Flax Studio", category: "Stationery", quantity: 15, unitCost: 4.2, salePrice: 14, reorderPoint: 6, salesTaxPaid: true, createdAt: `${nowYear}-02-18` },
   ],
+  customers: [
+    { id: "c1", externalKey: "seed-customer-1", name: "Harbor Market", email: "orders@harbormarket.example", phone: "", address: { line1: "210 Market St", city: "San Diego", state: "CA", postalCode: "92101" }, createdAt: `${nowYear}-03-04`, updatedAt: `${nowYear}-03-04` },
+    { id: "c2", externalKey: "seed-customer-2", name: "Hill Street Goods", email: "hello@hillstreet.example", phone: "", address: { line1: "48 Hill Ave", city: "Los Angeles", state: "CA", postalCode: "90012" }, createdAt: `${nowYear}-03-04`, updatedAt: `${nowYear}-03-04` },
+  ],
   movements: [
-    { id: "m1", productId: "p1", productName: "Speckled Ceramic Mug", productSku: "CER-101", finalProductId: "p1", finalProductName: "Speckled Ceramic Mug", type: "sale", quantity: 3, unitCost: 8.5, unitPrice: 24, salesTax: 5.22, stateTax: 5.22, localTax: 0, taxRate: 7.25, stateTaxRate: 7.25, localTaxRate: 0, taxJurisdiction: "CA", taxCollected: true, customerAddress: { line1: "210 Market St", city: "San Diego", state: "CA", postalCode: "92101" }, date: `${nowYear}-03-04`, note: "Weekend market" },
-    { id: "m2", productId: "p3", productName: "Canvas Market Tote", productSku: "TOT-310", finalProductId: "p3", finalProductName: "Canvas Market Tote", type: "sale", quantity: 4, unitCost: 5.8, unitPrice: 18, salesTax: 5.22, stateTax: 5.22, localTax: 0, taxRate: 7.25, stateTaxRate: 7.25, localTaxRate: 0, taxJurisdiction: "CA", taxCollected: true, customerAddress: { line1: "48 Hill Ave", city: "Los Angeles", state: "CA", postalCode: "90012" }, date: `${nowYear}-03-04`, note: "Weekend market" },
+    { id: "m1", productId: "p1", productName: "Speckled Ceramic Mug", productSku: "CER-101", finalProductId: "p1", finalProductName: "Speckled Ceramic Mug", type: "sale", quantity: 3, unitCost: 8.5, unitPrice: 24, salesTax: 5.22, stateTax: 5.22, localTax: 0, taxRate: 7.25, stateTaxRate: 7.25, localTaxRate: 0, taxJurisdiction: "CA", taxCollected: true, customerId: "c1", customerName: "Harbor Market", customerAddress: { line1: "210 Market St", city: "San Diego", state: "CA", postalCode: "92101" }, date: `${nowYear}-03-04`, note: "Weekend market" },
+    { id: "m2", productId: "p3", productName: "Canvas Market Tote", productSku: "TOT-310", finalProductId: "p3", finalProductName: "Canvas Market Tote", type: "sale", quantity: 4, unitCost: 5.8, unitPrice: 18, salesTax: 5.22, stateTax: 5.22, localTax: 0, taxRate: 7.25, stateTaxRate: 7.25, localTaxRate: 0, taxJurisdiction: "CA", taxCollected: true, customerId: "c2", customerName: "Hill Street Goods", customerAddress: { line1: "48 Hill Ave", city: "Los Angeles", state: "CA", postalCode: "90012" }, date: `${nowYear}-03-04`, note: "Weekend market" },
     { id: "m3", productId: "p2", productName: "Cedar + Moss Candle", productSku: "CAN-204", type: "purchase", quantity: 12, unitCost: 7.25, unitPrice: 0, salesTax: 7.61, date: `${nowYear}-02-20`, note: "Spring restock" },
     { id: "m4", productId: "p4", productName: "Linen Notebook", productSku: "NOT-118", finalProductName: "Stationery Gift Set", type: "production_use", quantity: 2, unitCost: 4.2, unitPrice: 0, salesTax: 0, date: `${nowYear}-03-02`, note: "Gift set assembly" },
   ],
@@ -130,7 +138,7 @@ const seed: AppState = {
 };
 
 const icons: Record<View | "plus" | "search" | "download" | "upload" | "alert" | "arrow", string> = {
-  dashboard: "▦", products: "□", activity: "↕", cogs: "∑", expenses: "$", taxes: "%", data: "↥", changelog: "≡", plus: "+", search: "⌕", download: "↓", upload: "↑", alert: "!", arrow: "→",
+  dashboard: "▦", products: "□", customers: "◉", activity: "↕", cogs: "∑", expenses: "$", taxes: "%", data: "↥", changelog: "≡", plus: "+", search: "⌕", download: "↓", upload: "↑", alert: "!", arrow: "→",
 };
 
 export default function Home() {
@@ -201,7 +209,7 @@ export default function Home() {
 
   const openUse = (product: Product) => { setSelectedProduct(product); setMovementType("personal_use"); setMovementModal(true); };
   const nav: { id: View; label: string }[] = [
-    { id: "dashboard", label: "Overview" }, { id: "products", label: "Products" }, { id: "activity", label: "Activity" }, { id: "cogs", label: "COGS" }, { id: "expenses", label: "Expenses" }, { id: "taxes", label: "Tax center" }, { id: "data", label: "Data & settings" }, { id: "changelog", label: "Changelog" },
+    { id: "dashboard", label: "Overview" }, { id: "products", label: "Products" }, { id: "customers", label: "Customers" }, { id: "activity", label: "Activity" }, { id: "cogs", label: "COGS" }, { id: "expenses", label: "Expenses" }, { id: "taxes", label: "Tax center" }, { id: "data", label: "Data & settings" }, { id: "changelog", label: "Changelog" },
   ];
 
   return (
@@ -218,6 +226,7 @@ export default function Home() {
 
         {view === "dashboard" && <Dashboard state={state} metrics={metrics} onView={setView} onUse={openUse} />}
         {view === "products" && <Products state={state} query={query} setQuery={setQuery} onEdit={(p) => { setSelectedProduct(p); setProductModal(true); }} onUse={openUse} onDelete={(p) => confirm(`Delete ${p.name}? Its activity history will remain.`) && setState((s) => ({ ...s, products: s.products.filter((x) => x.id !== p.id) }))} />}
+        {view === "customers" && <Customers state={state} setState={setState} />}
         {view === "activity" && <Activity state={state} onNew={() => setMovementModal(true)} />}
         {view === "cogs" && <CogsCenter state={state} onProductionUse={() => { setSelectedProduct(null); setMovementType("production_use"); setMovementModal(true); }} />}
         {view === "expenses" && <Expenses state={state} setState={setState} onExpense={() => setExpenseModal(true)} onDeleteExpense={(id) => setState((s) => ({ ...s, expenses: s.expenses.filter((e) => e.id !== id) }))} />}
@@ -290,12 +299,17 @@ function Dashboard({ state, metrics, onView, onUse }: { state: AppState; metrics
 function Metric({ label, value, note, accent }: { label: string; value: string; note: string; accent: string }) { return <article className={`metric ${accent}`}><span>{label}</span><strong>{value}</strong><small>{note}</small></article>; }
 
 function Products({ state, query, setQuery, onEdit, onUse, onDelete }: { state: AppState; query: string; setQuery: (v: string) => void; onEdit: (p: Product) => void; onUse: (p: Product) => void; onDelete: (p: Product) => void }) {
-  type ProductSortKey = "product" | "vendor" | "quantity" | "unitCost" | "retailValue" | "taxStatus";
+  type ProductSortKey = "product" | "vendor" | "quantity" | "sold" | "unitCost" | "retailValue" | "taxStatus";
   const [sort, setSort] = useState<{ key: ProductSortKey; direction: SortDirection }>({ key: "product", direction: "asc" });
+  const soldByProduct = state.movements.filter((movement) => movement.type === "sale").reduce((totals, movement) => {
+    totals.set(movement.productId, (totals.get(movement.productId) ?? 0) + movement.quantity);
+    return totals;
+  }, new Map<string, number>());
   const columns: Array<{ key: ProductSortKey; label: string }> = [
     { key: "product", label: "Product" },
     { key: "vendor", label: "Vendor" },
     { key: "quantity", label: "On hand" },
+    { key: "sold", label: "Sold" },
     { key: "unitCost", label: "Unit cost" },
     { key: "retailValue", label: "Retail value" },
     { key: "taxStatus", label: "Tax status" },
@@ -303,6 +317,7 @@ function Products({ state, query, setQuery, onEdit, onUse, onDelete }: { state: 
   const productSortValue = (product: Product): SortValue => {
     if (sort.key === "vendor") return product.vendor;
     if (sort.key === "quantity") return product.quantity;
+    if (sort.key === "sold") return soldByProduct.get(product.id) ?? 0;
     if (sort.key === "unitCost") return product.unitCost;
     if (sort.key === "retailValue") return product.quantity * product.salePrice;
     if (sort.key === "taxStatus") return product.salesTaxPaid ? "Tax paid" : "Untaxed resale";
@@ -314,8 +329,138 @@ function Products({ state, query, setQuery, onEdit, onUse, onDelete }: { state: 
   const changeSort = (key: ProductSortKey) => setSort((current) => ({ key, direction: current.key === key && current.direction === "asc" ? "desc" : "asc" }));
   return <section className="panel tablePanel"><div className="toolbar"><label className="search"><span>{icons.search}</span><input aria-label="Search products" placeholder="Search products, vendors, SKU, or category" value={query} onChange={(e) => setQuery(e.target.value)} /></label><div className="legend"><span className="dot untaxed" /> Resale purchase — no tax paid</div></div>
     <div className="productTable"><div className="tableHead">{columns.map((column) => <button role="columnheader" aria-sort={sort.key === column.key ? (sort.direction === "asc" ? "ascending" : "descending") : "none"} type="button" key={column.key} className={`stockHeaderCell ${sort.key === column.key ? `sorted ${sort.direction}` : ""}`} onClick={() => changeSort(column.key)}><span>{column.label}</span><span className="sortPair" aria-hidden="true"><i /><b /></span></button>)}<span className="stockHeaderSpacer" /></div>
-    {products.map((p) => <div className="productRow" key={p.id}><div className="productCell"><div className="productGlyph">{p.name.slice(0, 1)}</div><div className="productDescription"><strong title={p.name}>{p.name}</strong><span>{p.sku} · {p.category}</span></div></div><div className="vendorCell" title={p.vendor || "Vendor not set"}><strong>{p.vendor || "—"}</strong></div><div><strong>{p.quantity}</strong><span className={p.quantity <= p.reorderPoint ? "lowText" : "mutedText"}>{p.quantity <= p.reorderPoint ? "Low stock" : `Min ${p.reorderPoint}`}</span></div><strong>{money.format(p.unitCost)}</strong><strong>{money.format(p.quantity * p.salePrice)}</strong><div>{p.salesTaxPaid ? <span className="pill neutral">Tax paid</span> : <span className="pill taxFree">Untaxed resale</span>}</div><div className="rowActions"><button onClick={() => onUse(p)} disabled={p.quantity < 1}>Use one</button><button onClick={() => onEdit(p)}>Edit</button><button className="dangerText" onClick={() => onDelete(p)}>Delete</button></div></div>)}
+    {products.map((p) => <div className="productRow" key={p.id}><div className="productCell"><div className="productGlyph">{p.name.slice(0, 1)}</div><div className="productDescription"><strong title={p.name}>{p.name}</strong><span>{p.sku} · {p.category}</span></div></div><div className="vendorCell" title={p.vendor || "Vendor not set"}><strong>{p.vendor || "—"}</strong></div><div><strong>{p.quantity}</strong><span className={p.quantity <= p.reorderPoint ? "lowText" : "mutedText"}>{p.quantity <= p.reorderPoint ? "Low stock" : `Min ${p.reorderPoint}`}</span></div><strong>{whole.format(soldByProduct.get(p.id) ?? 0)}</strong><strong>{money.format(p.unitCost)}</strong><strong>{money.format(p.quantity * p.salePrice)}</strong><div>{p.salesTaxPaid ? <span className="pill neutral">Tax paid</span> : <span className="pill taxFree">Untaxed resale</span>}</div><div className="rowActions"><button onClick={() => onUse(p)} disabled={p.quantity < 1}>Use one</button><button onClick={() => onEdit(p)}>Edit</button><button className="dangerText" onClick={() => onDelete(p)}>Delete</button></div></div>)}
     {!products.length && <Empty text="No products match your search." />}</div></section>;
+}
+
+function Customers({ state, setState }: { state: AppState; setState: React.Dispatch<React.SetStateAction<AppState>> }) {
+  type CustomerSortKey = "customer" | "contact" | "location" | "invoices" | "units" | "revenue" | "lastPurchase";
+  const [query, setQuery] = useState("");
+  const [sort, setSort] = useState<{ key: CustomerSortKey; direction: SortDirection }>({ key: "lastPurchase", direction: "desc" });
+  const [preview, setPreview] = useState<InvoiceImportPreview | null>(null);
+  const [importing, setImporting] = useState(false);
+  const invoiceRef = useRef<HTMLInputElement>(null);
+  const salesFor = (customer: Customer) => state.movements.filter((movement) => movement.type === "sale" && movement.customerId === customer.id);
+  const customerStats = (customer: Customer) => {
+    const sales = salesFor(customer);
+    return {
+      invoices: new Set(sales.map((movement) => movement.invoiceNumber).filter(Boolean)).size,
+      units: sales.reduce((total, movement) => total + movement.quantity, 0),
+      revenue: sales.reduce((total, movement) => total + movement.quantity * movement.unitPrice, 0),
+      lastPurchase: sales.map((movement) => movement.date).sort().at(-1) ?? "",
+    };
+  };
+  const sortValue = (customer: Customer): SortValue => {
+    const stats = customerStats(customer);
+    if (sort.key === "contact") return `${customer.email} ${customer.phone}`;
+    if (sort.key === "location") return `${customer.address.state} ${customer.address.city} ${customer.address.postalCode}`;
+    if (sort.key === "invoices") return stats.invoices;
+    if (sort.key === "units") return stats.units;
+    if (sort.key === "revenue") return stats.revenue;
+    if (sort.key === "lastPurchase") return stats.lastPurchase;
+    return customer.name;
+  };
+  const customers = state.customers
+    .filter((customer) => `${customer.name} ${customer.email} ${customer.phone} ${customer.address.line1} ${customer.address.city} ${customer.address.state} ${customer.address.postalCode}`.toLowerCase().includes(query.toLowerCase()))
+    .sort((left, right) => compareSortValues(sortValue(left), sortValue(right), sort.direction));
+  const invoiceSales = state.movements.filter((movement) => movement.type === "sale" && movement.sourceKey?.startsWith("invoice:"));
+  const invoiceCount = new Set(invoiceSales.map((movement) => movement.invoiceNumber).filter(Boolean)).size;
+  const importedRevenue = invoiceSales.reduce((total, movement) => total + movement.quantity * movement.unitPrice, 0);
+  const knownProductKeys = new Set(state.products.flatMap((product) => [normalizeProductIdentifier(product.sku), `name:${normalizeProductIdentifier(product.name)}`]));
+  const previewNewProductKeys = new Set((preview?.ready ?? []).filter((line) => !knownProductKeys.has(normalizeProductIdentifier(line.sku)) && !knownProductKeys.has(`name:${normalizeProductIdentifier(line.productName)}`)).map((line) => normalizeProductIdentifier(line.sku)));
+  const previewNewCustomerKeys = new Set((preview?.customers ?? []).filter((imported) => !state.customers.some((customer) => normalizeCustomerKey(customer.externalKey) === normalizeCustomerKey(imported.externalKey) || (imported.email && customer.email.toLowerCase() === imported.email.toLowerCase()))).map((customer) => customer.key));
+  const columns: Array<{ key: CustomerSortKey; label: string }> = [
+    { key: "customer", label: "Customer" }, { key: "contact", label: "Contact" }, { key: "location", label: "Location" },
+    { key: "invoices", label: "Invoices" }, { key: "units", label: "Units sold" }, { key: "revenue", label: "Revenue" }, { key: "lastPurchase", label: "Last purchase" },
+  ];
+  const changeSort = (key: CustomerSortKey) => setSort((current) => ({ key, direction: current.key === key && current.direction === "asc" ? "desc" : "asc" }));
+  const openInvoiceImport = async (event: ChangeEvent<HTMLInputElement>) => {
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+    input.value = "";
+    if (!file) return;
+    setImporting(true);
+    try {
+      setPreview(parseInvoiceImportText(await file.text(), file.name, state.movements.map((movement) => movement.sourceKey).filter((key): key is string => Boolean(key))));
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : "The invoice file could not be read.";
+      setPreview({ fileName: file.name, ready: [], duplicates: [], invalid: [`${message} Use the downloadable CSV template or a JSON invoice export.`], customers: [], columns: [], invoiceCount: 0, totalQuantity: 0, totalRevenue: 0 });
+    } finally { setImporting(false); }
+  };
+  const applyInvoiceImport = () => {
+    if (!preview?.ready.length) return;
+    setState((current) => {
+      const existingSourceKeys = new Set(current.movements.map((movement) => movement.sourceKey).filter((key): key is string => Boolean(key)).map(normalizeInvoiceKey));
+      const lines = preview.ready.filter((line) => !existingSourceKeys.has(normalizeInvoiceKey(line.sourceKey)));
+      const usedCustomerKeys = new Set(lines.map((line) => line.customerKey));
+      const customerIds = new Map<string, string>();
+      const customers = current.customers.map((customer) => ({ ...customer, address: { ...customer.address } }));
+      for (const imported of preview.customers.filter((customer) => usedCustomerKeys.has(customer.key))) {
+        const existing = customers.find((customer) => normalizeCustomerKey(customer.externalKey) === normalizeCustomerKey(imported.externalKey) || (imported.email && customer.email.toLowerCase() === imported.email.toLowerCase()));
+        const customerDates = lines.filter((line) => line.customerKey === imported.key).map((line) => line.date).sort();
+        const updatedAt = customerDates.at(-1) ?? dateOnly();
+        if (existing) {
+          existing.name = existing.name || imported.name;
+          existing.email = existing.email || imported.email;
+          existing.phone = existing.phone || imported.phone;
+          existing.address = {
+            line1: existing.address.line1 || imported.address.line1,
+            city: existing.address.city || imported.address.city,
+            state: existing.address.state || imported.address.state,
+            postalCode: existing.address.postalCode || imported.address.postalCode,
+          };
+          existing.updatedAt = existing.updatedAt > updatedAt ? existing.updatedAt : updatedAt;
+          customerIds.set(imported.key, existing.id);
+        } else {
+          const customer: Customer = { id: uid(), externalKey: imported.externalKey, name: imported.name, email: imported.email, phone: imported.phone, address: { ...blankAddress(imported.address.state || "CA"), ...imported.address }, createdAt: customerDates[0] ?? dateOnly(), updatedAt };
+          customers.unshift(customer);
+          customerIds.set(imported.key, customer.id);
+        }
+      }
+
+      const productsBySku = new Map(current.products.map((product) => [normalizeProductIdentifier(product.sku), product]));
+      const productsByName = new Map(current.products.map((product) => [normalizeProductIdentifier(product.name), product]));
+      const productAdditions: Product[] = [];
+      const movementAdditions: Movement[] = [];
+      for (const line of lines) {
+        let product = productsBySku.get(normalizeProductIdentifier(line.sku)) ?? productsByName.get(normalizeProductIdentifier(line.productName));
+        if (!product) {
+          product = { id: uid(), sku: line.sku, name: line.productName, vendor: "", category: line.category, quantity: 0, unitCost: line.unitCost ?? 0, salePrice: line.unitPrice, reorderPoint: 0, salesTaxPaid: false, createdAt: line.date };
+          productAdditions.push(product);
+          productsBySku.set(normalizeProductIdentifier(product.sku), product);
+          productsByName.set(normalizeProductIdentifier(product.name), product);
+        }
+        const importedCustomer = preview.customers.find((customer) => customer.key === line.customerKey);
+        const customerId = customerIds.get(line.customerKey);
+        const address = importedCustomer ? { ...blankAddress(importedCustomer.address.state || "CA"), ...importedCustomer.address } : blankAddress();
+        const stateSetting = current.settings.stateTaxes[address.state] ?? { enabled: false, rate: 0 };
+        const resolvedRate = resolveAddressRate(address, current.settings);
+        const taxableAmount = line.quantity * line.unitPrice;
+        const calculatedTax = stateSetting.enabled ? roundTax(taxableAmount, resolvedRate.totalRate) : 0;
+        const salesTax = line.salesTax ?? calculatedTax;
+        const effectiveRate = taxableAmount > 0 ? roundRate((salesTax / taxableAmount) * 100) : 0;
+        const stateShare = resolvedRate.totalRate > 0 ? resolvedRate.stateRate / resolvedRate.totalRate : 1;
+        const stateTax = Math.round(salesTax * stateShare * 100) / 100;
+        const localTax = Math.round((salesTax - stateTax) * 100) / 100;
+        movementAdditions.push({
+          id: uid(), productId: product.id, productName: product.name, productSku: product.sku, finalProductId: product.id, finalProductName: product.name,
+          type: "sale", quantity: line.quantity, unitCost: line.unitCost ?? product.unitCost, unitPrice: line.unitPrice, salesTax, stateTax, localTax,
+          taxRate: effectiveRate, stateTaxRate: resolvedRate.stateRate, localTaxRate: resolvedRate.localRate, taxJurisdiction: address.state || undefined,
+          localJurisdiction: resolvedRate.jurisdiction, taxCollected: salesTax > 0, customerAddress: address, customerId, customerName: importedCustomer?.name,
+          sourceKey: line.sourceKey, invoiceNumber: line.invoiceNumber, date: line.date, note: `Imported invoice ${line.invoiceNumber}`,
+        });
+        existingSourceKeys.add(normalizeInvoiceKey(line.sourceKey));
+      }
+      return { ...current, version: 9, customers, products: [...productAdditions, ...current.products], movements: [...movementAdditions, ...current.movements] };
+    });
+    setPreview(null);
+  };
+  return <div className="customerLayout">
+    <section className="customerHero"><div><p className="eyebrow">Sales history</p><h2>Customers and old invoices, connected.</h2><p>Bring in historical invoice lines without changing today&apos;s on-hand counts. Each unique line increases the product&apos;s sold total and becomes part of the customer&apos;s history.</p></div><div className="customerHeroActions"><button className="dark" onClick={() => invoiceRef.current?.click()} disabled={importing}>{importing ? "Reading invoices…" : "↑ Import old invoices"}</button><button className="secondary" onClick={downloadInvoiceTemplate}>Download template</button><input ref={invoiceRef} hidden type="file" accept=".csv,text/csv,.json,application/json" onChange={openInvoiceImport} /></div></section>
+    <section className="metricGrid"><Metric label="Customers" value={whole.format(state.customers.length)} note="Saved customer records" accent="green" /><Metric label="Imported invoices" value={whole.format(invoiceCount)} note={`${whole.format(invoiceSales.length)} unique invoice lines`} accent="blue" /><Metric label="Historical units sold" value={whole.format(invoiceSales.reduce((total, movement) => total + movement.quantity, 0))} note="Does not reduce on-hand inventory" accent="sand" /><Metric label="Imported revenue" value={money.format(importedRevenue)} note="From historical invoices" accent="coral" /></section>
+    <section className="panel customerPanel"><div className="toolbar"><label className="search"><span>{icons.search}</span><input aria-label="Search customers" placeholder="Search customer, email, phone, or location" value={query} onChange={(event) => setQuery(event.target.value)} /></label><div className="legend">Invoice imports are duplicate-safe by invoice and line ID</div></div><div className="customerTable"><div className="customerHead">{columns.map((column) => <button role="columnheader" aria-sort={sort.key === column.key ? (sort.direction === "asc" ? "ascending" : "descending") : "none"} type="button" key={column.key} className={`stockHeaderCell ${sort.key === column.key ? `sorted ${sort.direction}` : ""}`} onClick={() => changeSort(column.key)}><span>{column.label}</span><span className="sortPair" aria-hidden="true"><i /><b /></span></button>)}</div>{customers.map((customer) => { const stats = customerStats(customer); return <div className="customerRow" key={customer.id}><div className="customerName"><div className="productGlyph">{customer.name.slice(0, 1)}</div><span><strong title={customer.name}>{customer.name}</strong><small>{customer.externalKey}</small></span></div><div><strong>{customer.email || "—"}</strong><small>{customer.phone || "No phone"}</small></div><div><strong>{customer.address.city && customer.address.state ? `${customer.address.city}, ${customer.address.state}` : customer.address.state || "—"}</strong><small>{customer.address.postalCode || "No ZIP"}</small></div><strong>{whole.format(stats.invoices)}</strong><strong>{whole.format(stats.units)}</strong><strong>{money.format(stats.revenue)}</strong><strong>{stats.lastPurchase || "—"}</strong></div>; })}{!customers.length && <Empty text="No customers yet. Import an old invoice file to build your customer directory." />}</div></section>
+    {preview && <Modal title="Review old invoice import" eyebrow="Historical sales import" onClose={() => setPreview(null)}><div className="importSummary"><article><span>Unique invoice lines</span><strong>{preview.ready.length}</strong></article><article><span>New products</span><strong>{previewNewProductKeys.size}</strong></article><article><span>New customers</span><strong>{previewNewCustomerKeys.size}</strong></article></div><p className="settingsCopy"><strong>{preview.fileName}</strong> contains {preview.invoiceCount} invoice{preview.invoiceCount === 1 ? "" : "s"}, {whole.format(preview.totalQuantity)} units, and {money.format(preview.totalRevenue)} in historical revenue. Existing products gain sold history only; on-hand quantities stay unchanged.</p>{preview.ready.length > 0 && <div className="importPreviewList">{preview.ready.slice(0, 7).map((line) => <div key={line.sourceKey}><span><strong>{line.productName}</strong><small>{line.invoiceNumber} · {line.sku} · {line.quantity} sold · {preview.customers.find((customer) => customer.key === line.customerKey)?.name}</small></span><b>{money.format(line.quantity * line.unitPrice)}</b></div>)}{preview.ready.length > 7 && <small>+ {preview.ready.length - 7} more lines</small>}</div>}{preview.duplicates.length > 0 && <details className="importDetails"><summary>{preview.duplicates.length} duplicate invoice line{preview.duplicates.length === 1 ? "" : "s"} skipped</summary><p>{preview.duplicates.slice(0, 12).join(", ")}</p></details>}{preview.invalid.length > 0 && <details className="importDetails"><summary>{preview.invalid.length} invalid row{preview.invalid.length === 1 ? "" : "s"} skipped</summary>{preview.invalid.slice(0, 12).map((message) => <p key={message}>{message}</p>)}</details>}<div className="modalActions"><button type="button" className="secondary" onClick={() => setPreview(null)}>Cancel</button><button className="primary" type="button" disabled={!preview.ready.length} onClick={applyInvoiceImport}>Import unique invoice lines</button></div></Modal>}
+  </div>;
 }
 
 function Activity({ state, onNew }: { state: AppState; onNew: () => void }) { return <section className="panel tablePanel"><div className="panelTitle"><div><p className="eyebrow">Permanent stock trail</p><h3>Inventory ledger</h3></div><button className="primary" onClick={onNew}>+ Record activity</button></div><MovementTable movements={state.movements} products={state.products} /><p className="footnote">Activity entries remain in the ledger even if a product is later removed.</p></section>; }
@@ -790,6 +935,7 @@ function ModalActions({ onClose, label }: { onClose: () => void; label: string }
 function Empty({ text }: { text: string }) { return <div className="empty">{text}</div>; }
 
 function downloadExpenseTemplate() { const csv = "external_key,vendor,date,amount,category,note\nAMAZON-ORDER-ID,Amazon,2026-01-15,49.95,Office supplies,Printer paper\n"; const blob = new Blob([csv], { type: "text/csv;charset=utf-8" }); const url = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = url; anchor.download = "stockbot-expense-import-template.csv"; anchor.click(); URL.revokeObjectURL(url); }
+function downloadInvoiceTemplate() { const csv = "Invoice Number,Line Item ID,Invoice Date,Customer ID,Customer Name,Customer Email,Customer Phone,Shipping Address,Shipping City,Shipping State,Shipping ZIP,SKU,Product Name,Category,Quantity,Unit Price,Unit Cost,Line Sales Tax\nINV-1001,1,2025-01-15,CUST-42,Harbor Market,orders@harbormarket.example,555-0100,210 Market St,San Diego,CA,92101,CER-101,Speckled Ceramic Mug,Home,3,24.00,8.50,5.22\n"; const blob = new Blob([csv], { type: "text/csv;charset=utf-8" }); const url = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = url; anchor.download = "stockbot-historical-invoice-template.csv"; anchor.click(); URL.revokeObjectURL(url); }
 function exportState(state: AppState) { const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" }); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = `stockbot-backup-${dateOnly()}.json`; a.click(); URL.revokeObjectURL(url); }
 function importState(event: ChangeEvent<HTMLInputElement>, setState: React.Dispatch<React.SetStateAction<AppState>>) { const file = event.target.files?.[0]; if (!file) return; file.text().then((text) => { const parsed: unknown = JSON.parse(text); const normalized = normalizeState(parsed); if (!Array.isArray((parsed as Partial<AppState>)?.products) || !Array.isArray((parsed as Partial<AppState>)?.movements) || !Array.isArray((parsed as Partial<AppState>)?.expenses)) throw new Error(); if (confirm(`Import ${normalized.products.length} products and replace the current workspace?`)) setState(normalized); }).catch(() => alert("That file is not a valid StockBot backup.")); event.target.value = ""; }
 
@@ -823,20 +969,46 @@ function normalizeState(raw: unknown): AppState {
   const expenseColumnKeys = new Set(expenseColumns.map((column) => column.key));
   const savedVisibleColumns = Array.isArray(incoming.settings?.expenseVisibleColumns) ? incoming.settings.expenseVisibleColumns.filter((key): key is string => typeof key === "string" && expenseColumnKeys.has(key)) : [];
   const products = (Array.isArray(incoming.products) ? incoming.products : seed.products).map((product) => ({ ...product, vendor: typeof product.vendor === "string" ? product.vendor.trim() : "" }));
+  const seenCustomerKeys = new Set<string>();
+  const customers = (Array.isArray(incoming.customers) ? incoming.customers : []).map((customer, index): Customer => {
+    const address = customer.address && typeof customer.address === "object" ? customer.address : blankAddress();
+    const externalKey = String(customer.externalKey || customer.email || customer.id || `legacy-customer-${index + 1}`).trim();
+    return {
+      id: String(customer.id || `legacy-customer-${index + 1}`),
+      externalKey,
+      name: String(customer.name || customer.email || "Unknown customer").trim(),
+      email: String(customer.email || "").trim().toLowerCase(),
+      phone: String(customer.phone || "").trim(),
+      address: { ...blankAddress(String(address.state || "CA")), ...address, state: String(address.state || "CA").toUpperCase() },
+      createdAt: normalizeExpenseDate(customer.createdAt) || dateOnly(),
+      updatedAt: normalizeExpenseDate(customer.updatedAt) || normalizeExpenseDate(customer.createdAt) || dateOnly(),
+    };
+  }).filter((customer) => {
+    const key = normalizeCustomerKey(customer.externalKey);
+    if (!key || seenCustomerKeys.has(key)) return false;
+    seenCustomerKeys.add(key); return true;
+  });
   const movementTypes: MovementType[] = ["purchase", "sale", "production_use", "personal_use", "adjustment"];
+  const seenMovementSourceKeys = new Set<string>();
   const movements = (Array.isArray(incoming.movements) ? incoming.movements : seed.movements).map((movement): Movement => {
     const product = products.find((candidate) => candidate.id === movement.productId);
     const type = movementTypes.includes(movement.type) ? movement.type : "adjustment";
     const productName = typeof movement.productName === "string" && movement.productName.trim() ? movement.productName.trim() : product?.name;
     const productSku = typeof movement.productSku === "string" && movement.productSku.trim() ? movement.productSku.trim() : product?.sku;
     const savedFinalProductName = typeof movement.finalProductName === "string" ? movement.finalProductName.trim() : "";
-    return { ...movement, type, productName, productSku, finalProductId: typeof movement.finalProductId === "string" ? movement.finalProductId : undefined, finalProductName: savedFinalProductName || (type === "sale" ? productName : undefined) };
+    return { ...movement, type, productName, productSku, finalProductId: typeof movement.finalProductId === "string" ? movement.finalProductId : undefined, finalProductName: savedFinalProductName || (type === "sale" ? productName : undefined), sourceKey: typeof movement.sourceKey === "string" && movement.sourceKey.trim() ? movement.sourceKey.trim() : undefined, invoiceNumber: typeof movement.invoiceNumber === "string" ? movement.invoiceNumber.trim() : undefined, customerId: typeof movement.customerId === "string" ? movement.customerId : undefined, customerName: typeof movement.customerName === "string" ? movement.customerName.trim() : undefined };
+  }).filter((movement) => {
+    if (!movement.sourceKey) return true;
+    const key = normalizeInvoiceKey(movement.sourceKey);
+    if (seenMovementSourceKeys.has(key)) return false;
+    seenMovementSourceKeys.add(key); return true;
   });
   return {
-    version: 8,
+    version: 9,
     products,
     movements,
     expenses,
+    customers,
     settings: {
       businessName: incoming.settings?.businessName ?? seed.settings.businessName,
       taxYear: incoming.settings?.taxYear ?? nowYear,

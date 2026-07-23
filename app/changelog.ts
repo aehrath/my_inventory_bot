@@ -13,6 +13,33 @@ export type ChangelogRelease = {
 
 export const changelogReleases: readonly ChangelogRelease[] = [
   {
+    version: "0.15.0",
+    date: "July 22, 2026",
+    title: "Historical invoices and customers",
+    summary: "Old invoice imports now build customer and product history without changing today’s inventory counts.",
+    sections: [
+      {
+        title: "Added",
+        items: [
+          "Added a Customers section with contact details, locations, invoice counts, units sold, revenue, and last-purchase dates.",
+          "Added CSV and JSON imports for historical invoice lines, plus a downloadable template.",
+          "Added a sortable Sold column to Products.",
+        ],
+      },
+      {
+        title: "Changed",
+        items: [
+          "Historical invoice lines create missing products and record sales against existing products without reducing current on-hand quantities.",
+          "Imported customers are created automatically and matched by customer key or email.",
+        ],
+      },
+      {
+        title: "Fixed",
+        items: ["Invoice number and line ID now form a durable unique key, preventing repeat imports from counting the same sale twice."],
+      },
+    ],
+  },
+  {
     version: "0.14.0",
     date: "July 22, 2026",
     title: "Expense imports stay in Expenses",

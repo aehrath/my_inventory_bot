@@ -21,6 +21,7 @@ test("includes a visible release changelog", async () => {
   assert.match(page, /label: "Changelog"/);
   assert.match(page, /What&apos;s new in StockBot/);
   assert.match(page, /changelogReleases\.map/);
+  assert.match(changelog, /version: "0\.15\.0"/);
   assert.match(changelog, /version: "0\.14\.0"/);
   assert.match(changelog, /version: "0\.13\.0"/);
   assert.match(changelog, /version: "0\.12\.0"/);
@@ -31,6 +32,7 @@ test("includes a visible release changelog", async () => {
   assert.match(changelog, /version: "0\.7\.0"/);
   assert.match(changelog, /version: "0\.6\.0"/);
   assert.match(changelog, /version: "0\.1\.0"/);
+  assert.match(markdown, /## 0\.15\.0 - 2026-07-22/);
   assert.match(markdown, /## 0\.14\.0 - 2026-07-22/);
   assert.match(markdown, /## 0\.13\.0 - 2026-07-22/);
   assert.match(markdown, /## 0\.12\.0 - 2026-07-22/);
@@ -79,7 +81,7 @@ test("includes item-level COGS and final-product tracking", async () => {
   assert.match(page, /Production-use cost/);
   assert.match(page, /Allocated, not yet sale COGS/);
   assert.match(page, /productName: product\.name, productSku: product\.sku/);
-  assert.match(page, /version: 8/);
+  assert.match(page, /version: 9/);
   assert.match(styles, /\.cogsHead,.cogsRow/);
   assert.match(styles, /activityTag\.production_use/);
 });
@@ -146,9 +148,30 @@ test("keeps expense imports isolated from products and inventory", async () => {
     read("app/page.tsx"),
     read("app/expense-import.ts"),
   ]);
+  const expensesSection = page.slice(page.indexOf("function Expenses"), page.indexOf("function TaxCenter"));
   assert.doesNotMatch(expenseImport, /ImportedInventoryProduct|inventoryProductsFromRecords|parseProductPackSize/);
-  assert.doesNotMatch(page, /expenseImport\.products|productAdditions|updatedProducts|importedQuantityForExpenseKeys/);
-  assert.match(page, /expenses: \[\.\.\.additions, \.\.\.enriched\]/);
+  assert.doesNotMatch(expensesSection, /expenseImport\.products|productAdditions|updatedProducts|importedQuantityForExpenseKeys/);
+  assert.match(expensesSection, /expenses: \[\.\.\.additions, \.\.\.enriched\]/);
+});
+
+test("imports historical invoices into duplicate-safe sales and customers", async () => {
+  const [page, invoiceImport, stateRoute, styles] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/invoice-import.ts"),
+    read("app/api/state/route.ts"),
+    read("app/globals.css"),
+  ]);
+  assert.match(page, /label: "Customers"/);
+  assert.match(page, /Import old invoices/);
+  assert.match(page, /downloadInvoiceTemplate/);
+  assert.match(page, /soldByProduct/);
+  assert.match(page, /sourceKey: line\.sourceKey/);
+  assert.match(page, /products: \[\.\.\.productAdditions, \.\.\.current\.products\]/);
+  assert.match(page, /on-hand quantities stay unchanged/);
+  assert.match(invoiceImport, /invoice:\$\{normalizeInvoiceKey\(invoiceNumber\)\}:line:/);
+  assert.match(invoiceImport, /customeremail/);
+  assert.match(stateRoute, /Duplicate imported invoice line/);
+  assert.match(styles, /\.customerHead,\.customerRow/);
 });
 
 test("keeps external tax credentials on the server", async () => {

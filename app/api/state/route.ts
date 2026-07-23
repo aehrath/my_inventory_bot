@@ -30,12 +30,29 @@ export async function PUT(request: Request) {
     if (!Array.isArray(state.expenses)) {
       return Response.json({ error: "Expense records are missing." }, { status: 400 });
     }
+    if (!Array.isArray(state.customers)) {
+      return Response.json({ error: "Customer records are missing." }, { status: 400 });
+    }
     const expenseKeys = new Set<string>();
     for (const expense of state.expenses) {
       const key = String(expense?.externalKey ?? "").trim().toLowerCase().replace(/\s+/g, "");
       if (!key) return Response.json({ error: "Every expense needs a unique external key." }, { status: 400 });
       if (expenseKeys.has(key)) return Response.json({ error: `Duplicate expense key: ${expense.externalKey}` }, { status: 409 });
       expenseKeys.add(key);
+    }
+    const customerKeys = new Set<string>();
+    for (const customer of state.customers) {
+      const key = String(customer?.externalKey ?? "").trim().toLowerCase().replace(/\s+/g, "");
+      if (!key) return Response.json({ error: "Every customer needs a unique external key." }, { status: 400 });
+      if (customerKeys.has(key)) return Response.json({ error: `Duplicate customer key: ${customer.externalKey}` }, { status: 409 });
+      customerKeys.add(key);
+    }
+    const invoiceLineKeys = new Set<string>();
+    for (const movement of state.movements) {
+      const key = String(movement?.sourceKey ?? "").trim().toLowerCase().replace(/\s+/g, "");
+      if (!key) continue;
+      if (invoiceLineKeys.has(key)) return Response.json({ error: `Duplicate imported invoice line: ${movement.sourceKey}` }, { status: 409 });
+      invoiceLineKeys.add(key);
     }
     const db = await ensureTable();
     const updatedAt = new Date().toISOString();

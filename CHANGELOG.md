@@ -4,6 +4,23 @@ All notable changes to StockBot are documented here.
 
 ## Unreleased
 
+## 0.15.0 - 2026-07-22
+
+### Added
+
+- Added a Customers section with contact details, locations, invoice counts, units sold, revenue, and last-purchase dates.
+- Added CSV and JSON imports for historical invoice lines, plus a downloadable template.
+- Added a sortable Sold column to Products.
+
+### Changed
+
+- Historical invoice lines create missing products and record sales against existing products without reducing current on-hand quantities.
+- Imported customers are created automatically and matched by customer key or email.
+
+### Fixed
+
+- Invoice number and line ID now form a durable unique key, preventing repeat imports from counting the same sale twice.
+
 ## 0.14.0 - 2026-07-22
 
 ### Changed

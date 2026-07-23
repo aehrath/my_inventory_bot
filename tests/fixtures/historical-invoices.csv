@@ -1,0 +1,5 @@
+Invoice Number,Line Item ID,Invoice Date,Customer ID,Customer Name,Customer Email,Customer Phone,Shipping Address,Shipping City,Shipping State,Shipping ZIP,SKU,Product Name,Category,Quantity,Unit Price,Unit Cost,Line Sales Tax
+INV-100,1,01/10/2025,CUST-1,Ada Market,orders@adamarket.example,555-0101,10 Pine St,Portland,OR,97205,MUG-1,Stoneware Mug,Home,2,24.00,8.50,0.00
+INV-100,2,01/10/2025,CUST-1,Ada Market,orders@adamarket.example,555-0101,10 Pine St,Portland,OR,97205,TOTE-1,Canvas Tote,Accessories,3,18.00,5.80,4.86
+INV-100,2,01/10/2025,CUST-1,Ada Market,orders@adamarket.example,555-0101,10 Pine St,Portland,OR,97205,TOTE-1,Canvas Tote,Accessories,3,18.00,5.80,4.86
+INV-101,1,01/12/2025,CUST-2,Birch Studio,billing@birch.example,555-0102,42 Oak Ave,Austin,TX,78701,MUG-1,Stoneware Mug,Home,1,25.00,8.50,2.06
