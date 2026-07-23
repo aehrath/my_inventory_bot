@@ -21,12 +21,14 @@ test("includes a visible release changelog", async () => {
   assert.match(page, /label: "Changelog"/);
   assert.match(page, /What&apos;s new in StockBot/);
   assert.match(page, /changelogReleases\.map/);
+  assert.match(changelog, /version: "0\.11\.0"/);
   assert.match(changelog, /version: "0\.10\.0"/);
   assert.match(changelog, /version: "0\.9\.0"/);
   assert.match(changelog, /version: "0\.8\.0"/);
   assert.match(changelog, /version: "0\.7\.0"/);
   assert.match(changelog, /version: "0\.6\.0"/);
   assert.match(changelog, /version: "0\.1\.0"/);
+  assert.match(markdown, /## 0\.11\.0 - 2026-07-22/);
   assert.match(markdown, /## 0\.10\.0 - 2026-07-22/);
   assert.match(markdown, /## 0\.9\.0 - 2026-07-22/);
   assert.match(markdown, /## 0\.8\.0 - 2026-07-22/);
@@ -43,6 +45,17 @@ test("stores and displays product vendors", async () => {
   assert.match(page, /<label className="wide">Vendor<input/);
   assert.match(page, /product\.vendor\.trim\(\)/);
   assert.match(page, /Search products, vendors, SKU, or category/);
+});
+
+test("truncates long product descriptions and exposes the full text on hover", async () => {
+  const [page, styles] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/globals.css"),
+  ]);
+  assert.match(page, /className="productDescription"/);
+  assert.match(page, /<strong title=\{p\.name\}>\{p\.name\}<\/strong>/);
+  assert.match(styles, /\.productDescription\{min-width:0\}/);
+  assert.match(styles, /white-space:nowrap;overflow:hidden;text-overflow:ellipsis/);
 });
 
 test("uses True Wealth-style sortable headers on every table", async () => {

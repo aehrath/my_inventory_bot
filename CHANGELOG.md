@@ -4,6 +4,13 @@ All notable changes to StockBot are documented here.
 
 ## Unreleased
 
+## 0.11.0 - 2026-07-22
+
+### Changed
+
+- Shortened overflowing product descriptions with an ellipsis.
+- Added the full product description as a hover tooltip.
+
 ## 0.10.0 - 2026-07-22
 
 ### Changed

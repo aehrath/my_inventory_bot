@@ -13,6 +13,21 @@ export type ChangelogRelease = {
 
 export const changelogReleases: readonly ChangelogRelease[] = [
   {
+    version: "0.11.0",
+    date: "July 22, 2026",
+    title: "Long product names stay tidy",
+    summary: "Product descriptions now fit cleanly inside the inventory table without hiding the full text.",
+    sections: [
+      {
+        title: "Changed",
+        items: [
+          "Shortened overflowing product descriptions with an ellipsis.",
+          "Added the full product description as a hover tooltip.",
+        ],
+      },
+    ],
+  },
+  {
     version: "0.10.0",
     date: "July 22, 2026",
     title: "Pack sizes become real inventory units",
