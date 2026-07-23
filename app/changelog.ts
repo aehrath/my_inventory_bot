@@ -13,6 +13,27 @@ export type ChangelogRelease = {
 
 export const changelogReleases: readonly ChangelogRelease[] = [
   {
+    version: "0.20.0",
+    date: "July 23, 2026",
+    title: "Bulk expense categorization",
+    summary: "Multiple expense records can now be selected and recategorized together.",
+    sections: [
+      {
+        title: "Added",
+        items: [
+          "Added a checkbox to every expense row and a Select all visible checkbox in the table header.",
+          "Added a bulk category picker with every existing expense category.",
+          "Added a clear-selection action and visible selected-row count.",
+          "Added Delete/Backspace-key support and a Delete selected button for removing selected expenses after confirmation.",
+        ],
+      },
+      {
+        title: "Changed",
+        items: ["Bulk category changes immediately update tax totals and the expense-backed Purchase inventory."],
+      },
+    ],
+  },
+  {
     version: "0.19.0",
     date: "July 23, 2026",
     title: "Clear workspace records",

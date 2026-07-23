@@ -21,6 +21,7 @@ test("includes a visible release changelog", async () => {
   assert.match(page, /label: "Changelog"/);
   assert.match(page, /What&apos;s new in StockBot/);
   assert.match(page, /changelogReleases\.map/);
+  assert.match(changelog, /version: "0\.20\.0"/);
   assert.match(changelog, /version: "0\.19\.0"/);
   assert.match(changelog, /version: "0\.18\.0"/);
   assert.match(changelog, /version: "0\.17\.0"/);
@@ -36,6 +37,7 @@ test("includes a visible release changelog", async () => {
   assert.match(changelog, /version: "0\.7\.0"/);
   assert.match(changelog, /version: "0\.6\.0"/);
   assert.match(changelog, /version: "0\.1\.0"/);
+  assert.match(markdown, /## 0\.20\.0 - 2026-07-23/);
   assert.match(markdown, /## 0\.19\.0 - 2026-07-23/);
   assert.match(markdown, /## 0\.18\.0 - 2026-07-23/);
   assert.match(markdown, /## 0\.17\.0 - 2026-07-22/);
@@ -189,6 +191,26 @@ test("builds synchronized purchase inventory from expense categories", async () 
   assert.match(inventory, /totalCost \/ quantity/);
   assert.match(styles, /\.purchaseInventoryHead/);
   assert.match(styles, /\.expenseCategorySelect/);
+});
+
+test("supports multi-select expense category changes and deletion", async () => {
+  const [page, styles] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/globals.css"),
+  ]);
+  assert.match(page, /selectedExpenseIds/);
+  assert.match(page, /Select all visible expenses/);
+  assert.match(page, /aria-label=\{`Select expense \$\{expense\.externalKey\}`\}/);
+  assert.match(page, /Bulk expense category/);
+  assert.match(page, />Change category<\/button>/);
+  assert.match(page, /selected\.has\(expense\.id\) \? \{ \.\.\.expense, category: bulkExpenseCategory \} : expense/);
+  assert.match(page, /event\.key !== "Delete"/);
+  assert.match(page, /window\.addEventListener\("keydown", handleDeleteKey\)/);
+  assert.match(page, />Delete selected<\/button>/);
+  assert.match(page, /current\.expenses\.filter\(\(expense\) => !selected\.has\(expense\.id\)\)/);
+  assert.match(styles, /\.expenseBulkBar/);
+  assert.match(styles, /\.expenseSelectionHead/);
+  assert.match(styles, /\.expenseRow\.selected/);
 });
 
 test("offers separate clear-all and demo-reset workspace actions", async () => {

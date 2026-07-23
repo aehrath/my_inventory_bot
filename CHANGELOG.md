@@ -4,6 +4,19 @@ All notable changes to StockBot are documented here.
 
 ## Unreleased
 
+## 0.20.0 - 2026-07-23
+
+### Added
+
+- Added a checkbox to every expense row and a **Select all visible** checkbox in the table header.
+- Added a bulk category picker with every existing expense category.
+- Added a clear-selection action and visible selected-row count.
+- Added Delete/Backspace-key support and a **Delete selected** button for removing selected expenses after confirmation.
+
+### Changed
+
+- Bulk category changes immediately update tax totals and the expense-backed Purchase inventory.
+
 ## 0.19.0 - 2026-07-23
 
 ### Added
