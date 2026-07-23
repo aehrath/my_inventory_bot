@@ -13,6 +13,22 @@ export type ChangelogRelease = {
 
 export const changelogReleases: readonly ChangelogRelease[] = [
   {
+    version: "0.14.0",
+    date: "July 22, 2026",
+    title: "Expense imports stay in Expenses",
+    summary: "Imported expense records no longer create products or change inventory quantities.",
+    sections: [
+      {
+        title: "Changed",
+        items: ["Expense imports now add or enrich records only in the Expenses ledger."],
+      },
+      {
+        title: "Fixed",
+        items: ["Removed automatic product creation, product detail updates, and on-hand quantity changes from expense imports."],
+      },
+    ],
+  },
+  {
     version: "0.13.0",
     date: "July 22, 2026",
     title: "Item-level COGS tracking",

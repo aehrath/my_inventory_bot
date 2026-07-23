@@ -21,6 +21,7 @@ test("includes a visible release changelog", async () => {
   assert.match(page, /label: "Changelog"/);
   assert.match(page, /What&apos;s new in StockBot/);
   assert.match(page, /changelogReleases\.map/);
+  assert.match(changelog, /version: "0\.14\.0"/);
   assert.match(changelog, /version: "0\.13\.0"/);
   assert.match(changelog, /version: "0\.12\.0"/);
   assert.match(changelog, /version: "0\.11\.0"/);
@@ -30,6 +31,7 @@ test("includes a visible release changelog", async () => {
   assert.match(changelog, /version: "0\.7\.0"/);
   assert.match(changelog, /version: "0\.6\.0"/);
   assert.match(changelog, /version: "0\.1\.0"/);
+  assert.match(markdown, /## 0\.14\.0 - 2026-07-22/);
   assert.match(markdown, /## 0\.13\.0 - 2026-07-22/);
   assert.match(markdown, /## 0\.12\.0 - 2026-07-22/);
   assert.match(markdown, /## 0\.11\.0 - 2026-07-22/);
@@ -139,16 +141,14 @@ test("deduplicates imported expense records by external key", async () => {
   assert.match(stateRoute, /Duplicate expense key/);
 });
 
-test("uses new expense keys to add imported products and stock exactly once", async () => {
+test("keeps expense imports isolated from products and inventory", async () => {
   const [page, expenseImport] = await Promise.all([
     read("app/page.tsx"),
     read("app/expense-import.ts"),
   ]);
-  assert.match(expenseImport, /expenseQuantities/);
-  assert.match(expenseImport, /ready\.map\(\(expense\) => expense\.externalKey\)/);
-  assert.match(page, /addedExpenseKeys/);
-  assert.match(page, /quantity: product\.quantity \+ importedQuantity\(imported\)/);
-  assert.match(page, /re-imported expenses never add stock twice/);
+  assert.doesNotMatch(expenseImport, /ImportedInventoryProduct|inventoryProductsFromRecords|parseProductPackSize/);
+  assert.doesNotMatch(page, /expenseImport\.products|productAdditions|updatedProducts|importedQuantityForExpenseKeys/);
+  assert.match(page, /expenses: \[\.\.\.additions, \.\.\.enriched\]/);
 });
 
 test("keeps external tax credentials on the server", async () => {

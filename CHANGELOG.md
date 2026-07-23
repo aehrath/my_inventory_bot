@@ -4,6 +4,16 @@ All notable changes to StockBot are documented here.
 
 ## Unreleased
 
+## 0.14.0 - 2026-07-22
+
+### Changed
+
+- Expense imports now add or enrich records only in the Expenses ledger.
+
+### Fixed
+
+- Removed automatic product creation, product detail updates, and on-hand quantity changes from expense imports.
+
 ## 0.13.0 - 2026-07-22
 
 ### Added

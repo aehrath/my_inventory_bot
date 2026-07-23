@@ -3,7 +3,7 @@
 
 import { ChangeEvent, CSSProperties, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { changelogReleases } from "./changelog";
-import { amazonBusinessCsvColumns, expenseCategories, importedQuantityForExpenseKeys, normalizeExpenseCategory, normalizeExpenseDate, normalizeExpenseKey, normalizeProductKey, parseExpenseImportText } from "./expense-import";
+import { amazonBusinessCsvColumns, expenseCategories, normalizeExpenseCategory, normalizeExpenseDate, normalizeExpenseKey, parseExpenseImportText } from "./expense-import";
 import type { ExpenseCategory, ExpenseImportPreview } from "./expense-import";
 import { defaultStateTaxSettings, stateName, stateTaxDefaults } from "./tax-data";
 import type { TaxAddress, TaxRateLookup, TaxRateLookupResponse, TaxSourceStatus } from "./tax-rate-types";
@@ -79,8 +79,8 @@ const mergeExpenseColumnOrder = (saved: string[], definitions: ExpenseColumnDefi
   const valid = saved.filter((key) => available.has(key));
   return [...valid, ...definitions.map((column) => column.key).filter((key) => !valid.includes(key))];
 };
-async function parseExpenseImport(file: File, existingExpenses: Expense[], existingProducts: Product[]): Promise<ExpenseImportPreview> {
-  return parseExpenseImportText(await file.text(), file.name, existingExpenses.map((expense) => expense.externalKey), new Date().toISOString(), existingProducts.map((product) => product.sku));
+async function parseExpenseImport(file: File, existingExpenses: Expense[]): Promise<ExpenseImportPreview> {
+  return parseExpenseImportText(await file.text(), file.name, existingExpenses.map((expense) => expense.externalKey));
 }
 const addressKey = (address: Address) => [address.line1, address.city, address.state, address.postalCode.slice(0, 5)].map((part) => part.trim().toLowerCase()).join("|");
 const isCompleteAddress = (address: Address) => Boolean(address.line1.trim() && address.city.trim() && address.state && /^\d{5}(?:-\d{4})?$/.test(address.postalCode.trim()));
@@ -451,18 +451,16 @@ function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppS
   const cogsTotal = selectedExpenses.filter((expense) => expense.category === "Cost of goods").reduce((sum, expense) => sum + expense.amount, 0);
   const operatingTotal = expenseTotal - cogsTotal;
   const importPreviewExpenses = expenseImport ? [...expenseImport.ready, ...expenseImport.updates] : [];
-  const newInventoryProducts = expenseImport?.products.filter((product) => !product.existing) ?? [];
-  const matchedInventoryProducts = expenseImport?.products.filter((product) => product.existing) ?? [];
   const openExpenseImport = async (event: ChangeEvent<HTMLInputElement>) => {
     const input = event.currentTarget;
     const file = input.files?.[0];
     input.value = "";
     if (!file) return;
     setImporting(true);
-    try { setExpenseImport(await parseExpenseImport(file, state.expenses, state.products)); }
+    try { setExpenseImport(await parseExpenseImport(file, state.expenses)); }
     catch (caught) {
       const message = caught instanceof Error ? caught.message : "The file could not be read.";
-      setExpenseImport({ fileName: file.name, ready: [], updates: [], duplicates: [], invalid: [`${message} Use a CSV or JSON expense export.`], years: [], readyTotal: 0, columns: [], products: [] });
+      setExpenseImport({ fileName: file.name, ready: [], updates: [], duplicates: [], invalid: [`${message} Use a CSV or JSON expense export.`], years: [], readyTotal: 0, columns: [] });
     } finally { setImporting(false); }
   };
   const applyExpenseImport = () => {
@@ -477,45 +475,13 @@ function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppS
         if (keys.has(key)) continue;
         keys.add(key); additions.push({ ...draft, id: uid() });
       }
-      const addedExpenseKeys = new Set(additions.map((expense) => normalizeExpenseKey(expense.externalKey)));
       const enriched = current.expenses.map((expense) => {
         const update = updates.get(normalizeExpenseKey(expense.externalKey));
         return update ? { ...expense, fields: update.fields, importedAt: expense.importedAt ?? update.importedAt } : expense;
       });
-      const importedQuantity = (product: ExpenseImportPreview["products"][number]) => importedQuantityForExpenseKeys(product, addedExpenseKeys);
-      const importedProducts = new Map(expenseImport.products
-        .filter((product) => Object.keys(product.expenseQuantities).some((expenseKey) => addedExpenseKeys.has(expenseKey)))
-        .map((product) => [product.key, product]));
-      const updatedProducts = current.products.map((product) => {
-        const imported = importedProducts.get(normalizeProductKey(product.sku));
-        if (!imported) return product;
-        importedProducts.delete(imported.key);
-        return {
-          ...product,
-          name: imported.name || product.name,
-          vendor: imported.vendor ?? product.vendor,
-          category: imported.category ?? product.category,
-          unitCost: imported.unitCost ?? product.unitCost,
-          salesTaxPaid: imported.salesTaxPaid ?? product.salesTaxPaid,
-          quantity: product.quantity + importedQuantity(imported),
-        };
-      });
-      const productAdditions = Array.from(importedProducts.values()).map((product): Product => ({
-        id: uid(),
-        sku: product.sku,
-        name: product.name,
-        vendor: product.vendor ?? "",
-        category: product.category ?? "Uncategorized",
-        quantity: importedQuantity(product),
-        unitCost: product.unitCost ?? 0,
-        salePrice: 0,
-        reorderPoint: 5,
-        salesTaxPaid: product.salesTaxPaid ?? false,
-        createdAt: product.createdAt,
-      }));
       const importedColumnKeys = expenseImport.columns.map(expenseCsvColumnKey);
       const expenseColumnOrder = [...current.settings.expenseColumnOrder, ...importedColumnKeys.filter((key) => !current.settings.expenseColumnOrder.includes(key))];
-      return { ...current, products: [...productAdditions, ...updatedProducts], expenses: [...additions, ...enriched], settings: { ...current.settings, expenseColumnOrder } };
+      return { ...current, expenses: [...additions, ...enriched], settings: { ...current.settings, expenseColumnOrder } };
     });
     setExpenseYear(importedYears.length === 1 ? String(importedYears[0]) : "All");
     setExpenseCategory("All");
@@ -572,9 +538,6 @@ function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppS
     {expenseImport && <Modal title="Review expense import" eyebrow="Duplicate-safe import" onClose={() => setExpenseImport(null)}>
       <div className="importSummary"><article><span>New records</span><strong>{expenseImport.ready.length}</strong></article><article><span>Existing records enriched</span><strong>{expenseImport.updates.length}</strong></article><article><span>Invalid records</span><strong>{expenseImport.invalid.length}</strong></article></div>
       <p className="settingsCopy"><strong>{expenseImport.fileName}</strong> contains {expenseImport.columns.length} source columns. {importPreviewExpenses.length > 0 && <>The importable total is <strong>{money.format(expenseImport.readyTotal)}</strong>{expenseImport.years.length ? ` across ${expenseImport.years.join(", ")}` : ""}. Existing expense keys receive the source fields but are never duplicated.</>}</p>
-      {expenseImport.products.length > 0 && <><div className="formNotice inventoryImportNotice"><strong>{newInventoryProducts.length} new inventory item{newInventoryProducts.length === 1 ? "" : "s"}</strong><span>{matchedInventoryProducts.length} existing product key{matchedInventoryProducts.length === 1 ? "" : "s"} matched. Quantities are added only for new expense keys; re-imported expenses never add stock twice.</span></div><details className="importDetails inventoryProductDetails"><summary>{expenseImport.products.length} product{expenseImport.products.length === 1 ? "" : "s"} found in new expense lines</summary><div className="importPreviewList">{expenseImport.products.slice(0, 7).map((product) => { const existing = state.products.find((item) => normalizeProductKey(item.sku) === product.key); return <div key={product.key}><span><strong>{product.name}</strong><small>{product.sku}{product.vendor ? ` · ${product.vendor}` : ""}{existing ? ` · ${existing.quantity} + ${product.quantity} on hand` : ` · adds ${product.quantity} on hand`}</small></span><b>{existing ? `Add ${product.quantity}` : "Add to inventory"}</b></div>; })}{expenseImport.products.length > 7 && <small>+ {expenseImport.products.length - 7} more products</small>}</div></details></>}
-      {expenseImport.products.length === 0 && expenseImport.ready.length === 0 && expenseImport.updates.length > 0 && <div className="formNotice inventoryImportNotice"><strong>No inventory changes.</strong><span>Every expense key in this file already exists, so no product quantity will be added again.</span></div>}
-      {expenseImport.products.length === 0 && expenseImport.ready.length > 0 && <div className="formNotice inventoryImportNotice"><strong>No product keys found.</strong><span>Add a SKU, ASIN, UPC, part number, or model-number column when you want expense lines added to inventory.</span></div>}
       {importPreviewExpenses.length > 0 && <div className="importPreviewList">{importPreviewExpenses.slice(0, 6).map((expense) => <div key={expense.externalKey}><span><strong>{expense.vendor}</strong><small>{expense.externalKey} · {expense.category} · {expense.date}{expenseImport.updates.some((update) => update.externalKey === expense.externalKey) ? " · existing" : " · new"}</small></span><b>{money.format(expense.amount)}</b></div>)}{importPreviewExpenses.length > 6 && <small>+ {importPreviewExpenses.length - 6} more records</small>}</div>}
       {expenseImport.duplicates.length > 0 && <details className="importDetails"><summary>{expenseImport.duplicates.length} duplicate row{expenseImport.duplicates.length === 1 ? "" : "s"} inside this file skipped</summary><p>{expenseImport.duplicates.slice(0, 12).join(", ")}</p></details>}
       {expenseImport.invalid.length > 0 && <details className="importDetails"><summary>{expenseImport.invalid.length} invalid record{expenseImport.invalid.length === 1 ? "" : "s"} skipped</summary>{expenseImport.invalid.slice(0, 12).map((message) => <p key={message}>{message}</p>)}</details>}
