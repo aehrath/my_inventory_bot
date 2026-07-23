@@ -4,6 +4,17 @@ All notable changes to StockBot are documented here.
 
 ## Unreleased
 
+## 0.19.0 - 2026-07-23
+
+### Added
+
+- Added a guarded **Clear all** button alongside **Reset demo**.
+- **Clear all** removes products, customers, inventory activity, COGS activity, and expenses while preserving business and tax settings.
+
+### Changed
+
+- Renamed the original reset action to **Reset demo** so its effect is unambiguous.
+
 ## 0.18.0 - 2026-07-23
 
 ### Added

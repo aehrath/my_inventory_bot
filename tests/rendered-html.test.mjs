@@ -21,6 +21,7 @@ test("includes a visible release changelog", async () => {
   assert.match(page, /label: "Changelog"/);
   assert.match(page, /What&apos;s new in StockBot/);
   assert.match(page, /changelogReleases\.map/);
+  assert.match(changelog, /version: "0\.19\.0"/);
   assert.match(changelog, /version: "0\.18\.0"/);
   assert.match(changelog, /version: "0\.17\.0"/);
   assert.match(changelog, /version: "0\.16\.0"/);
@@ -35,6 +36,7 @@ test("includes a visible release changelog", async () => {
   assert.match(changelog, /version: "0\.7\.0"/);
   assert.match(changelog, /version: "0\.6\.0"/);
   assert.match(changelog, /version: "0\.1\.0"/);
+  assert.match(markdown, /## 0\.19\.0 - 2026-07-23/);
   assert.match(markdown, /## 0\.18\.0 - 2026-07-23/);
   assert.match(markdown, /## 0\.17\.0 - 2026-07-22/);
   assert.match(markdown, /## 0\.16\.0 - 2026-07-22/);
@@ -187,6 +189,20 @@ test("builds synchronized purchase inventory from expense categories", async () 
   assert.match(inventory, /totalCost \/ quantity/);
   assert.match(styles, /\.purchaseInventoryHead/);
   assert.match(styles, /\.expenseCategorySelect/);
+});
+
+test("offers separate clear-all and demo-reset workspace actions", async () => {
+  const [page, styles] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/globals.css"),
+  ]);
+  assert.match(page, /const clearAllRecords = \(\) => setState/);
+  assert.match(page, /products: \[\],\s+movements: \[\],\s+expenses: \[\],\s+customers: \[\]/);
+  assert.match(page, /settings: \{ \.\.\.current\.settings, beginningInventory: 0 \}/);
+  assert.match(page, />Clear all<\/button>/);
+  assert.match(page, />Reset demo<\/button>/);
+  assert.match(page, /Business and tax settings will be kept/);
+  assert.match(styles, /\.dangerActions/);
 });
 
 test("imports historical invoices into duplicate-safe sales and customers", async () => {

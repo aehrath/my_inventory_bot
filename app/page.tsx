@@ -900,6 +900,14 @@ function DataSettings({ state, setState, fileRef, onImport }: { state: AppState;
   const ownLocalRate = ownResolvedRate.localRate;
   const ownRate = ownResolvedRate.totalRate;
   const enabledCount = Object.values(state.settings.stateTaxes).filter((setting) => setting.enabled).length;
+  const clearAllRecords = () => setState((current) => ({
+    ...current,
+    products: [],
+    movements: [],
+    expenses: [],
+    customers: [],
+    settings: { ...current.settings, beginningInventory: 0 },
+  }));
   return <div className="settingsGrid">
     <section className="panel"><p className="eyebrow">Business profile</p><h3>Calculation settings</h3><div className="formGrid"><label className="wide">Business name<input value={state.settings.businessName} onChange={(e) => setState((s) => ({ ...s, settings: { ...s.settings, businessName: e.target.value } }))} /></label><label>Beginning inventory<input type="number" step="0.01" value={state.settings.beginningInventory} onChange={(e) => setState((s) => ({ ...s, settings: { ...s.settings, beginningInventory: Number(e.target.value) } }))} /></label></div></section>
     <section className="panel"><p className="eyebrow">Personal-use location</p><h3>Your address sets use tax</h3><p className="settingsCopy">When untaxed resale inventory becomes personal use, StockBot applies {ownStateRate}% state tax{ownLocalRate ? ` + ${ownLocalRate}% local tax${ownResolvedRate.jurisdiction ? ` for ${ownResolvedRate.jurisdiction}` : ""}` : ""}, for a {ownRate}% combined rate.</p><div className="formGrid"><label className="wide">Street address<input value={state.settings.ownAddress.line1} onChange={(e) => updateOwnAddress("line1", e.target.value)} placeholder="123 Main Street" /></label><label>City<input value={state.settings.ownAddress.city} onChange={(e) => updateOwnAddress("city", e.target.value)} /></label><label>State<select value={state.settings.ownAddress.state} onChange={(e) => updateOwnAddress("state", e.target.value)}>{stateTaxDefaults.map((item) => <option value={item.code} key={item.code}>{item.name}</option>)}</select></label><label>ZIP code<input value={state.settings.ownAddress.postalCode} onChange={(e) => updateOwnAddress("postalCode", e.target.value)} inputMode="numeric" /></label></div></section>
@@ -907,7 +915,7 @@ function DataSettings({ state, setState, fileRef, onImport }: { state: AppState;
     <LocalTaxRulesPanel rules={state.settings.localTaxRules} onChange={(localTaxRules) => setState((current) => ({ ...current, settings: { ...current.settings, localTaxRules } }))} />
     <section className="panel backupCard"><p className="eyebrow">Portable backups</p><h3>Your data, in your hands.</h3><p>Export a complete JSON backup whenever you like. Importing replaces the current workspace after validation.</p><div><button className="primary" onClick={() => exportState(state)}>{icons.download} Export backup</button><button className="secondary" onClick={() => fileRef.current?.click()}>{icons.upload} Import backup</button><input ref={fileRef} hidden type="file" accept="application/json,.json" onChange={onImport} /></div></section>
     <section className="panel privacyCard"><div className="lock">⌂</div><div><h3>Local by design</h3><p>Inventory is stored in this server&apos;s local database. Nothing is sent to an outside inventory service.</p></div></section>
-    <section className="panel dangerZone"><p className="eyebrow">Fresh start</p><h3>Reset demo workspace</h3><p>Replace all current data with the original sample products and activity.</p><button className="danger" onClick={() => confirm("Replace all current inventory data with the demo workspace?") && setState(seed)}>Reset all data</button></section>
+    <section className="panel dangerZone"><p className="eyebrow">Fresh start</p><h3>Clear or reset workspace</h3><p>Clear every product, customer, activity, COGS, and expense record, or replace them with the original sample data.</p><div className="dangerActions"><button className="danger" onClick={() => confirm("Permanently clear all products, customers, activity, COGS, and expenses? Business and tax settings will be kept.") && clearAllRecords()}>Clear all</button><button className="secondary" onClick={() => confirm("Replace all current inventory data with the demo workspace?") && setState(seed)}>Reset demo</button></div><small>Clear all keeps your business profile, address, tax rates, local tax rules, and display settings.</small></section>
   </div>;
 }
 

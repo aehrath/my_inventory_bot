@@ -13,6 +13,25 @@ export type ChangelogRelease = {
 
 export const changelogReleases: readonly ChangelogRelease[] = [
   {
+    version: "0.19.0",
+    date: "July 23, 2026",
+    title: "Clear workspace records",
+    summary: "The Data & settings page now offers a clean start without restoring demo records.",
+    sections: [
+      {
+        title: "Added",
+        items: [
+          "Added a guarded Clear all button alongside Reset demo.",
+          "Clear all removes products, customers, inventory activity, COGS activity, and expenses while preserving business and tax settings.",
+        ],
+      },
+      {
+        title: "Changed",
+        items: ["Renamed the original reset action to Reset demo so its effect is unambiguous."],
+      },
+    ],
+  },
+  {
     version: "0.18.0",
     date: "July 23, 2026",
     title: "Expense-backed purchase inventory",
