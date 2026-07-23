@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { amazonBusinessCsvColumns, parseExpenseImportText } from "../app/expense-import.ts";
+import { amazonBusinessCsvColumns, expenseCategories, normalizeExpenseCategory, parseExpenseImportText } from "../app/expense-import.ts";
 
 const fixture = new URL("./fixtures/amazon-business-orders.csv", import.meta.url);
 
@@ -39,4 +39,11 @@ test("defines every column in the provided Amazon Business export", () => {
   assert.equal(amazonBusinessCsvColumns.length, 73);
   assert.equal(amazonBusinessCsvColumns[0], "Order Date");
   assert.equal(amazonBusinessCsvColumns.at(-1), "Seller ZipCode");
+});
+
+test("includes inventory categories and normalizes their common labels", () => {
+  assert.ok(expenseCategories.includes("Raw materials"));
+  assert.ok(expenseCategories.includes("Resale item"));
+  assert.equal(normalizeExpenseCategory("raw material"), "Raw materials");
+  assert.equal(normalizeExpenseCategory("resale inventory"), "Resale item");
 });

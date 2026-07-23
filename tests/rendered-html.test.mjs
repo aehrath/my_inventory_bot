@@ -21,6 +21,7 @@ test("includes a visible release changelog", async () => {
   assert.match(page, /label: "Changelog"/);
   assert.match(page, /What&apos;s new in StockBot/);
   assert.match(page, /changelogReleases\.map/);
+  assert.match(changelog, /version: "0\.18\.0"/);
   assert.match(changelog, /version: "0\.17\.0"/);
   assert.match(changelog, /version: "0\.16\.0"/);
   assert.match(changelog, /version: "0\.15\.0"/);
@@ -34,6 +35,7 @@ test("includes a visible release changelog", async () => {
   assert.match(changelog, /version: "0\.7\.0"/);
   assert.match(changelog, /version: "0\.6\.0"/);
   assert.match(changelog, /version: "0\.1\.0"/);
+  assert.match(markdown, /## 0\.18\.0 - 2026-07-23/);
   assert.match(markdown, /## 0\.17\.0 - 2026-07-22/);
   assert.match(markdown, /## 0\.16\.0 - 2026-07-22/);
   assert.match(markdown, /## 0\.15\.0 - 2026-07-22/);
@@ -161,6 +163,30 @@ test("keeps expense imports isolated from products and inventory", async () => {
   assert.doesNotMatch(expenseImport, /ImportedInventoryProduct|inventoryProductsFromRecords|parseProductPackSize/);
   assert.doesNotMatch(expensesSection, /expenseImport\.products|productAdditions|updatedProducts|importedQuantityForExpenseKeys/);
   assert.match(expensesSection, /expenses: \[\.\.\.additions, \.\.\.enriched\]/);
+});
+
+test("builds synchronized purchase inventory from expense categories", async () => {
+  const [page, expenseImport, inventory, styles] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/expense-import.ts"),
+    read("app/expense-inventory.ts"),
+    read("app/globals.css"),
+  ]);
+  assert.match(page, /label: "Purchase inventory"/);
+  assert.match(page, /function PurchaseInventory/);
+  assert.match(page, /isExpenseInventoryCategory\(expense\.category\)/);
+  assert.match(page, /parseExpenseInventoryDescription\(expense\.note, expense\.amount\)/);
+  assert.match(page, /expense\.category !== "Cost of goods" && !isExpenseInventoryCategory\(expense\.category\)/);
+  assert.match(page, /Excludes COGS and inventory purchases/);
+  assert.match(page, /className="expenseCategorySelect"/);
+  assert.match(page, /Category for \$\{expense\.externalKey\}/);
+  assert.match(page, /item\.id === expense\.id \? \{ \.\.\.item, category \} : item/);
+  assert.match(expenseImport, /"Raw materials"/);
+  assert.match(expenseImport, /"Resale item"/);
+  assert.match(inventory, /expenseInventoryCategories/);
+  assert.match(inventory, /totalCost \/ quantity/);
+  assert.match(styles, /\.purchaseInventoryHead/);
+  assert.match(styles, /\.expenseCategorySelect/);
 });
 
 test("imports historical invoices into duplicate-safe sales and customers", async () => {

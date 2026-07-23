@@ -4,6 +4,21 @@ All notable changes to StockBot are documented here.
 
 ## Unreleased
 
+## 0.18.0 - 2026-07-23
+
+### Added
+
+- Added `Raw materials` and `Resale item` expense categories.
+- Added a sortable **Purchase inventory** section with item counts, per-item cost, total cost, vendor, purchase date, and source expense key.
+- Added inline category dropdowns to every visible expense Category cell.
+
+### Changed
+
+- Clear pack sizes such as `200 PCS`, `10 pack`, and `Pack of 12` are removed from the inventory name and used as the item count.
+- Purchase cost is divided by the detected item count to calculate per-item cost.
+- Changing an expense to any category other than `Raw materials` or `Resale item` removes it from Purchase inventory without deleting the expense.
+- Raw-material and resale inventory purchases remain out of operating-expense and taxable-income totals until they are reclassified as a recognized cost.
+
 ## 0.17.0 - 2026-07-22
 
 ### Changed

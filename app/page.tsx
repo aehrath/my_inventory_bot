@@ -5,12 +5,13 @@ import { ChangeEvent, CSSProperties, FormEvent, useEffect, useMemo, useRef, useS
 import { changelogReleases } from "./changelog";
 import { amazonBusinessCsvColumns, expenseCategories, normalizeExpenseCategory, normalizeExpenseDate, normalizeExpenseKey, parseExpenseImportText } from "./expense-import";
 import type { ExpenseCategory, ExpenseImportPreview } from "./expense-import";
+import { expenseInventoryCategories, isExpenseInventoryCategory, parseExpenseInventoryDescription } from "./expense-inventory";
 import { normalizeCustomerKey, normalizeInvoiceKey, normalizeProductIdentifier, parseInvoiceImportText } from "./invoice-import";
 import type { InvoiceImportPreview } from "./invoice-import";
 import { defaultStateTaxSettings, stateName, stateTaxDefaults } from "./tax-data";
 import type { TaxAddress, TaxRateLookup, TaxRateLookupResponse, TaxSourceStatus } from "./tax-rate-types";
 
-type View = "dashboard" | "products" | "customers" | "activity" | "cogs" | "expenses" | "taxes" | "data" | "changelog";
+type View = "dashboard" | "products" | "purchaseInventory" | "customers" | "activity" | "cogs" | "expenses" | "taxes" | "data" | "changelog";
 type MovementType = "purchase" | "sale" | "production_use" | "personal_use" | "adjustment";
 type Product = {
   id: string; sku: string; name: string; vendor: string; category: string; quantity: number; unitCost: number;
@@ -138,7 +139,7 @@ const seed: AppState = {
 };
 
 const icons: Record<View | "plus" | "search" | "download" | "upload" | "alert" | "arrow", string> = {
-  dashboard: "▦", products: "□", customers: "◉", activity: "↕", cogs: "∑", expenses: "$", taxes: "%", data: "↥", changelog: "≡", plus: "+", search: "⌕", download: "↓", upload: "↑", alert: "!", arrow: "→",
+  dashboard: "▦", products: "□", purchaseInventory: "▤", customers: "◉", activity: "↕", cogs: "∑", expenses: "$", taxes: "%", data: "↥", changelog: "≡", plus: "+", search: "⌕", download: "↓", upload: "↑", alert: "!", arrow: "→",
 };
 
 export default function Home() {
@@ -188,8 +189,8 @@ export default function Home() {
     const useTax = personalUse.reduce((n, m) => n + m.salesTax, 0);
     const stateUseTax = personalUse.reduce((n, m) => n + (m.stateTax ?? m.salesTax), 0);
     const localUseTax = personalUse.reduce((n, m) => n + (m.localTax ?? 0), 0);
-    const expenses = yearExpenses.filter((expense) => expense.category !== "Cost of goods").reduce((n, expense) => n + expense.amount, 0);
-    const expenseRecordsTotal = expenses + additionalCogs;
+    const expenses = yearExpenses.filter((expense) => expense.category !== "Cost of goods" && !isExpenseInventoryCategory(expense.category)).reduce((n, expense) => n + expense.amount, 0);
+    const expenseRecordsTotal = yearExpenses.reduce((n, expense) => n + expense.amount, 0);
     const purchases = yearMovements.filter((m) => m.type === "purchase").reduce((n, m) => n + m.quantity * m.unitCost, 0);
     return { inventoryValue, units, revenue, inventoryCogs, additionalCogs, cogs, salesTax, stateSalesTax, localSalesTax, useTax, stateUseTax, localUseTax, expenses, expenseRecordsTotal, purchases, grossProfit: revenue - cogs, taxableIncome: revenue - cogs - expenses };
   }, [state.products, yearExpenses, yearMovements]);
@@ -210,7 +211,7 @@ export default function Home() {
   const openUse = (product: Product) => { setSelectedProduct(product); setMovementType("personal_use"); setMovementModal(true); };
   const openLinkedProduct = (product: Product) => { setView("products"); setQuery(product.sku); setSelectedProduct(product); setProductModal(true); };
   const nav: { id: View; label: string }[] = [
-    { id: "dashboard", label: "Overview" }, { id: "products", label: "Products" }, { id: "customers", label: "Customers" }, { id: "activity", label: "Activity" }, { id: "cogs", label: "COGS" }, { id: "expenses", label: "Expenses" }, { id: "taxes", label: "Tax center" }, { id: "data", label: "Data & settings" }, { id: "changelog", label: "Changelog" },
+    { id: "dashboard", label: "Overview" }, { id: "products", label: "Products" }, { id: "purchaseInventory", label: "Purchase inventory" }, { id: "customers", label: "Customers" }, { id: "activity", label: "Activity" }, { id: "cogs", label: "COGS" }, { id: "expenses", label: "Expenses" }, { id: "taxes", label: "Tax center" }, { id: "data", label: "Data & settings" }, { id: "changelog", label: "Changelog" },
   ];
 
   return (
@@ -227,6 +228,7 @@ export default function Home() {
 
         {view === "dashboard" && <Dashboard state={state} metrics={metrics} onView={setView} onUse={openUse} />}
         {view === "products" && <Products state={state} query={query} setQuery={setQuery} onEdit={(p) => { setSelectedProduct(p); setProductModal(true); }} onUse={openUse} onDelete={(p) => confirm(`Delete ${p.name}? Its activity history will remain.`) && setState((s) => ({ ...s, products: s.products.filter((x) => x.id !== p.id) }))} />}
+        {view === "purchaseInventory" && <PurchaseInventory expenses={state.expenses} onViewExpenses={() => setView("expenses")} />}
         {view === "customers" && <Customers state={state} setState={setState} />}
         {view === "activity" && <Activity state={state} onNew={() => setMovementModal(true)} />}
         {view === "cogs" && <CogsCenter state={state} onOpenProduct={openLinkedProduct} onProductionUse={() => { setSelectedProduct(null); setMovementType("production_use"); setMovementModal(true); }} />}
@@ -544,6 +546,66 @@ function MovementTable({ movements, products }: { movements: Movement[]; product
   return <div className="ledger"><div className="ledgerHead">{columns.map((column) => <button role="columnheader" aria-sort={sort.key === column.key ? (sort.direction === "asc" ? "ascending" : "descending") : "none"} type="button" key={column.key} className={`stockHeaderCell ${sort.key === column.key ? `sorted ${sort.direction}` : ""}`} onClick={() => changeSort(column.key)}><span>{column.label}</span><span className="sortPair" aria-hidden="true"><i /><b /></span></button>)}</div>{sortedMovements.map((m) => { const p = productFor(m); const amount = amountFor(m); return <div className="ledgerRow" key={m.id}><span>{new Date(`${m.date}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span><div><strong>{m.productName || p?.name || "Removed product"}</strong><small>{m.note || m.productSku || p?.sku}</small></div><span className={`activityTag ${m.type}`}>{m.type.replaceAll("_", " ")}</span><strong>{m.type === "purchase" || (m.type === "adjustment" && m.quantity > 0) ? "+" : "−"}{Math.abs(m.quantity)}</strong><strong>{money.format(amount)}</strong><span className="taxLedger">{m.salesTax ? money.format(m.salesTax) : "—"}{(m.localTax ?? 0) > 0 && <small>{money.format(m.localTax ?? 0)} local</small>}</span></div>})}{!movements.length && <Empty text="No activity has been recorded yet." />}</div>;
 }
 
+type PurchaseInventorySortKey = "name" | "category" | "quantity" | "unitCost" | "totalCost" | "vendor" | "date" | "externalKey";
+
+function PurchaseInventory({ expenses, onViewExpenses }: { expenses: Expense[]; onViewExpenses: () => void }) {
+  const [query, setQuery] = useState("");
+  const [category, setCategory] = useState<ExpenseCategory | "All">("All");
+  const [sort, setSort] = useState<{ key: PurchaseInventorySortKey; direction: SortDirection }>({ key: "date", direction: "desc" });
+  const items = expenses.filter((expense) => isExpenseInventoryCategory(expense.category)).map((expense) => ({
+    expense,
+    ...parseExpenseInventoryDescription(expense.note, expense.amount),
+  }));
+  const visibleItems = items.filter((item) => {
+    const matchesCategory = category === "All" || item.expense.category === category;
+    const haystack = `${item.name} ${item.expense.vendor} ${item.expense.externalKey} ${item.expense.category}`.toLowerCase();
+    return matchesCategory && haystack.includes(query.trim().toLowerCase());
+  });
+  const sortValue = (item: typeof items[number]): SortValue => {
+    if (sort.key === "name") return item.name;
+    if (sort.key === "category") return item.expense.category;
+    if (sort.key === "quantity") return item.quantity;
+    if (sort.key === "unitCost") return item.unitCost;
+    if (sort.key === "totalCost") return item.expense.amount;
+    if (sort.key === "vendor") return item.expense.vendor;
+    if (sort.key === "externalKey") return item.expense.externalKey;
+    return item.expense.date;
+  };
+  const sortedItems = [...visibleItems].sort((left, right) => {
+    const comparison = compareSortValues(sortValue(left), sortValue(right), sort.direction);
+    return comparison || left.expense.externalKey.localeCompare(right.expense.externalKey);
+  });
+  const changeSort = (key: PurchaseInventorySortKey) => setSort((current) => ({
+    key,
+    direction: current.key === key && current.direction === "asc" ? "desc" : "asc",
+  }));
+  const columns: Array<{ key: PurchaseInventorySortKey; label: string }> = [
+    { key: "name", label: "Item" },
+    { key: "category", label: "Inventory type" },
+    { key: "quantity", label: "Item count" },
+    { key: "unitCost", label: "Cost per item" },
+    { key: "totalCost", label: "Total cost" },
+    { key: "vendor", label: "Vendor" },
+    { key: "date", label: "Purchased" },
+    { key: "externalKey", label: "Expense key" },
+  ];
+  const totalUnits = items.reduce((total, item) => total + item.quantity, 0);
+  const totalValue = items.reduce((total, item) => total + item.expense.amount, 0);
+  const rawMaterialsValue = items.filter((item) => item.expense.category === "Raw materials").reduce((total, item) => total + item.expense.amount, 0);
+  const resaleValue = items.filter((item) => item.expense.category === "Resale item").reduce((total, item) => total + item.expense.amount, 0);
+
+  return <div className="purchaseInventoryLayout">
+    <section className="purchaseInventoryHero"><div><p className="eyebrow">Expense-backed stock</p><h2>Materials and resale purchases, counted.</h2><p>Choose Raw materials or Resale item on an expense and it appears here automatically. StockBot removes clear pack sizes from the description, counts the individual items, and divides the purchase cost per item.</p></div><button className="dark" onClick={onViewExpenses}>Review expense categories</button></section>
+    <div className="metricGrid"><Metric label="Inventory value" value={money.format(totalValue)} note={`${whole.format(items.length)} qualifying expense records`} accent="green" /><Metric label="Individual items" value={whole.format(totalUnits)} note="Pack descriptions expanded" accent="blue" /><Metric label="Raw materials" value={money.format(rawMaterialsValue)} note="Expenses categorized as Raw materials" accent="sand" /><Metric label="Resale items" value={money.format(resaleValue)} note="Expenses categorized as Resale item" accent="coral" /></div>
+    <section className="panel purchaseInventoryPanel">
+      <div className="panelTitle"><div><p className="eyebrow">Synchronized inventory</p><h3>Purchased items</h3></div><span className="pill neutral">{sortedItems.length} shown</span></div>
+      <p className="settingsCopy">This list is linked to the expense ledger. Changing a source expense to any category other than Raw materials or Resale item removes it from this inventory without deleting the expense.</p>
+      <div className="purchaseInventoryToolbar"><label className="search"><span>{icons.search}</span><input aria-label="Search purchase inventory" placeholder="Search item, vendor, category, or expense key" value={query} onChange={(event) => setQuery(event.target.value)} /></label><label>Inventory type<select aria-label="Purchase inventory type" value={category} onChange={(event) => setCategory(event.target.value as ExpenseCategory | "All")}><option>All</option>{expenseInventoryCategories.map((inventoryCategory) => <option key={inventoryCategory}>{inventoryCategory}</option>)}</select></label></div>
+      <div className="purchaseInventoryTable"><div className="purchaseInventoryHead">{columns.map((column) => <button role="columnheader" aria-sort={sort.key === column.key ? (sort.direction === "asc" ? "ascending" : "descending") : "none"} type="button" key={column.key} className={`stockHeaderCell ${sort.key === column.key ? `sorted ${sort.direction}` : ""}`} onClick={() => changeSort(column.key)}><span>{column.label}</span><span className="sortPair" aria-hidden="true"><i /><b /></span></button>)}</div>{sortedItems.map((item) => <div className="purchaseInventoryRow" key={item.expense.id}><div className="purchaseInventoryName"><strong title={item.name}>{item.name}</strong><small title={item.expense.note}>{item.expense.note || "Untitled inventory item"}</small></div><span><span className={`inventoryType ${item.expense.category === "Raw materials" ? "rawMaterials" : "resaleItem"}`}>{item.expense.category}</span></span><strong>{whole.format(item.quantity)}</strong><strong>{money.format(item.unitCost)}</strong><strong>{money.format(item.expense.amount)}</strong><span>{item.expense.vendor || "—"}</span><span>{new Date(`${item.expense.date}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span><span><code title={item.expense.externalKey}>{item.expense.externalKey}</code></span></div>)}{!sortedItems.length && <Empty text={items.length ? "No purchase inventory matches this view." : "Categorize an expense as Raw materials or Resale item to add it here."} />}</div>
+    </section>
+  </div>;
+}
+
 function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppState; setState: React.Dispatch<React.SetStateAction<AppState>>; onExpense: () => void; onDeleteExpense: (id: string) => void }) {
   const [expenseQuery, setExpenseQuery] = useState("");
   const [expenseCategory, setExpenseCategory] = useState<ExpenseCategory | "All">("All");
@@ -599,7 +661,8 @@ function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppS
   const categoryTotals = expenseCategories.map((category) => ({ category, total: selectedExpenses.filter((expense) => expense.category === category).reduce((sum, expense) => sum + expense.amount, 0) })).filter((item) => item.total > 0).sort((a, b) => b.total - a.total);
   const expenseTotal = selectedExpenses.reduce((sum, expense) => sum + expense.amount, 0);
   const cogsTotal = selectedExpenses.filter((expense) => expense.category === "Cost of goods").reduce((sum, expense) => sum + expense.amount, 0);
-  const operatingTotal = expenseTotal - cogsTotal;
+  const inventoryPurchaseTotal = selectedExpenses.filter((expense) => isExpenseInventoryCategory(expense.category)).reduce((sum, expense) => sum + expense.amount, 0);
+  const operatingTotal = expenseTotal - cogsTotal - inventoryPurchaseTotal;
   const importPreviewExpenses = expenseImport ? [...expenseImport.ready, ...expenseImport.updates] : [];
   const openExpenseImport = async (event: ChangeEvent<HTMLInputElement>) => {
     const input = event.currentTarget;
@@ -666,7 +729,10 @@ function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppS
     }
     if (column.key === "vendor") return <span className="expenseCell"><strong>{expense.vendor}</strong></span>;
     if (column.key === "note") return <span className="expenseCell note" title={expense.note}>{expense.note || (expense.source === "import" ? "Imported record" : "Manual record")}</span>;
-    if (column.key === "category") return <span className="expenseCell"><b>{expense.category}</b></span>;
+    if (column.key === "category") return <span className="expenseCell category"><select className="expenseCategorySelect" aria-label={`Category for ${expense.externalKey}`} value={expense.category} onChange={(event) => {
+      const category = event.target.value as ExpenseCategory;
+      setState((current) => ({ ...current, expenses: current.expenses.map((item) => item.id === expense.id ? { ...item, category } : item) }));
+    }}>{expenseCategories.map((category) => <option key={category}>{category}</option>)}</select></span>;
     if (column.key === "externalKey") return <span className="expenseCell"><code>{expense.externalKey}</code></span>;
     if (column.key === "amount") return <span className="expenseCell amount"><strong>{money.format(expense.amount)}</strong></span>;
     if (column.key === "source") return <span className="expenseCell"><small>{expense.source}</small></span>;
@@ -674,7 +740,7 @@ function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppS
   };
   return <div className="expenseLayout">
     <section className="expenseHero"><div><p className="eyebrow">Business spending</p><h2>Every expense, easy to find.</h2><p>Import purchase history or add a record by hand. StockBot keeps unique keys, categories, and tax-year totals organized.</p></div><div className="expenseHeroTotal"><span>{expenseYear === "All" ? "All recorded years" : expenseYear}</span><strong>{money.format(expenseTotal)}</strong><small>{selectedExpenses.length} unique records</small></div></section>
-    <div className="taxCards expenseCards"><Metric label="Total expenses" value={money.format(expenseTotal)} note={expenseYear === "All" ? "Across every recorded year" : `Dated in ${expenseYear}`} accent="green" /><Metric label="Operating expenses" value={money.format(operatingTotal)} note="Excludes cost-of-goods records" accent="blue" /><Metric label="Additional COGS" value={money.format(cogsTotal)} note="Costs not already in product unit cost" accent="sand" /><Metric label="Unique records" value={whole.format(selectedExpenses.length)} note={`${years.length} year${years.length === 1 ? "" : "s"} represented`} accent="coral" /></div>
+    <div className="taxCards expenseCards"><Metric label="Total expenses" value={money.format(expenseTotal)} note={expenseYear === "All" ? "Across every recorded year" : `Dated in ${expenseYear}`} accent="green" /><Metric label="Operating expenses" value={money.format(operatingTotal)} note="Excludes COGS and inventory purchases" accent="blue" /><Metric label="Additional COGS" value={money.format(cogsTotal)} note="Costs not already in product unit cost" accent="sand" /><Metric label="Unique records" value={whole.format(selectedExpenses.length)} note={`${years.length} year${years.length === 1 ? "" : "s"} represented`} accent="coral" /></div>
     <div className="taxColumns expenseColumns"><section className="panel expenseCategories"><div className="panelTitle"><div><p className="eyebrow">Expense summary</p><h3>Spending by category</h3></div><span className="pill neutral">{selectedExpenses.length} records</span></div><div className="categoryTotals">{categoryTotals.map((item) => <button className={expenseCategory === item.category ? "active" : ""} key={item.category} onClick={() => setExpenseCategory(item.category)}><span><strong>{item.category}</strong><small>{selectedExpenses.filter((expense) => expense.category === item.category).length} records</small></span><b>{money.format(item.total)}</b></button>)}{!categoryTotals.length && <Empty text="No expenses recorded for this period." />}</div><div className="expenseGrandTotal"><span>Total expense records</span><strong>{money.format(expenseTotal)}</strong></div></section>
     <section className="panel expenseGuide"><div className="panelTitle"><div><p className="eyebrow">Import guide</p><h3>Amazon Business exports</h3></div></div><p>StockBot groups multi-item rows into one expense per Amazon Order ID and uses Order Net Total, so the same order is not counted twice.</p><div className="importFacts"><span><strong>Unique key</strong><small>Amazon Order ID</small></span><span><strong>Expense amount</strong><small>Order Net Total</small></span><span><strong>Imported years</strong><small>Shown automatically after import</small></span></div></section></div>
     <section className="panel expenseLedger">
@@ -703,7 +769,7 @@ function TaxCenter({ state, metrics, setState }: { state: AppState; metrics: Met
     ["Inventory-ledger COGS", metrics.inventoryCogs, "Unit cost captured when each sale was recorded"],
     ["Additional COGS records", metrics.additionalCogs, "Imported or manually entered costs not already in product unit cost"],
     ["Gross profit", metrics.grossProfit, "Gross sales minus both COGS sources"],
-    ["Operating expenses", metrics.expenses, "Expense records outside cost of goods"],
+    ["Operating expenses", metrics.expenses, "Excludes cost of goods and inventory purchase records"],
     ["Estimated net business income", metrics.taxableIncome, "Before owner-specific deductions and income taxes"],
   ] as const;
   const taxMovements = state.movements.filter((movement) => movement.type === "sale" && new Date(`${movement.date}T12:00:00`).getFullYear() === state.settings.taxYear);

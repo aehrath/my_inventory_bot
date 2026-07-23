@@ -1,5 +1,7 @@
 export const expenseCategories = [
   "Cost of goods",
+  "Raw materials",
+  "Resale item",
   "Utilities",
   "Rent",
   "Office equipment",
@@ -62,6 +64,8 @@ export const normalizeExpenseCategory = (value: unknown): ExpenseCategory => {
   const label = String(value ?? "").trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
   const aliases: Record<string, ExpenseCategory> = {
     cogs: "Cost of goods", "cost of goods sold": "Cost of goods", inventory: "Cost of goods", merchandise: "Cost of goods",
+    "raw material": "Raw materials", "raw materials": "Raw materials", material: "Raw materials", materials: "Raw materials",
+    "resale item": "Resale item", "resale items": "Resale item", resale: "Resale item", "resale inventory": "Resale item",
     utility: "Utilities", utilities: "Utilities", electric: "Utilities", electricity: "Utilities", internet: "Utilities", phone: "Utilities",
     rent: "Rent", lease: "Rent", equipment: "Office equipment", "office equipment": "Office equipment", computer: "Office equipment",
     office: "Office supplies", supplies: "Office supplies", "office supplies": "Office supplies",

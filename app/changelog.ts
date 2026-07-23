@@ -13,6 +13,31 @@ export type ChangelogRelease = {
 
 export const changelogReleases: readonly ChangelogRelease[] = [
   {
+    version: "0.18.0",
+    date: "July 23, 2026",
+    title: "Expense-backed purchase inventory",
+    summary: "Raw-material and resale purchases now stay synchronized with a dedicated inventory view.",
+    sections: [
+      {
+        title: "Added",
+        items: [
+          "Added Raw materials and Resale item expense categories.",
+          "Added a sortable Purchase inventory section with item counts, per-item cost, total cost, vendor, purchase date, and source expense key.",
+          "Added inline category dropdowns to every visible expense Category cell.",
+        ],
+      },
+      {
+        title: "Changed",
+        items: [
+          "Clear pack sizes such as 200 PCS, 10 pack, and Pack of 12 are removed from the inventory name and used as the item count.",
+          "Purchase cost is divided by the detected item count to calculate per-item cost.",
+          "Changing an expense to any category other than Raw materials or Resale item removes it from Purchase inventory without deleting the expense.",
+          "Raw-material and resale inventory purchases remain out of operating-expense and taxable-income totals until they are reclassified as a recognized cost.",
+        ],
+      },
+    ],
+  },
+  {
     version: "0.17.0",
     date: "July 22, 2026",
     title: "COGS links to products",
