@@ -21,6 +21,7 @@ test("includes a visible release changelog", async () => {
   assert.match(page, /label: "Changelog"/);
   assert.match(page, /What&apos;s new in StockBot/);
   assert.match(page, /changelogReleases\.map/);
+  assert.match(changelog, /version: "0\.17\.0"/);
   assert.match(changelog, /version: "0\.16\.0"/);
   assert.match(changelog, /version: "0\.15\.0"/);
   assert.match(changelog, /version: "0\.14\.0"/);
@@ -33,6 +34,7 @@ test("includes a visible release changelog", async () => {
   assert.match(changelog, /version: "0\.7\.0"/);
   assert.match(changelog, /version: "0\.6\.0"/);
   assert.match(changelog, /version: "0\.1\.0"/);
+  assert.match(markdown, /## 0\.17\.0 - 2026-07-22/);
   assert.match(markdown, /## 0\.16\.0 - 2026-07-22/);
   assert.match(markdown, /## 0\.15\.0 - 2026-07-22/);
   assert.match(markdown, /## 0\.14\.0 - 2026-07-22/);
@@ -83,8 +85,13 @@ test("includes item-level COGS and final-product tracking", async () => {
   assert.match(page, /Production-use cost/);
   assert.match(page, /Allocated, not yet sale COGS/);
   assert.match(page, /productName: product\.name, productSku: product\.sku/);
+  assert.match(page, /className="cogsProductLink"/);
+  assert.match(page, /href=\{`#product-\$\{linkedProduct\.id\}`\}/);
+  assert.match(page, /onOpenProduct\(linkedProduct\)/);
+  assert.match(page, /linkedFinalProductFor/);
   assert.match(page, /version: 9/);
   assert.match(styles, /\.cogsHead,.cogsRow/);
+  assert.match(styles, /\.cogsProductLink/);
   assert.match(styles, /activityTag\.production_use/);
 });
 

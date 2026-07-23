@@ -13,6 +13,22 @@ export type ChangelogRelease = {
 
 export const changelogReleases: readonly ChangelogRelease[] = [
   {
+    version: "0.17.0",
+    date: "July 22, 2026",
+    title: "COGS links to products",
+    summary: "Final-product names in the COGS ledger now open their linked product records.",
+    sections: [
+      {
+        title: "Changed",
+        items: [
+          "Made resolvable Used in final product names into accessible hyperlinks.",
+          "Opening a final-product link switches to Products, filters to the item, and opens its product record.",
+          "Kept free-text and deleted product references as plain historical labels.",
+        ],
+      },
+    ],
+  },
+  {
     version: "0.16.0",
     date: "July 22, 2026",
     title: "Invoice-summary exports import correctly",

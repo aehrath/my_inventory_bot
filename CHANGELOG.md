@@ -4,6 +4,14 @@ All notable changes to StockBot are documented here.
 
 ## Unreleased
 
+## 0.17.0 - 2026-07-22
+
+### Changed
+
+- Made resolvable **Used in final product** names into accessible hyperlinks.
+- Opening a final-product link switches to Products, filters to the item, and opens its product record.
+- Kept free-text and deleted product references as plain historical labels.
+
 ## 0.16.0 - 2026-07-22
 
 ### Changed
