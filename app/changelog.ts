@@ -13,6 +13,29 @@ export type ChangelogRelease = {
 
 export const changelogReleases: readonly ChangelogRelease[] = [
   {
+    version: "0.16.0",
+    date: "July 22, 2026",
+    title: "Invoice-summary exports import correctly",
+    summary: "Invoice exports without line-item columns can now become duplicate-safe historical sales and customer records.",
+    sections: [
+      {
+        title: "Changed",
+        items: [
+          "Recognized Invoice Token, Invoice Title, Requested Amount, Amount Paid, and other invoice-summary columns.",
+          "Derived quantities from clear title patterns such as 24 Hats and Hats x12 while preserving mixed titles such as 50 Pens and 12 Hats as one bundle.",
+          "Generated stable historical SKUs when the export does not provide product identifiers.",
+        ],
+      },
+      {
+        title: "Fixed",
+        items: [
+          "The provided invoice-summary export now imports every valid row instead of rejecting rows for missing line-item fields.",
+          "Customers without exported addresses no longer default to California or receive an inferred destination tax.",
+        ],
+      },
+    ],
+  },
+  {
     version: "0.15.0",
     date: "July 22, 2026",
     title: "Historical invoices and customers",

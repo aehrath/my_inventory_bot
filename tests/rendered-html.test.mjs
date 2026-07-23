@@ -21,6 +21,7 @@ test("includes a visible release changelog", async () => {
   assert.match(page, /label: "Changelog"/);
   assert.match(page, /What&apos;s new in StockBot/);
   assert.match(page, /changelogReleases\.map/);
+  assert.match(changelog, /version: "0\.16\.0"/);
   assert.match(changelog, /version: "0\.15\.0"/);
   assert.match(changelog, /version: "0\.14\.0"/);
   assert.match(changelog, /version: "0\.13\.0"/);
@@ -32,6 +33,7 @@ test("includes a visible release changelog", async () => {
   assert.match(changelog, /version: "0\.7\.0"/);
   assert.match(changelog, /version: "0\.6\.0"/);
   assert.match(changelog, /version: "0\.1\.0"/);
+  assert.match(markdown, /## 0\.16\.0 - 2026-07-22/);
   assert.match(markdown, /## 0\.15\.0 - 2026-07-22/);
   assert.match(markdown, /## 0\.14\.0 - 2026-07-22/);
   assert.match(markdown, /## 0\.13\.0 - 2026-07-22/);
@@ -170,6 +172,9 @@ test("imports historical invoices into duplicate-safe sales and customers", asyn
   assert.match(page, /on-hand quantities stay unchanged/);
   assert.match(invoiceImport, /invoice:\$\{normalizeInvoiceKey\(invoiceNumber\)\}:line:/);
   assert.match(invoiceImport, /customeremail/);
+  assert.match(invoiceImport, /invoicetoken/);
+  assert.match(invoiceImport, /parseInvoiceSummaryTitle/);
+  assert.match(page, /Summary-only export/);
   assert.match(stateRoute, /Duplicate imported invoice line/);
   assert.match(styles, /\.customerHead,\.customerRow/);
 });

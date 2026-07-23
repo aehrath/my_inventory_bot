@@ -4,6 +4,19 @@ All notable changes to StockBot are documented here.
 
 ## Unreleased
 
+## 0.16.0 - 2026-07-22
+
+### Changed
+
+- Recognized `Invoice Token`, `Invoice Title`, `Requested Amount`, `Amount Paid`, and other invoice-summary columns.
+- Derived quantities from clear title patterns such as `24 Hats` and `Hats x12` while preserving mixed titles such as `50 Pens and 12 Hats` as one bundle.
+- Generated stable historical SKUs when the export does not provide product identifiers.
+
+### Fixed
+
+- The provided invoice-summary export now imports every valid row instead of rejecting rows for missing line-item fields.
+- Customers without exported addresses no longer default to California or receive an inferred destination tax.
+
 ## 0.15.0 - 2026-07-22
 
 ### Added

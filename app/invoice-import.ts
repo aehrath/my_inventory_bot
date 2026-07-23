@@ -124,6 +124,23 @@ export const generatedHistoricalSku = (name: string) => {
   return `HIST-${slug}-${hashText(name.trim().toLowerCase())}`;
 };
 
+export const parseInvoiceSummaryTitle = (title: string) => {
+  const originalName = title.trim().replace(/\s+/g, " ");
+  const leading = originalName.match(/^(\d[\d,]*)\s+(.+)$/);
+  if (leading) {
+    const remainder = leading[2].trim();
+    const hasAnotherQuantity = /\b\d[\d,]*\b/.test(remainder) || /(?:^|\s)[x×]\s*\d[\d,]*(?:\s|$)/i.test(remainder);
+    const quantity = Number(leading[1].replace(/,/g, ""));
+    if (!hasAnotherQuantity && Number.isSafeInteger(quantity) && quantity > 0) return { name: remainder.replace(/[.;,\s]+$/g, ""), quantity };
+  }
+  const trailing = originalName.match(/^(.+?)\s+[x×]\s*(\d[\d,]*)\s*$/i);
+  if (trailing) {
+    const quantity = Number(trailing[2].replace(/,/g, ""));
+    if (!/\b\d[\d,]*\b/.test(trailing[1]) && Number.isSafeInteger(quantity) && quantity > 0) return { name: trailing[1].trim().replace(/[.;,\s]+$/g, ""), quantity };
+  }
+  return { name: originalName.replace(/[.;,\s]+$/g, ""), quantity: 1 };
+};
+
 export function parseInvoiceImportText(
   text: string,
   fileName: string,
@@ -157,6 +174,9 @@ export function parseInvoiceImportText(
     lineTotal: ["linetotal", "itemtotal", "extendedprice", "netsales", "netamount", "subtotal", "amount"],
     unitCost: ["unitcost", "costeach", "productcost", "itemcost", "cost", "cogs"],
     salesTax: ["linesalestax", "itemtax", "salestax", "taxamount", "linetax", "tax"],
+    invoiceToken: ["invoicetoken"],
+    invoiceTitle: ["invoicetitle"],
+    status: ["invoicestatus", "status"],
     customerId: ["customerid", "customerkey", "clientid", "buyerid", "accountid"],
     customerName: ["customername", "clientname", "buyername", "billtoname", "shiptoname", "companyname"],
     customerEmail: ["customeremail", "clientemail", "buyeremail", "billingemail", "shippingemail", "email"],
@@ -173,15 +193,19 @@ export function parseInvoiceImportText(
   const customers = new Map<string, ImportedInvoiceCustomer>();
   const existing = new Set(existingSourceKeys.map(normalizeInvoiceKey));
   const seen = new Set<string>();
+  const isInvoiceSummaryExport = records.some((record) => valueFor(record, aliases.invoiceToken) && valueFor(record, aliases.invoiceTitle) && valueFor(record, ["requestedamount", "amountpaid"]) !== undefined);
 
   records.forEach((record, index) => {
     const invoiceNumber = String(valueFor(record, aliases.invoice) ?? "").trim();
     const date = normalizeInvoiceDate(valueFor(record, aliases.date));
     const rawSku = String(valueFor(record, aliases.sku) ?? "").trim();
-    const productName = String(valueFor(record, aliases.productName) ?? rawSku).trim();
+    const invoiceTitle = String(valueFor(record, aliases.invoiceTitle) ?? "").trim();
+    const summaryProduct = isInvoiceSummaryExport ? parseInvoiceSummaryTitle(invoiceTitle || `Invoice ${invoiceNumber}`) : null;
+    const productName = summaryProduct?.name || String(valueFor(record, aliases.productName) ?? rawSku).trim();
     const sku = rawSku || (productName ? generatedHistoricalSku(productName) : "");
-    const quantity = parseNumber(valueFor(record, aliases.quantity));
-    const lineTotal = parseNumber(valueFor(record, aliases.lineTotal));
+    const rawQuantity = parseNumber(valueFor(record, aliases.quantity));
+    const quantity = Number.isFinite(rawQuantity) ? rawQuantity : summaryProduct?.quantity ?? Number.NaN;
+    const lineTotal = parseNumber(valueFor(record, isInvoiceSummaryExport ? ["requestedamount", "amountpaid", ...aliases.lineTotal] : aliases.lineTotal));
     const rawUnitPrice = parseNumber(valueFor(record, aliases.unitPrice));
     const unitPrice = Number.isFinite(rawUnitPrice) ? rawUnitPrice : Number.isFinite(lineTotal) && quantity > 0 ? lineTotal / quantity : Number.NaN;
     const rawUnitCost = parseNumber(valueFor(record, aliases.unitCost));
@@ -202,9 +226,14 @@ export function parseInvoiceImportText(
         : name
           ? `name:${normalizeCustomerKey(`${name}|${address.line1}|${address.postalCode}`)}`
           : "";
+    const invoiceToken = String(valueFor(record, aliases.invoiceToken) ?? "").trim();
     const explicitLineId = String(valueFor(record, aliases.line) ?? "").trim();
-    const lineId = explicitLineId || rawSku || productName;
-    const sourceKey = invoiceNumber && lineId ? `invoice:${normalizeInvoiceKey(invoiceNumber)}:line:${normalizeProductIdentifier(lineId)}` : "";
+    const lineId = explicitLineId || (isInvoiceSummaryExport ? invoiceToken : "") || rawSku || productName;
+    const sourceKey = isInvoiceSummaryExport && invoiceToken
+      ? `invoice:${normalizeInvoiceKey(invoiceToken)}`
+      : invoiceNumber && lineId
+        ? `invoice:${normalizeInvoiceKey(invoiceNumber)}:line:${normalizeProductIdentifier(lineId)}`
+        : "";
     const problems = [
       !invoiceNumber && "missing invoice number",
       !date && "invalid invoice date",

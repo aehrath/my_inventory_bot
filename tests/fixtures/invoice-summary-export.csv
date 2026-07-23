@@ -1,0 +1,5 @@
+Invoice Token,Invoice Date,Time Zone,Invoice ID,Customer Name,Customer Email,Customer Phone,Invoice Title,Status,Requested Amount,Due Date,Last Payment Date,Amount Paid,Recurring Series ID,Invoice Delivery Method,Number of Installments,Tip Amount,Automatic Payment Source,Service date
+inv:TOKEN-1,2026-06-27,Pacific Time (US & Canada),#000021,Michael Lannon,michael@example.com,,Customized Guitarpicks,Paid,$95.70,2026-06-27,2026-06-27,$95.70,,Email,1,$0.00,None,2026-06-27
+inv:TOKEN-2,2026-04-08,Pacific Time (US & Canada),#000020,Michael Lannon,michael@example.com,,200 Guitar Picks Customized + initial design work.,Paid,$108.75,2026-04-08,2026-04-08,$108.75,,Email,1,$0.00,None,2026-04-07
+inv:TOKEN-3,2025-11-24,Pacific Time (US & Canada),#000018,Rich Hiner,rich@example.com,,50 Pens and 12 Hats,Paid,$154.00,2025-11-28,2025-11-25,$154.00,,Email,1,$0.00,None,2025-11-24
+inv:TOKEN-4,2025-06-09,Pacific Time (US & Canada),#000014,Rich Hiner,rich@example.com,,Customized hats x12,Paid,$107.00,2025-06-13,2025-06-09,$107.00,,Email,1,$0.00,None,
