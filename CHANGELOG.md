@@ -4,6 +4,19 @@ All notable changes to StockBot are documented here.
 
 ## Unreleased
 
+## 0.21.0 - 2026-07-23
+
+### Changed
+
+- Removed expense-selection checkboxes in favor of clearly highlighted selectable rows.
+- Clicking expense rows toggles them; Shift-clicking selects the full visible range from the previous row.
+- Changing the category dropdown on any selected row applies that category to every selected expense.
+- Removed the separate bulk category dropdown and **Change category** button.
+
+### Added
+
+- Added keyboard-accessible row selection while preserving Delete/Backspace bulk deletion.
+
 ## 0.20.0 - 2026-07-23
 
 ### Added

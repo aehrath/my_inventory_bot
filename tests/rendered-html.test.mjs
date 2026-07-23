@@ -21,6 +21,7 @@ test("includes a visible release changelog", async () => {
   assert.match(page, /label: "Changelog"/);
   assert.match(page, /What&apos;s new in StockBot/);
   assert.match(page, /changelogReleases\.map/);
+  assert.match(changelog, /version: "0\.21\.0"/);
   assert.match(changelog, /version: "0\.20\.0"/);
   assert.match(changelog, /version: "0\.19\.0"/);
   assert.match(changelog, /version: "0\.18\.0"/);
@@ -37,6 +38,7 @@ test("includes a visible release changelog", async () => {
   assert.match(changelog, /version: "0\.7\.0"/);
   assert.match(changelog, /version: "0\.6\.0"/);
   assert.match(changelog, /version: "0\.1\.0"/);
+  assert.match(markdown, /## 0\.21\.0 - 2026-07-23/);
   assert.match(markdown, /## 0\.20\.0 - 2026-07-23/);
   assert.match(markdown, /## 0\.19\.0 - 2026-07-23/);
   assert.match(markdown, /## 0\.18\.0 - 2026-07-23/);
@@ -184,7 +186,7 @@ test("builds synchronized purchase inventory from expense categories", async () 
   assert.match(page, /Excludes COGS and inventory purchases/);
   assert.match(page, /className="expenseCategorySelect"/);
   assert.match(page, /Category for \$\{expense\.externalKey\}/);
-  assert.match(page, /item\.id === expense\.id \? \{ \.\.\.item, category \} : item/);
+  assert.match(page, /targetIds\.has\(item\.id\) \? \{ \.\.\.item, category \} : item/);
   assert.match(expenseImport, /"Raw materials"/);
   assert.match(expenseImport, /"Resale item"/);
   assert.match(inventory, /expenseInventoryCategories/);
@@ -199,17 +201,19 @@ test("supports multi-select expense category changes and deletion", async () => 
     read("app/globals.css"),
   ]);
   assert.match(page, /selectedExpenseIds/);
-  assert.match(page, /Select all visible expenses/);
-  assert.match(page, /aria-label=\{`Select expense \$\{expense\.externalKey\}`\}/);
-  assert.match(page, /Bulk expense category/);
-  assert.match(page, />Change category<\/button>/);
-  assert.match(page, /selected\.has\(expense\.id\) \? \{ \.\.\.expense, category: bulkExpenseCategory \} : expense/);
+  assert.match(page, /const selectExpenseRow = \(id: string, extendRange: boolean\)/);
+  assert.match(page, /visibleExpenseIds\.slice\(start, end \+ 1\)/);
+  assert.match(page, /selectExpenseRow\(expense\.id, event\.shiftKey\)/);
+  assert.match(page, /role="row" tabIndex=\{0\} aria-selected=/);
+  assert.match(page, /targetIds = selectedExpenseSet\.has\(expense\.id\) \? selectedExpenseSet : new Set\(\[expense\.id\]\)/);
+  assert.match(page, /targetIds\.has\(item\.id\) \? \{ \.\.\.item, category \} : item/);
+  assert.doesNotMatch(page, /Select all visible expenses|Bulk expense category|>Change category<\/button>/);
+  assert.doesNotMatch(page, /expenseSelectionHead|expenseSelectionCell/);
   assert.match(page, /event\.key !== "Delete"/);
   assert.match(page, /window\.addEventListener\("keydown", handleDeleteKey\)/);
   assert.match(page, />Delete selected<\/button>/);
   assert.match(page, /current\.expenses\.filter\(\(expense\) => !selected\.has\(expense\.id\)\)/);
-  assert.match(styles, /\.expenseBulkBar/);
-  assert.match(styles, /\.expenseSelectionHead/);
+  assert.match(styles, /\.expenseSelectionBar/);
   assert.match(styles, /\.expenseRow\.selected/);
 });
 

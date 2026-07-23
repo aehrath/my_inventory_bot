@@ -13,6 +13,27 @@ export type ChangelogRelease = {
 
 export const changelogReleases: readonly ChangelogRelease[] = [
   {
+    version: "0.21.0",
+    date: "July 23, 2026",
+    title: "Direct row multi-selection",
+    summary: "Expenses now use click and Shift-click selection with category changes applied through the existing row control.",
+    sections: [
+      {
+        title: "Changed",
+        items: [
+          "Removed expense-selection checkboxes in favor of clearly highlighted selectable rows.",
+          "Clicking expense rows toggles them; Shift-clicking selects the full visible range from the previous row.",
+          "Changing the category dropdown on any selected row applies that category to every selected expense.",
+          "Removed the separate bulk category dropdown and Change category button.",
+        ],
+      },
+      {
+        title: "Added",
+        items: ["Added keyboard-accessible row selection while preserving Delete/Backspace bulk deletion."],
+      },
+    ],
+  },
+  {
     version: "0.20.0",
     date: "July 23, 2026",
     title: "Bulk expense categorization",
