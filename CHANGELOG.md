@@ -4,6 +4,23 @@ All notable changes to StockBot are documented here.
 
 ## Unreleased
 
+## 0.22.0 - 2026-07-28
+
+### Added
+
+- Added a required purchase source key during expense-import review, with an automatic Amazon account-group suggestion when available.
+- Added a configurable and sortable **Purchase source** column plus a dedicated source filter to Expenses.
+- Added source sorting, searching, and filtering to Purchase Inventory.
+- Added optional purchase source entry for manual expenses and `purchase_source` support to the CSV template.
+
+### Changed
+
+- Existing expense data is migrated without loss, and the new **Purchase source** column is enabled automatically.
+
+### Fixed
+
+- Pinned local development to Node.js 22 and added an early runtime check so unsupported Node versions fail with setup instructions instead of a `node:fs/promises` module error.
+
 ## 0.21.0 - 2026-07-23
 
 ### Changed

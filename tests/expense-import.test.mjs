@@ -35,6 +35,22 @@ test("enriches an existing Amazon order without creating a duplicate", async () 
   assert.deepEqual(preview.duplicates, []);
 });
 
+test("suggests and imports purchase source keys", () => {
+  const amazon = [
+    "Order Date,Order ID,Account Group,Order Net Total,Title,Seller Name",
+    "01/15/2026,444-4444444-4444444,Studio account,25.00,Shipping labels,Amazon",
+  ].join("\n");
+  const amazonPreview = parseExpenseImportText(amazon, "amazon-orders.csv", []);
+  assert.equal(amazonPreview.ready[0].purchaseSource, "Amazon · Studio account");
+
+  const generic = [
+    "external_key,purchase_source,vendor,date,amount,category,note",
+    "SUPPLY-1,Wholesale portal,Supply Co.,2026-01-16,40.00,Raw materials,Cotton bags",
+  ].join("\n");
+  const genericPreview = parseExpenseImportText(generic, "purchases.csv", []);
+  assert.equal(genericPreview.ready[0].purchaseSource, "Wholesale portal");
+});
+
 test("defines every column in the provided Amazon Business export", () => {
   assert.equal(amazonBusinessCsvColumns.length, 73);
   assert.equal(amazonBusinessCsvColumns[0], "Order Date");

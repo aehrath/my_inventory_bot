@@ -13,6 +13,29 @@ export type ChangelogRelease = {
 
 export const changelogReleases: readonly ChangelogRelease[] = [
   {
+    version: "0.22.0",
+    date: "July 28, 2026",
+    title: "Purchase source tracking",
+    summary: "Imported purchases can now be separated by account or source throughout Expenses and Purchase Inventory.",
+    sections: [
+      {
+        title: "Added",
+        items: [
+          "Added a required purchase source key to the expense-import review, with Amazon account-group suggestions when available.",
+          "Added a configurable, sortable Purchase source column and source filter to the Expenses ledger.",
+          "Added Purchase source sorting, searching, and filtering to Purchase Inventory.",
+          "Added optional purchase source entry for manually recorded expenses and purchase_source support in the CSV template.",
+        ],
+      },
+      {
+        title: "Changed",
+        items: [
+          "Existing expense data is migrated without loss, and the new Purchase source column is enabled automatically.",
+        ],
+      },
+    ],
+  },
+  {
     version: "0.21.0",
     date: "July 23, 2026",
     title: "Direct row multi-selection",

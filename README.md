@@ -10,16 +10,35 @@ Supported CSV headers include:
 
 ```text
 external_key, amazon_order_id, order_id, transaction_id, invoice_id,
-receipt_id, vendor, merchant, date, amount, category, note, description
+receipt_id, purchase_source, source_key, vendor, merchant, date, amount,
+category, note, description
 ```
 
 A ready-to-fill CSV template can be downloaded from the expense ledger. JSON imports can be an array of expense objects or an object containing an `expenses` array.
 
 Amazon Business order-history exports are detected automatically. Because those files can repeat one order across several item rows, StockBot groups rows by `Order ID`, imports one expense per order, uses `Order Net Total` once, carries over seller and title details, and derives an initial office-equipment or office-supplies category when the Amazon category data supports it.
 
+During import review, assign a purchase source key such as `Amazon Business`
+or `Amazon Personal`. StockBot suggests the Amazon Account Group when it is
+available and saves the chosen source on every record for sorting and filtering.
+
 ## Local development
 
-Use Node.js 22.13 or newer.
+Use Node.js 22.13 or newer. The repository includes `.nvmrc` and
+`.node-version` files that select Node 22 in supported version managers.
+
+With Laravel Herd:
+
+```bash
+herd isolate-node 22
+```
+
+With nvm:
+
+```bash
+nvm install 22
+nvm use
+```
 
 ```bash
 npm install

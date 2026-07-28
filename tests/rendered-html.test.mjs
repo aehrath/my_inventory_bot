@@ -21,6 +21,7 @@ test("includes a visible release changelog", async () => {
   assert.match(page, /label: "Changelog"/);
   assert.match(page, /What&apos;s new in StockBot/);
   assert.match(page, /changelogReleases\.map/);
+  assert.match(changelog, /version: "0\.22\.0"/);
   assert.match(changelog, /version: "0\.21\.0"/);
   assert.match(changelog, /version: "0\.20\.0"/);
   assert.match(changelog, /version: "0\.19\.0"/);
@@ -38,6 +39,7 @@ test("includes a visible release changelog", async () => {
   assert.match(changelog, /version: "0\.7\.0"/);
   assert.match(changelog, /version: "0\.6\.0"/);
   assert.match(changelog, /version: "0\.1\.0"/);
+  assert.match(markdown, /## 0\.22\.0 - 2026-07-28/);
   assert.match(markdown, /## 0\.21\.0 - 2026-07-23/);
   assert.match(markdown, /## 0\.20\.0 - 2026-07-23/);
   assert.match(markdown, /## 0\.19\.0 - 2026-07-23/);
@@ -97,7 +99,7 @@ test("includes item-level COGS and final-product tracking", async () => {
   assert.match(page, /href=\{`#product-\$\{linkedProduct\.id\}`\}/);
   assert.match(page, /onOpenProduct\(linkedProduct\)/);
   assert.match(page, /linkedFinalProductFor/);
-  assert.match(page, /version: 9/);
+  assert.match(page, /version: 10/);
   assert.match(styles, /\.cogsHead,.cogsRow/);
   assert.match(styles, /\.cogsProductLink/);
   assert.match(styles, /activityTag\.production_use/);
@@ -158,6 +160,26 @@ test("deduplicates imported expense records by external key", async () => {
   assert.match(page, /Import CSV or JSON/);
   assert.match(stateRoute, /expenseKeys\.has\(key\)/);
   assert.match(stateRoute, /Duplicate expense key/);
+});
+
+test("tracks sortable and filterable purchase sources", async () => {
+  const [page, expenseImport, styles] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/expense-import.ts"),
+    read("app/globals.css"),
+  ]);
+  assert.match(page, /purchaseSource: string/);
+  assert.match(page, /key: "purchaseSource", label: "Purchase source"/);
+  assert.match(page, /Purchase source key/);
+  assert.match(page, /Expense purchase source/);
+  assert.match(page, /Purchase inventory source/);
+  assert.match(page, /expenseSort\.key === "purchaseSource"/);
+  assert.match(page, /sort\.key === "purchaseSource"/);
+  assert.match(page, /setExpensePurchaseSource\(sourceKey\)/);
+  assert.match(page, /purchase_source,vendor/);
+  assert.match(expenseImport, /purchasesourcekey/);
+  assert.match(expenseImport, /Amazon · \$\{accountGroups\.join/);
+  assert.match(styles, /min-width:1390px/);
 });
 
 test("keeps expense imports isolated from products and inventory", async () => {

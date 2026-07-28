@@ -37,6 +37,7 @@ export type ExpenseCategory = typeof expenseCategories[number];
 
 export type ImportedExpense = {
   externalKey: string;
+  purchaseSource: string;
   vendor: string;
   category: ExpenseCategory;
   amount: number;
@@ -190,6 +191,7 @@ export function parseExpenseImportText(
       const first = orderRows[0];
       const uniqueValues = (fields: readonly string[]) => Array.from(new Set(orderRows.map((record) => String(valueFor(record, fields) ?? "").trim()).filter(Boolean)));
       const sellers = uniqueValues(["sellername", "vendor", "merchant"]);
+      const accountGroups = uniqueValues(["accountgroup"]);
       const titles = uniqueValues(["title", "description"]);
       const amazonCategories = uniqueValues(["amazoninternalproductcategory"]);
       const titleNote = titles.slice(0, 3).join("; ");
@@ -201,6 +203,7 @@ export function parseExpenseImportText(
       }));
       return {
         externalkey: orderId,
+        purchasesource: accountGroups.length ? `Amazon · ${accountGroups.join(" · ")}` : "Amazon",
         vendor: sellers.slice(0, 3).join(", ") || "Amazon",
         category: categoryForAmazonOrder(orderRows),
         amount: valueFor(first, ["ordernettotal"]),
@@ -219,6 +222,7 @@ export function parseExpenseImportText(
   const seen = new Set<string>();
   const aliases = {
     key: ["externalkey", "amazonorderid", "orderid", "transactionid", "invoiceid", "receiptid", "recordid", "uniqueid", "id"],
+    purchaseSource: ["purchasesource", "purchasesourcekey", "sourcekey", "accountsource", "accountname", "importsource"],
     vendor: ["vendor", "merchant", "sellername", "seller", "supplier", "payee", "store"],
     category: ["category", "expensecategory", "amazoninternalproductcategory", "type", "account"],
     amount: ["amount", "ordernettotal", "itemnettotal", "paymentamount", "totalamount", "total", "ordertotal", "charge", "price", "expenseamount"],
@@ -247,6 +251,7 @@ export function parseExpenseImportText(
       : Object.fromEntries(sourceColumns.map((column) => [column.label, String(record[column.key] ?? "").trim()]));
     const importedExpense: ImportedExpense = {
       externalKey,
+      purchaseSource: String(valueFor(record, aliases.purchaseSource) ?? "").trim(),
       vendor: String(valueFor(record, aliases.vendor) ?? "Unknown vendor").trim(),
       category: normalizeExpenseCategory(valueFor(record, aliases.category)),
       amount,
