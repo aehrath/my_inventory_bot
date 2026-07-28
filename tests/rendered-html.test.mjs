@@ -21,6 +21,7 @@ test("includes a visible release changelog", async () => {
   assert.match(page, /label: "Changelog"/);
   assert.match(page, /What&apos;s new in StockBot/);
   assert.match(page, /changelogReleases\.map/);
+  assert.match(changelog, /version: "0\.25\.0"/);
   assert.match(changelog, /version: "0\.24\.0"/);
   assert.match(changelog, /version: "0\.23\.0"/);
   assert.match(changelog, /version: "0\.22\.0"/);
@@ -41,6 +42,7 @@ test("includes a visible release changelog", async () => {
   assert.match(changelog, /version: "0\.7\.0"/);
   assert.match(changelog, /version: "0\.6\.0"/);
   assert.match(changelog, /version: "0\.1\.0"/);
+  assert.match(markdown, /## 0\.25\.0 - 2026-07-28/);
   assert.match(markdown, /## 0\.24\.0 - 2026-07-28/);
   assert.match(markdown, /## 0\.23\.0 - 2026-07-28/);
   assert.match(markdown, /## 0\.22\.0 - 2026-07-28/);
@@ -103,7 +105,7 @@ test("includes item-level COGS and final-product tracking", async () => {
   assert.match(page, /href=\{`#product-\$\{linkedProduct\.id\}`\}/);
   assert.match(page, /onOpenProduct\(linkedProduct\)/);
   assert.match(page, /linkedFinalProductFor/);
-  assert.match(page, /version: 11/);
+  assert.match(page, /version: 12/);
   assert.match(styles, /\.cogsHead,.cogsRow/);
   assert.match(styles, /\.cogsProductLink/);
   assert.match(styles, /activityTag\.production_use/);
@@ -277,6 +279,26 @@ test("keeps personal expenses visible but out of business calculations", async (
   assert.match(page, /category,personal,note/);
   assert.match(styles, /\.expenseRow\.personal/);
   assert.match(styles, /\.expensePersonalToggle/);
+});
+
+test("creates persistent custom expense categories for every category dropdown", async () => {
+  const [page, expenseImport, styles] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/expense-import.ts"),
+    read("app/globals.css"),
+  ]);
+  assert.match(page, /customExpenseCategories: string\[\]/);
+  assert.match(page, /const normalizeCustomExpenseCategories/);
+  assert.match(page, /const expenseCategoriesFor/);
+  assert.match(page, /const createExpenseCategory = \(event: FormEvent\)/);
+  assert.match(page, /aria-label="New expense category"/);
+  assert.match(page, /customExpenseCategories: \[\.\.\.current\.settings\.customExpenseCategories, category\]/);
+  assert.match(page, /availableExpenseCategories\.map\(\(category\) => <option/);
+  assert.match(page, /<ExpenseModal categories=\{expenseCategoriesFor\(state\.settings\)\}/);
+  assert.match(page, /normalizeExpenseCategory\(expense\.category, customExpenseCategories\)/);
+  assert.match(expenseImport, /customCategories: readonly string\[\] = \[\]/);
+  assert.match(expenseImport, /normalizeExpenseCategory\(valueFor\(record, aliases\.category\), customCategories\)/);
+  assert.match(styles, /\.expenseCategoryCreator/);
 });
 
 test("imports historical invoices into duplicate-safe sales and customers", async () => {

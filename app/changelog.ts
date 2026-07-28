@@ -13,6 +13,28 @@ export type ChangelogRelease = {
 
 export const changelogReleases: readonly ChangelogRelease[] = [
   {
+    version: "0.25.0",
+    date: "July 28, 2026",
+    title: "Custom expense categories",
+    summary: "Create categories that become available everywhere expenses are categorized or filtered.",
+    sections: [
+      {
+        title: "Added",
+        items: [
+          "Added a new-category creator to the Expenses summary.",
+          "Custom categories appear immediately in the ledger filter, inline category dropdowns, manual expense form, category summaries, and expense imports.",
+        ],
+      },
+      {
+        title: "Changed",
+        items: [
+          "Custom categories are saved with business settings and included in JSON backups.",
+          "Category names are normalized and protected from empty, duplicate, built-in, and reserved names.",
+        ],
+      },
+    ],
+  },
+  {
     version: "0.24.0",
     date: "July 28, 2026",
     title: "Personal expense separation",

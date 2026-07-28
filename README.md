@@ -36,6 +36,11 @@ records are excluded from COGS, purchase inventory, taxable income, and Tax
 Center totals. They can still be sorted, filtered, exported, and changed in
 multi-selected groups.
 
+Create additional expense categories from the **New category** form in the
+Expenses summary. A custom category is saved with the workspace and immediately
+appears in the ledger filter, every expense category dropdown, manual expense
+entry, import matching, category summaries, and JSON backups.
+
 ## Local development
 
 Use Node.js 22.13 or newer. The repository includes `.nvmrc` and

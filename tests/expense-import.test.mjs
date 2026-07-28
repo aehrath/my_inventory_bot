@@ -77,3 +77,14 @@ test("includes inventory categories and normalizes their common labels", () => {
   assert.equal(normalizeExpenseCategory("raw material"), "Raw materials");
   assert.equal(normalizeExpenseCategory("resale inventory"), "Resale item");
 });
+
+test("preserves configured custom categories during expense import", () => {
+  assert.equal(normalizeExpenseCategory("subscriptions", ["Subscriptions"]), "Subscriptions");
+  const text = [
+    "external_key,vendor,date,amount,category,note",
+    "SAAS-1,Software Co.,2026-01-20,29.00,Subscriptions,Monthly service",
+  ].join("\n");
+  const preview = parseExpenseImportText(text, "software.csv", [], "2026-07-28T00:00:00.000Z", ["Subscriptions"]);
+
+  assert.equal(preview.ready[0].category, "Subscriptions");
+});

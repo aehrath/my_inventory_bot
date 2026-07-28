@@ -33,7 +33,7 @@ export const amazonBusinessCsvColumns = [
   "Seller Credentials", "Seller City", "Seller State", "Seller ZipCode",
 ] as const;
 
-export type ExpenseCategory = typeof expenseCategories[number];
+export type ExpenseCategory = string;
 
 export type ImportedExpense = {
   externalKey: string;
@@ -62,7 +62,7 @@ export type ExpenseImportPreview = {
 
 export const normalizeExpenseKey = (key: string) => key.trim().toLowerCase().replace(/\s+/g, "");
 
-export const normalizeExpenseCategory = (value: unknown): ExpenseCategory => {
+export const normalizeExpenseCategory = (value: unknown, customCategories: readonly string[] = []): ExpenseCategory => {
   const label = String(value ?? "").trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
   const aliases: Record<string, ExpenseCategory> = {
     cogs: "Cost of goods", "cost of goods sold": "Cost of goods", inventory: "Cost of goods", merchandise: "Cost of goods",
@@ -79,7 +79,10 @@ export const normalizeExpenseCategory = (value: unknown): ExpenseCategory => {
     fees: "Bank & processing fees", banking: "Bank & processing fees", "bank fees": "Bank & processing fees", "processing fees": "Bank & processing fees",
     other: "Other",
   };
-  return expenseCategories.find((category) => category.toLowerCase() === label) ?? aliases[label] ?? "Other";
+  return expenseCategories.find((category) => category.toLowerCase() === label)
+    ?? customCategories.find((category) => category.toLowerCase() === label)
+    ?? aliases[label]
+    ?? "Other";
 };
 
 export const normalizeExpenseDate = (value: unknown) => {
@@ -162,6 +165,7 @@ export function parseExpenseImportText(
   fileName: string,
   existingExternalKeys: readonly string[],
   importedAt = new Date().toISOString(),
+  customCategories: readonly string[] = [],
 ): ExpenseImportPreview {
   let records: Array<Record<string, unknown>> = [];
   let sourceColumns: Array<{ key: string; label: string }> = [];
@@ -263,7 +267,7 @@ export function parseExpenseImportText(
       externalKey,
       purchaseSource: String(valueFor(record, aliases.purchaseSource) ?? "").trim(),
       vendor: String(valueFor(record, aliases.vendor) ?? "Unknown vendor").trim(),
-      category: normalizeExpenseCategory(valueFor(record, aliases.category)),
+      category: normalizeExpenseCategory(valueFor(record, aliases.category), customCategories),
       amount,
       date,
       note: String(valueFor(record, aliases.note) ?? "").trim(),

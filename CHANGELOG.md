@@ -4,6 +4,18 @@ All notable changes to StockBot are documented here.
 
 ## Unreleased
 
+## 0.25.0 - 2026-07-28
+
+### Added
+
+- Added a new-category creator to the Expenses summary.
+- Custom expense categories appear immediately in the ledger filter, inline category dropdowns, manual expense form, category summaries, and imports.
+
+### Changed
+
+- Custom categories are saved with business settings and included in JSON backups.
+- Custom category names are normalized and protected from empty, duplicate, built-in, and reserved names.
+
 ## 0.24.0 - 2026-07-28
 
 ### Added
