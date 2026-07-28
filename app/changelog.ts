@@ -13,6 +13,29 @@ export type ChangelogRelease = {
 
 export const changelogReleases: readonly ChangelogRelease[] = [
   {
+    version: "0.24.0",
+    date: "July 28, 2026",
+    title: "Personal expense separation",
+    summary: "Personal purchases stay documented without affecting business inventory, expenses, COGS, or tax totals.",
+    sections: [
+      {
+        title: "Added",
+        items: [
+          "Added a configurable and sortable Personal expense column plus a Business/Personal ledger filter.",
+          "Added Personal support to manual entry, CSV and JSON imports, backups, and indexed D1 storage.",
+          "Personal changes apply to every selected row when expenses are multi-selected.",
+        ],
+      },
+      {
+        title: "Changed",
+        items: [
+          "Personal expenses remain visible in the ledger but are excluded from business expenses, COGS, purchase inventory, taxable income, and Tax Center calculations.",
+          "Clear all now waits for the database to confirm the deletion and reloads StockBot into a fresh view.",
+        ],
+      },
+    ],
+  },
+  {
     version: "0.23.0",
     date: "July 28, 2026",
     title: "Lightweight relational storage",

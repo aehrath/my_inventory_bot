@@ -19,7 +19,7 @@ Supported CSV headers include:
 ```text
 external_key, amazon_order_id, order_id, transaction_id, invoice_id,
 receipt_id, purchase_source, source_key, vendor, merchant, date, amount,
-category, note, description
+category, personal, personal_use, note, description
 ```
 
 A ready-to-fill CSV template can be downloaded from the expense ledger. JSON imports can be an array of expense objects or an object containing an `expenses` array.
@@ -29,6 +29,12 @@ Amazon Business order-history exports are detected automatically. Because those 
 During import review, assign a purchase source key such as `Amazon Business`
 or `Amazon Personal`. StockBot suggests the Amazon Account Group when it is
 available and saves the chosen source on every record for sorting and filtering.
+
+Set `personal` (or `personal_use`) to `true`, `yes`, or `1` to retain a
+purchase in the ledger without counting it as a business expense. Personal
+records are excluded from COGS, purchase inventory, taxable income, and Tax
+Center totals. They can still be sorted, filtered, exported, and changed in
+multi-selected groups.
 
 ## Local development
 

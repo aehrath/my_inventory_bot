@@ -25,7 +25,7 @@ type Movement = {
   productName?: string; productSku?: string; finalProductId?: string; finalProductName?: string;
   sourceKey?: string; invoiceNumber?: string; customerId?: string; customerName?: string;
 };
-type Expense = { id: string; externalKey: string; purchaseSource: string; vendor: string; category: ExpenseCategory; amount: number; date: string; note: string; source: "manual" | "import"; importedAt?: string; fields?: Record<string, string> };
+type Expense = { id: string; externalKey: string; purchaseSource: string; vendor: string; category: ExpenseCategory; amount: number; date: string; note: string; personal: boolean; source: "manual" | "import"; importedAt?: string; fields?: Record<string, string> };
 type ExpenseDraft = Omit<Expense, "id">;
 type Address = TaxAddress;
 type Customer = { id: string; externalKey: string; name: string; email: string; phone: string; address: Address; createdAt: string; updatedAt: string };
@@ -35,7 +35,7 @@ type LocalTaxRule = { id: string; name: string; state: string; city: string; pos
 type AddressTaxRate = TaxRateLookup & { addressKey: string; checkedAt: string };
 type TaxUpdateAudit = { id: string; checkedAt: string; appliedAt: string | null; checkedAddresses: number; availableUpdates: number; appliedUpdates: number; status: "checked" | "applied"; sources: string[] };
 type Settings = { businessName: string; taxYear: number; beginningInventory: number; ownAddress: Address; stateTaxes: Record<string, StateTaxSetting>; localTaxRules: LocalTaxRule[]; addressTaxRates: AddressTaxRate[]; taxUpdateHistory: TaxUpdateAudit[]; expenseColumnOrder: string[]; expenseVisibleColumns: string[] };
-type AppState = { version: 10; products: Product[]; movements: Movement[]; expenses: Expense[]; customers: Customer[]; settings: Settings };
+type AppState = { version: 11; products: Product[]; movements: Movement[]; expenses: Expense[]; customers: Customer[]; settings: Settings };
 type Metrics = { inventoryValue: number; units: number; revenue: number; inventoryCogs: number; additionalCogs: number; cogs: number; salesTax: number; stateSalesTax: number; localSalesTax: number; useTax: number; stateUseTax: number; localUseTax: number; expenses: number; expenseRecordsTotal: number; purchases: number; grossProfit: number; taxableIncome: number };
 type ExpenseColumnDefinition = { key: string; label: string; width: string; field?: string };
 type SortDirection = "asc" | "desc";
@@ -62,6 +62,7 @@ const expenseBaseColumns: ExpenseColumnDefinition[] = [
   { key: "purchaseSource", label: "Purchase source", width: "180px" },
   { key: "note", label: "Description", width: "340px" },
   { key: "category", label: "Category", width: "175px" },
+  { key: "personal", label: "Personal", width: "105px" },
   { key: "externalKey", label: "Unique key", width: "195px" },
   { key: "amount", label: "Amount", width: "125px" },
   { key: "source", label: "Record origin", width: "110px" },
@@ -74,7 +75,7 @@ const expenseCsvColumnDefinition = (label: string): ExpenseColumnDefinition => (
 });
 const defaultExpenseColumnDefinitions = [...expenseBaseColumns, ...amazonBusinessCsvColumns.map(expenseCsvColumnDefinition)];
 const defaultExpenseColumnOrder = defaultExpenseColumnDefinitions.map((column) => column.key);
-const defaultExpenseVisibleColumns = ["date", "vendor", "purchaseSource", "note", "category", "externalKey", "amount"];
+const defaultExpenseVisibleColumns = ["date", "vendor", "purchaseSource", "note", "category", "personal", "externalKey", "amount"];
 const expenseColumnDefinitionsFor = (expenses: Expense[]) => {
   const knownFields = new Set(amazonBusinessCsvColumns);
   const dynamicFields = Array.from(new Set(expenses.flatMap((expense) => Object.keys(expense.fields ?? {})))).filter((field) => !knownFields.has(field as typeof amazonBusinessCsvColumns[number]));
@@ -115,7 +116,7 @@ const resolveAddressRate = (address: Address, settings: Settings, liveRate?: Tax
 };
 
 const seed: AppState = {
-  version: 10,
+  version: 11,
   settings: { businessName: "Juniper & Co.", taxYear: nowYear, beginningInventory: 3180, ownAddress: blankAddress("CA"), stateTaxes: defaultStateTaxSettings("CA"), localTaxRules: [], addressTaxRates: [], taxUpdateHistory: [], expenseColumnOrder: defaultExpenseColumnOrder, expenseVisibleColumns: defaultExpenseVisibleColumns },
   products: [
     { id: "p1", sku: "CER-101", name: "Speckled Ceramic Mug", vendor: "Clay & Kiln Supply", category: "Home", quantity: 24, unitCost: 8.5, salePrice: 24, reorderPoint: 8, salesTaxPaid: false, createdAt: `${nowYear}-01-05` },
@@ -134,8 +135,8 @@ const seed: AppState = {
     { id: "m4", productId: "p4", productName: "Linen Notebook", productSku: "NOT-118", finalProductName: "Stationery Gift Set", type: "production_use", quantity: 2, unitCost: 4.2, unitPrice: 0, salesTax: 0, date: `${nowYear}-03-02`, note: "Gift set assembly" },
   ],
   expenses: [
-    { id: "e1", externalKey: "seed-flyer-001", purchaseSource: "Direct purchase", vendor: "Town Print Shop", category: "Advertising & marketing", amount: 95, date: `${nowYear}-02-12`, note: "Local market flyer", source: "manual" },
-    { id: "e2", externalKey: "seed-packaging-001", purchaseSource: "Direct purchase", vendor: "Packaging Supply Co.", category: "Office supplies", amount: 64.5, date: `${nowYear}-03-01`, note: "Packaging and labels", source: "manual" },
+    { id: "e1", externalKey: "seed-flyer-001", purchaseSource: "Direct purchase", vendor: "Town Print Shop", category: "Advertising & marketing", amount: 95, date: `${nowYear}-02-12`, note: "Local market flyer", personal: false, source: "manual" },
+    { id: "e2", externalKey: "seed-packaging-001", purchaseSource: "Direct purchase", vendor: "Packaging Supply Co.", category: "Office supplies", amount: 64.5, date: `${nowYear}-03-01`, note: "Packaging and labels", personal: false, source: "manual" },
   ],
 };
 
@@ -174,7 +175,7 @@ export default function Home() {
   }, [state, loaded]);
 
   const yearMovements = useMemo(() => state.movements.filter((m) => new Date(`${m.date}T12:00:00`).getFullYear() === state.settings.taxYear), [state.movements, state.settings.taxYear]);
-  const yearExpenses = useMemo(() => state.expenses.filter((e) => new Date(`${e.date}T12:00:00`).getFullYear() === state.settings.taxYear), [state.expenses, state.settings.taxYear]);
+  const yearExpenses = useMemo(() => state.expenses.filter((e) => !e.personal && new Date(`${e.date}T12:00:00`).getFullYear() === state.settings.taxYear), [state.expenses, state.settings.taxYear]);
   const metrics = useMemo(() => {
     const inventoryValue = state.products.reduce((n, p) => n + p.quantity * p.unitCost, 0);
     const units = state.products.reduce((n, p) => n + p.quantity, 0);
@@ -457,7 +458,7 @@ function Customers({ state, setState }: { state: AppState; setState: React.Dispa
         });
         existingSourceKeys.add(normalizeInvoiceKey(line.sourceKey));
       }
-      return { ...current, version: 10, customers, products: [...productAdditions, ...current.products], movements: [...movementAdditions, ...current.movements] };
+      return { ...current, version: 11, customers, products: [...productAdditions, ...current.products], movements: [...movementAdditions, ...current.movements] };
     });
     setPreview(null);
   };
@@ -554,7 +555,7 @@ function PurchaseInventory({ expenses, onViewExpenses }: { expenses: Expense[]; 
   const [category, setCategory] = useState<ExpenseCategory | "All">("All");
   const [purchaseSource, setPurchaseSource] = useState("All");
   const [sort, setSort] = useState<{ key: PurchaseInventorySortKey; direction: SortDirection }>({ key: "date", direction: "desc" });
-  const items = expenses.filter((expense) => isExpenseInventoryCategory(expense.category)).map((expense) => ({
+  const items = expenses.filter((expense) => !expense.personal && isExpenseInventoryCategory(expense.category)).map((expense) => ({
     expense,
     ...parseExpenseInventoryDescription(expense.note, expense.amount),
   }));
@@ -617,6 +618,7 @@ function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppS
   const [expenseQuery, setExpenseQuery] = useState("");
   const [expenseCategory, setExpenseCategory] = useState<ExpenseCategory | "All">("All");
   const [expensePurchaseSource, setExpensePurchaseSource] = useState("All");
+  const [expenseUse, setExpenseUse] = useState<"All" | "Business" | "Personal">("All");
   const [expenseYear, setExpenseYear] = useState<string>("All");
   const [expenseImport, setExpenseImport] = useState<ExpenseImportPreview | null>(null);
   const [importPurchaseSource, setImportPurchaseSource] = useState("");
@@ -645,14 +647,16 @@ function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppS
   const filteredExpenses = selectedExpenses.filter((expense) => {
     const matchesCategory = expenseCategory === "All" || expense.category === expenseCategory;
     const matchesSource = expensePurchaseSource === "All" || (expensePurchaseSource === "__unassigned" ? !expense.purchaseSource : expense.purchaseSource === expensePurchaseSource);
+    const matchesUse = expenseUse === "All" || (expenseUse === "Personal" ? expense.personal : !expense.personal);
     const haystack = `${expense.vendor} ${expense.purchaseSource} ${expense.externalKey} ${expense.category} ${expense.note} ${Object.values(expense.fields ?? {}).join(" ")}`.toLowerCase();
-    return matchesCategory && matchesSource && haystack.includes(expenseQuery.toLowerCase());
+    return matchesCategory && matchesSource && matchesUse && haystack.includes(expenseQuery.toLowerCase());
   });
   const expenseSortValue = (expense: Expense): SortValue => {
     if (expenseSort.key === "vendor") return expense.vendor;
     if (expenseSort.key === "purchaseSource") return expense.purchaseSource;
     if (expenseSort.key === "note") return expense.note;
     if (expenseSort.key === "category") return expense.category;
+    if (expenseSort.key === "personal") return expense.personal;
     if (expenseSort.key === "externalKey") return expense.externalKey;
     if (expenseSort.key === "amount") return expense.amount;
     if (expenseSort.key === "source") return expense.source;
@@ -675,10 +679,13 @@ function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppS
   });
   const selectedExpenseSet = new Set(selectedExpenseIds);
   const visibleExpenseIds = visibleExpenses.map((expense) => expense.id);
-  const categoryTotals = expenseCategories.map((category) => ({ category, total: selectedExpenses.filter((expense) => expense.category === category).reduce((sum, expense) => sum + expense.amount, 0) })).filter((item) => item.total > 0).sort((a, b) => b.total - a.total);
-  const expenseTotal = selectedExpenses.reduce((sum, expense) => sum + expense.amount, 0);
-  const cogsTotal = selectedExpenses.filter((expense) => expense.category === "Cost of goods").reduce((sum, expense) => sum + expense.amount, 0);
-  const inventoryPurchaseTotal = selectedExpenses.filter((expense) => isExpenseInventoryCategory(expense.category)).reduce((sum, expense) => sum + expense.amount, 0);
+  const businessExpenses = selectedExpenses.filter((expense) => !expense.personal);
+  const personalExpenses = selectedExpenses.filter((expense) => expense.personal);
+  const categoryTotals = expenseCategories.map((category) => ({ category, total: businessExpenses.filter((expense) => expense.category === category).reduce((sum, expense) => sum + expense.amount, 0) })).filter((item) => item.total > 0).sort((a, b) => b.total - a.total);
+  const expenseTotal = businessExpenses.reduce((sum, expense) => sum + expense.amount, 0);
+  const personalExpenseTotal = personalExpenses.reduce((sum, expense) => sum + expense.amount, 0);
+  const cogsTotal = businessExpenses.filter((expense) => expense.category === "Cost of goods").reduce((sum, expense) => sum + expense.amount, 0);
+  const inventoryPurchaseTotal = businessExpenses.filter((expense) => isExpenseInventoryCategory(expense.category)).reduce((sum, expense) => sum + expense.amount, 0);
   const operatingTotal = expenseTotal - cogsTotal - inventoryPurchaseTotal;
   const importPreviewExpenses = expenseImport ? [...expenseImport.ready, ...expenseImport.updates] : [];
   const openExpenseImport = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -711,11 +718,11 @@ function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppS
       for (const draft of expenseImport.ready) {
         const key = normalizeExpenseKey(draft.externalKey);
         if (keys.has(key)) continue;
-        keys.add(key); additions.push({ ...draft, purchaseSource: sourceKey, id: uid() });
+        keys.add(key); additions.push({ ...draft, personal: draft.personal ?? false, purchaseSource: sourceKey, id: uid() });
       }
       const enriched = current.expenses.map((expense) => {
         const update = updates.get(normalizeExpenseKey(expense.externalKey));
-        return update ? { ...expense, purchaseSource: sourceKey, fields: update.fields, importedAt: expense.importedAt ?? update.importedAt } : expense;
+        return update ? { ...expense, personal: update.personal ?? expense.personal, purchaseSource: sourceKey, fields: update.fields, importedAt: expense.importedAt ?? update.importedAt } : expense;
       });
       const importedColumnKeys = expenseImport.columns.map(expenseCsvColumnKey);
       const expenseColumnOrder = [...current.settings.expenseColumnOrder, ...importedColumnKeys.filter((key) => !current.settings.expenseColumnOrder.includes(key))];
@@ -724,6 +731,7 @@ function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppS
     setExpenseYear(importedYears.length === 1 ? String(importedYears[0]) : "All");
     setExpenseCategory("All");
     setExpensePurchaseSource(sourceKey);
+    setExpenseUse("All");
     setExpenseQuery("");
     setExpenseImport(null);
     setImportPurchaseSource("");
@@ -800,23 +808,28 @@ function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppS
       const targetIds = selectedExpenseSet.has(expense.id) ? selectedExpenseSet : new Set([expense.id]);
       setState((current) => ({ ...current, expenses: current.expenses.map((item) => targetIds.has(item.id) ? { ...item, category } : item) }));
     }}>{expenseCategories.map((category) => <option key={category}>{category}</option>)}</select></span>;
+    if (column.key === "personal") return <span className="expenseCell personal"><label className="expensePersonalToggle" onClick={(event) => event.stopPropagation()}><input type="checkbox" aria-label={`Personal expense ${expense.externalKey}`} checked={expense.personal} onChange={(event) => {
+      const personal = event.target.checked;
+      const targetIds = selectedExpenseSet.has(expense.id) ? selectedExpenseSet : new Set([expense.id]);
+      setState((current) => ({ ...current, expenses: current.expenses.map((item) => targetIds.has(item.id) ? { ...item, personal } : item) }));
+    }} /><span>{expense.personal ? "Yes" : "No"}</span></label></span>;
     if (column.key === "externalKey") return <span className="expenseCell"><code>{expense.externalKey}</code></span>;
     if (column.key === "amount") return <span className="expenseCell amount"><strong>{money.format(expense.amount)}</strong></span>;
     if (column.key === "source") return <span className="expenseCell"><small>{expense.source}</small></span>;
     return <span className="expenseCell">{expense.date}</span>;
   };
   return <div className="expenseLayout">
-    <section className="expenseHero"><div><p className="eyebrow">Business spending</p><h2>Every expense, easy to find.</h2><p>Import purchase history or add a record by hand. StockBot keeps unique keys, categories, and tax-year totals organized.</p></div><div className="expenseHeroTotal"><span>{expenseYear === "All" ? "All recorded years" : expenseYear}</span><strong>{money.format(expenseTotal)}</strong><small>{selectedExpenses.length} unique records</small></div></section>
-    <div className="taxCards expenseCards"><Metric label="Total expenses" value={money.format(expenseTotal)} note={expenseYear === "All" ? "Across every recorded year" : `Dated in ${expenseYear}`} accent="green" /><Metric label="Operating expenses" value={money.format(operatingTotal)} note="Excludes COGS and inventory purchases" accent="blue" /><Metric label="Additional COGS" value={money.format(cogsTotal)} note="Costs not already in product unit cost" accent="sand" /><Metric label="Unique records" value={whole.format(selectedExpenses.length)} note={`${years.length} year${years.length === 1 ? "" : "s"} represented`} accent="coral" /></div>
-    <div className="taxColumns expenseColumns"><section className="panel expenseCategories"><div className="panelTitle"><div><p className="eyebrow">Expense summary</p><h3>Spending by category</h3></div><span className="pill neutral">{selectedExpenses.length} records</span></div><div className="categoryTotals">{categoryTotals.map((item) => <button className={expenseCategory === item.category ? "active" : ""} key={item.category} onClick={() => setExpenseCategory(item.category)}><span><strong>{item.category}</strong><small>{selectedExpenses.filter((expense) => expense.category === item.category).length} records</small></span><b>{money.format(item.total)}</b></button>)}{!categoryTotals.length && <Empty text="No expenses recorded for this period." />}</div><div className="expenseGrandTotal"><span>Total expense records</span><strong>{money.format(expenseTotal)}</strong></div></section>
+    <section className="expenseHero"><div><p className="eyebrow">Business spending</p><h2>Every expense, easy to find.</h2><p>Import purchase history or add a record by hand. Mark personal purchases so they stay visible without affecting business totals or taxes.</p></div><div className="expenseHeroTotal"><span>{expenseYear === "All" ? "Business total · all years" : `Business total · ${expenseYear}`}</span><strong>{money.format(expenseTotal)}</strong><small>{businessExpenses.length} business records · {personalExpenses.length} personal excluded</small></div></section>
+    <div className="taxCards expenseCards"><Metric label="Business expenses" value={money.format(expenseTotal)} note={expenseYear === "All" ? "Across every recorded year" : `Dated in ${expenseYear}`} accent="green" /><Metric label="Operating expenses" value={money.format(operatingTotal)} note="Excludes COGS, inventory, and personal" accent="blue" /><Metric label="Additional COGS" value={money.format(cogsTotal)} note="Business costs not already in unit cost" accent="sand" /><Metric label="Personal excluded" value={money.format(personalExpenseTotal)} note={`${personalExpenses.length} record${personalExpenses.length === 1 ? "" : "s"} kept out of business totals`} accent="coral" /></div>
+    <div className="taxColumns expenseColumns"><section className="panel expenseCategories"><div className="panelTitle"><div><p className="eyebrow">Expense summary</p><h3>Business spending by category</h3></div><span className="pill neutral">{businessExpenses.length} records</span></div><div className="categoryTotals">{categoryTotals.map((item) => <button className={expenseCategory === item.category ? "active" : ""} key={item.category} onClick={() => setExpenseCategory(item.category)}><span><strong>{item.category}</strong><small>{businessExpenses.filter((expense) => expense.category === item.category).length} records</small></span><b>{money.format(item.total)}</b></button>)}{!categoryTotals.length && <Empty text="No business expenses recorded for this period." />}</div><div className="expenseGrandTotal"><span>Total business expenses</span><strong>{money.format(expenseTotal)}</strong></div></section>
     <section className="panel expenseGuide"><div className="panelTitle"><div><p className="eyebrow">Import guide</p><h3>Amazon Business exports</h3></div></div><p>StockBot groups multi-item rows into one expense per Amazon Order ID and uses Order Net Total, so the same order is not counted twice.</p><div className="importFacts"><span><strong>Unique key</strong><small>Amazon Order ID</small></span><span><strong>Expense amount</strong><small>Order Net Total</small></span><span><strong>Purchase source</strong><small>Account key assigned on review</small></span><span><strong>Imported years</strong><small>Shown automatically after import</small></span></div></section></div>
     <section className="panel expenseLedger">
       <div className="panelTitle"><div><p className="eyebrow">Deduplicated records</p><h3>Expense ledger</h3></div><div className="expenseActions"><button className={columnConfigOpen ? "secondary active" : "secondary"} onClick={() => setColumnConfigOpen((open) => !open)}>☷ Columns ({visibleColumns.length}/{orderedColumns.length})</button><button className="secondary" onClick={downloadExpenseTemplate}>↓ CSV template</button><button className="secondary" disabled={importing} onClick={() => expenseFileRef.current?.click()}>{importing ? "Reading file…" : "↑ Import CSV or JSON"}</button><button className="primary" onClick={onExpense}>+ Add expense</button><input ref={expenseFileRef} hidden type="file" accept="text/csv,.csv,application/json,.json" onChange={openExpenseImport} /></div></div>
       <p className="settingsCopy">Every record requires a unique external key—such as an Amazon order ID, invoice number, or bank transaction ID. Re-importing enriches existing records with every source column without creating duplicates.</p>
       {columnConfigOpen && <div className="expenseColumnConfig"><div className="expenseColumnConfigHeading"><div><strong>Display columns</strong><small>Check columns to show. Drag visible table headers to reorder them.</small></div><div><button type="button" onClick={selectAllExpenseColumns}>Select all</button><button type="button" onClick={resetExpenseColumns}>Reset</button></div></div><label className="search columnSearch"><span>{icons.search}</span><input aria-label="Search expense columns" placeholder="Find a column" value={columnQuery} onChange={(event) => setColumnQuery(event.target.value)} /></label><div className="expenseColumnChecklist">{columnOptions.map((column) => { const checked = visibleColumnKeys.includes(column.key); return <label className="expenseColumnOption" key={column.key}><input type="checkbox" checked={checked} disabled={checked && visibleColumnKeys.length === 1} onChange={() => toggleExpenseColumn(column.key)} /><span><strong>{column.label}</strong><small>{column.field ? "Imported CSV field" : "StockBot field"}</small></span></label>; })}</div></div>}
-      <div className="expenseToolbar"><label className="search"><span>{icons.search}</span><input aria-label="Search expenses" placeholder="Search any displayed or imported field" value={expenseQuery} onChange={(event) => setExpenseQuery(event.target.value)} /></label><label>Year<select aria-label="Expense year" value={expenseYear} onChange={(event) => setExpenseYear(event.target.value)}><option value="All">All years</option>{years.map((year) => <option value={year} key={year}>{year}</option>)}</select></label><label>Category<select value={expenseCategory} onChange={(event) => setExpenseCategory(event.target.value as ExpenseCategory | "All")}><option>All</option>{expenseCategories.map((category) => <option key={category}>{category}</option>)}</select></label><label>Purchase source<select aria-label="Expense purchase source" value={expensePurchaseSource} onChange={(event) => setExpensePurchaseSource(event.target.value)}><option value="All">All sources</option>{purchaseSources.map((source) => <option value={source} key={source}>{source}</option>)}{hasUnassignedSource && <option value="__unassigned">Unassigned</option>}</select></label></div>
-      <div className={`expenseSelectionBar ${selectedExpenseIds.length ? "active" : ""}`}><span><strong>{selectedExpenseIds.length} selected</strong><small>Click rows to toggle selection. Shift-click selects a range. Changing one selected row&apos;s category updates the entire selection.</small></span><button className="danger" disabled={!selectedExpenseIds.length} onClick={deleteSelectedExpenses}>Delete selected</button><button className="textButton" disabled={!selectedExpenseIds.length} onClick={clearExpenseSelection}>Clear selection</button></div>
-      <div className="expenseTable"><div className="expenseDataGrid" style={{ "--expense-columns": expenseGridColumns } as CSSProperties}><div className="expenseHead">{visibleColumns.map((column) => <button role="columnheader" aria-sort={expenseSort.key === column.key ? (expenseSort.direction === "asc" ? "ascending" : "descending") : "none"} type="button" key={column.key} className={`stockHeaderCell draggable ${expenseSort.key === column.key ? `sorted ${expenseSort.direction}` : ""} ${draggedExpenseColumn === column.key ? "dragging" : ""}`} onPointerDown={() => { expenseColumnWasDragged.current = false; setDraggedExpenseColumn(column.key); }} onPointerEnter={(event) => { if (draggedExpenseColumn && event.buttons === 1) moveExpenseColumn(draggedExpenseColumn, column.key); }} onPointerUp={() => setDraggedExpenseColumn(null)} onPointerCancel={() => setDraggedExpenseColumn(null)} onClick={() => { if (expenseColumnWasDragged.current) { expenseColumnWasDragged.current = false; return; } changeExpenseSort(column.key); }} title="Click to sort; drag to reorder"><span>{column.label}</span><span className="sortPair" aria-hidden="true"><i /><b /></span></button>)}<span className="stockHeaderSpacer" /></div>{visibleExpenses.map((expense) => <div role="row" tabIndex={0} aria-selected={selectedExpenseSet.has(expense.id)} aria-label={`Expense ${expense.externalKey}`} className={`expenseRow ${selectedExpenseSet.has(expense.id) ? "selected" : ""}`} key={expense.id} onClick={(event) => selectExpenseRow(expense.id, event.shiftKey)} onKeyDown={(event) => { if (event.target !== event.currentTarget || (event.key !== "Enter" && event.key !== " ")) return; event.preventDefault(); selectExpenseRow(expense.id, event.shiftKey); }}>{visibleColumns.map((column) => <span key={column.key}>{expenseCell(expense, column)}</span>)}<button aria-label={`Delete expense ${expense.externalKey}`} onClick={(event) => { event.stopPropagation(); if (!confirm(`Delete expense ${expense.externalKey}?`)) return; setSelectedExpenseIds((current) => current.filter((id) => id !== expense.id)); onDeleteExpense(expense.id); }}>×</button></div>)}{!visibleExpenses.length && <Empty text="No expense records match this view." />}</div></div>
+      <div className="expenseToolbar"><label className="search"><span>{icons.search}</span><input aria-label="Search expenses" placeholder="Search any displayed or imported field" value={expenseQuery} onChange={(event) => setExpenseQuery(event.target.value)} /></label><label>Year<select aria-label="Expense year" value={expenseYear} onChange={(event) => setExpenseYear(event.target.value)}><option value="All">All years</option>{years.map((year) => <option value={year} key={year}>{year}</option>)}</select></label><label>Category<select value={expenseCategory} onChange={(event) => setExpenseCategory(event.target.value as ExpenseCategory | "All")}><option>All</option>{expenseCategories.map((category) => <option key={category}>{category}</option>)}</select></label><label>Use<select aria-label="Expense business or personal use" value={expenseUse} onChange={(event) => setExpenseUse(event.target.value as "All" | "Business" | "Personal")}><option>All</option><option>Business</option><option>Personal</option></select></label><label>Purchase source<select aria-label="Expense purchase source" value={expensePurchaseSource} onChange={(event) => setExpensePurchaseSource(event.target.value)}><option value="All">All sources</option>{purchaseSources.map((source) => <option value={source} key={source}>{source}</option>)}{hasUnassignedSource && <option value="__unassigned">Unassigned</option>}</select></label></div>
+      <div className={`expenseSelectionBar ${selectedExpenseIds.length ? "active" : ""}`}><span><strong>{selectedExpenseIds.length} selected</strong><small>Click rows to toggle selection. Shift-click selects a range. Category and Personal changes apply to the entire selection.</small></span><button className="danger" disabled={!selectedExpenseIds.length} onClick={deleteSelectedExpenses}>Delete selected</button><button className="textButton" disabled={!selectedExpenseIds.length} onClick={clearExpenseSelection}>Clear selection</button></div>
+      <div className="expenseTable"><div className="expenseDataGrid" style={{ "--expense-columns": expenseGridColumns } as CSSProperties}><div className="expenseHead">{visibleColumns.map((column) => <button role="columnheader" aria-sort={expenseSort.key === column.key ? (expenseSort.direction === "asc" ? "ascending" : "descending") : "none"} type="button" key={column.key} className={`stockHeaderCell draggable ${expenseSort.key === column.key ? `sorted ${expenseSort.direction}` : ""} ${draggedExpenseColumn === column.key ? "dragging" : ""}`} onPointerDown={() => { expenseColumnWasDragged.current = false; setDraggedExpenseColumn(column.key); }} onPointerEnter={(event) => { if (draggedExpenseColumn && event.buttons === 1) moveExpenseColumn(draggedExpenseColumn, column.key); }} onPointerUp={() => setDraggedExpenseColumn(null)} onPointerCancel={() => setDraggedExpenseColumn(null)} onClick={() => { if (expenseColumnWasDragged.current) { expenseColumnWasDragged.current = false; return; } changeExpenseSort(column.key); }} title="Click to sort; drag to reorder"><span>{column.label}</span><span className="sortPair" aria-hidden="true"><i /><b /></span></button>)}<span className="stockHeaderSpacer" /></div>{visibleExpenses.map((expense) => <div role="row" tabIndex={0} aria-selected={selectedExpenseSet.has(expense.id)} aria-label={`Expense ${expense.externalKey}`} className={`expenseRow ${expense.personal ? "personal" : ""} ${selectedExpenseSet.has(expense.id) ? "selected" : ""}`} key={expense.id} onClick={(event) => selectExpenseRow(expense.id, event.shiftKey)} onKeyDown={(event) => { if (event.target !== event.currentTarget || (event.key !== "Enter" && event.key !== " ")) return; event.preventDefault(); selectExpenseRow(expense.id, event.shiftKey); }}>{visibleColumns.map((column) => <span key={column.key}>{expenseCell(expense, column)}</span>)}<button aria-label={`Delete expense ${expense.externalKey}`} onClick={(event) => { event.stopPropagation(); if (!confirm(`Delete expense ${expense.externalKey}?`)) return; setSelectedExpenseIds((current) => current.filter((id) => id !== expense.id)); onDeleteExpense(expense.id); }}>×</button></div>)}{!visibleExpenses.length && <Empty text="No expense records match this view." />}</div></div>
     </section>
     <div className="disclaimer"><strong>Good records, calmer filing.</strong><span>The Tax center uses the selected tax year for its filing worksheet. This ledger shows all years unless you filter it.</span></div>
     {expenseImport && <Modal title="Review expense import" eyebrow="Duplicate-safe import" onClose={() => { setExpenseImport(null); setImportPurchaseSource(""); }}>
@@ -912,9 +925,10 @@ function TaxRateUpdater({ state, setState }: { state: AppState; setState: React.
       });
       const auditId = uid();
       const applyIds = items.filter((item) => item.canApply).map((item) => item.lookup.id);
+      const audit: TaxUpdateAudit = { id: auditId, checkedAt: payload.checkedAt, appliedAt: null, checkedAddresses: relevantAddresses.length, availableUpdates: applyIds.length, appliedUpdates: 0, status: "checked", sources: payload.sources.filter((source) => source.status === "connected").map((source) => source.name) };
       setSelected(applyIds);
       setPreview({ response: payload, items, auditId });
-      setState((current) => ({ ...current, settings: { ...current.settings, taxUpdateHistory: [{ id: auditId, checkedAt: payload.checkedAt, appliedAt: null, checkedAddresses: relevantAddresses.length, availableUpdates: applyIds.length, appliedUpdates: 0, status: "checked", sources: payload.sources.filter((source) => source.status === "connected").map((source) => source.name) }, ...current.settings.taxUpdateHistory].slice(0, 50) } }));
+      setState((current) => ({ ...current, settings: { ...current.settings, taxUpdateHistory: [audit, ...current.settings.taxUpdateHistory].slice(0, 50) } }));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "The tax sources could not be checked.");
     } finally {
@@ -960,6 +974,7 @@ function TaxRateUpdater({ state, setState }: { state: AppState; setState: React.
 }
 
 function DataSettings({ state, setState, fileRef, onImport }: { state: AppState; setState: React.Dispatch<React.SetStateAction<AppState>>; fileRef: React.RefObject<HTMLInputElement | null>; onImport: (e: ChangeEvent<HTMLInputElement>) => void }) {
+  const [clearing, setClearing] = useState(false);
   const updateOwnAddress = (field: keyof Address, value: string) => setState((current) => ({
     ...current,
     settings: { ...current.settings, ownAddress: { ...current.settings.ownAddress, [field]: value } },
@@ -969,14 +984,29 @@ function DataSettings({ state, setState, fileRef, onImport }: { state: AppState;
   const ownLocalRate = ownResolvedRate.localRate;
   const ownRate = ownResolvedRate.totalRate;
   const enabledCount = Object.values(state.settings.stateTaxes).filter((setting) => setting.enabled).length;
-  const clearAllRecords = () => setState((current) => ({
-    ...current,
-    products: [],
-    movements: [],
-    expenses: [],
-    customers: [],
-    settings: { ...current.settings, beginningInventory: 0 },
-  }));
+  const clearAllRecords = async () => {
+    const clearedState: AppState = {
+      ...state,
+      version: 11,
+      products: [],
+      movements: [],
+      expenses: [],
+      customers: [],
+      settings: { ...state.settings, beginningInventory: 0 },
+    };
+    setClearing(true);
+    setState(clearedState);
+    try {
+      const response = await fetch("/api/state", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(clearedState) });
+      const payload = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(payload.error || "Could not clear StockBot data.");
+      window.location.reload();
+    } catch (caught) {
+      setState(state);
+      setClearing(false);
+      alert(caught instanceof Error ? caught.message : "Could not clear StockBot data.");
+    }
+  };
   return <div className="settingsGrid">
     <section className="panel"><p className="eyebrow">Business profile</p><h3>Calculation settings</h3><div className="formGrid"><label className="wide">Business name<input value={state.settings.businessName} onChange={(e) => setState((s) => ({ ...s, settings: { ...s.settings, businessName: e.target.value } }))} /></label><label>Beginning inventory<input type="number" step="0.01" value={state.settings.beginningInventory} onChange={(e) => setState((s) => ({ ...s, settings: { ...s.settings, beginningInventory: Number(e.target.value) } }))} /></label></div></section>
     <section className="panel"><p className="eyebrow">Personal-use location</p><h3>Your address sets use tax</h3><p className="settingsCopy">When untaxed resale inventory becomes personal use, StockBot applies {ownStateRate}% state tax{ownLocalRate ? ` + ${ownLocalRate}% local tax${ownResolvedRate.jurisdiction ? ` for ${ownResolvedRate.jurisdiction}` : ""}` : ""}, for a {ownRate}% combined rate.</p><div className="formGrid"><label className="wide">Street address<input value={state.settings.ownAddress.line1} onChange={(e) => updateOwnAddress("line1", e.target.value)} placeholder="123 Main Street" /></label><label>City<input value={state.settings.ownAddress.city} onChange={(e) => updateOwnAddress("city", e.target.value)} /></label><label>State<select value={state.settings.ownAddress.state} onChange={(e) => updateOwnAddress("state", e.target.value)}>{stateTaxDefaults.map((item) => <option value={item.code} key={item.code}>{item.name}</option>)}</select></label><label>ZIP code<input value={state.settings.ownAddress.postalCode} onChange={(e) => updateOwnAddress("postalCode", e.target.value)} inputMode="numeric" /></label></div></section>
@@ -984,7 +1014,7 @@ function DataSettings({ state, setState, fileRef, onImport }: { state: AppState;
     <LocalTaxRulesPanel rules={state.settings.localTaxRules} onChange={(localTaxRules) => setState((current) => ({ ...current, settings: { ...current.settings, localTaxRules } }))} />
     <section className="panel backupCard"><p className="eyebrow">Portable backups</p><h3>Your data, in your hands.</h3><p>Export a complete JSON backup whenever you like. Importing replaces the current workspace after validation.</p><div><button className="primary" onClick={() => exportState(state)}>{icons.download} Export backup</button><button className="secondary" onClick={() => fileRef.current?.click()}>{icons.upload} Import backup</button><input ref={fileRef} hidden type="file" accept="application/json,.json" onChange={onImport} /></div></section>
     <section className="panel privacyCard"><div className="lock">⌂</div><div><h3>Lightweight SQLite storage</h3><p>StockBot keeps products, expenses, purchase sources, customers, and activity in indexed tables in this server&apos;s private D1 database. Nothing is sent to an outside inventory service.</p></div></section>
-    <section className="panel dangerZone"><p className="eyebrow">Fresh start</p><h3>Clear or reset workspace</h3><p>Clear every product, customer, activity, COGS, and expense record, or replace them with the original sample data.</p><div className="dangerActions"><button className="danger" onClick={() => confirm("Permanently clear all products, customers, activity, COGS, and expenses? Business and tax settings will be kept.") && clearAllRecords()}>Clear all</button><button className="secondary" onClick={() => confirm("Replace all current inventory data with the demo workspace?") && setState(seed)}>Reset demo</button></div><small>Clear all keeps your business profile, address, tax rates, local tax rules, and display settings.</small></section>
+    <section className="panel dangerZone"><p className="eyebrow">Fresh start</p><h3>Clear or reset workspace</h3><p>Clear every product, customer, activity, COGS, and expense record, or replace them with the original sample data.</p><div className="dangerActions"><button className="danger" disabled={clearing} onClick={() => { if (confirm("Permanently clear all products, customers, activity, COGS, and expenses? Business and tax settings will be kept.")) void clearAllRecords(); }}>{clearing ? "Clearing…" : "Clear all"}</button><button className="secondary" disabled={clearing} onClick={() => confirm("Replace all current inventory data with the demo workspace?") && setState(seed)}>Reset demo</button></div><small>After clearing, StockBot reloads a fresh view while keeping your business profile, address, tax rates, local tax rules, and display settings.</small></section>
   </div>;
 }
 
@@ -1074,15 +1104,15 @@ function MovementModal({ products, initialProduct, initialType, settings, onSave
 }
 
 function ExpenseModal({ onSave, onClose }: { onSave: (expense: ExpenseDraft) => void; onClose: () => void }) {
-  const [draft, setDraft] = useState<ExpenseDraft>({ externalKey: "", purchaseSource: "", vendor: "", category: "Office supplies", amount: 0, date: dateOnly(), note: "", source: "manual" });
-  return <Modal title="Add a business expense" eyebrow="Expense ledger" onClose={onClose}><form onSubmit={(event) => { event.preventDefault(); onSave({ ...draft, externalKey: draft.externalKey.trim(), purchaseSource: draft.purchaseSource.trim(), vendor: draft.vendor.trim(), note: draft.note.trim() }); }}><div className="formGrid"><label className="wide">Unique record key<input autoFocus required value={draft.externalKey} onChange={(event) => setDraft({ ...draft, externalKey: event.target.value })} placeholder="Amazon order ID, invoice ID, or transaction ID" /><small>StockBot blocks any future record with this same key.</small></label><label>Vendor or merchant<input required value={draft.vendor} onChange={(event) => setDraft({ ...draft, vendor: event.target.value })} placeholder="Amazon, electric company, landlord…" /></label><label>Purchase source<input value={draft.purchaseSource} onChange={(event) => setDraft({ ...draft, purchaseSource: event.target.value })} placeholder="Account or purchase channel" /><small>Optional for manually entered expenses.</small></label><label>Category<select value={draft.category} onChange={(event) => setDraft({ ...draft, category: event.target.value as ExpenseCategory })}>{expenseCategories.map((category) => <option key={category}>{category}</option>)}</select></label><label>Amount<input required min="0.01" step="0.01" type="number" value={draft.amount} onChange={(event) => setDraft({ ...draft, amount: Number(event.target.value) })} /></label><label>Date<input required type="date" value={draft.date} onChange={(event) => setDraft({ ...draft, date: event.target.value })} /></label><label className="wide">Description or memo<input value={draft.note} onChange={(event) => setDraft({ ...draft, note: event.target.value })} placeholder="What the purchase was for" /></label>{draft.category === "Cost of goods" && <div className="formNotice wide"><strong>Avoid counting the same cost twice.</strong><span>Use this category only when the amount is not already included in a product&apos;s unit cost.</span></div>}</div><ModalActions onClose={onClose} label="Add expense" /></form></Modal>;
+  const [draft, setDraft] = useState<ExpenseDraft>({ externalKey: "", purchaseSource: "", vendor: "", category: "Office supplies", amount: 0, date: dateOnly(), note: "", personal: false, source: "manual" });
+  return <Modal title="Add an expense record" eyebrow="Expense ledger" onClose={onClose}><form onSubmit={(event) => { event.preventDefault(); onSave({ ...draft, externalKey: draft.externalKey.trim(), purchaseSource: draft.purchaseSource.trim(), vendor: draft.vendor.trim(), note: draft.note.trim() }); }}><div className="formGrid"><label className="wide">Unique record key<input autoFocus required value={draft.externalKey} onChange={(event) => setDraft({ ...draft, externalKey: event.target.value })} placeholder="Amazon order ID, invoice ID, or transaction ID" /><small>StockBot blocks any future record with this same key.</small></label><label>Vendor or merchant<input required value={draft.vendor} onChange={(event) => setDraft({ ...draft, vendor: event.target.value })} placeholder="Amazon, electric company, landlord…" /></label><label>Purchase source<input value={draft.purchaseSource} onChange={(event) => setDraft({ ...draft, purchaseSource: event.target.value })} placeholder="Account or purchase channel" /><small>Optional for manually entered expenses.</small></label><label>Category<select value={draft.category} onChange={(event) => setDraft({ ...draft, category: event.target.value as ExpenseCategory })}>{expenseCategories.map((category) => <option key={category}>{category}</option>)}</select></label><label>Amount<input required min="0.01" step="0.01" type="number" value={draft.amount} onChange={(event) => setDraft({ ...draft, amount: Number(event.target.value) })} /></label><label>Date<input required type="date" value={draft.date} onChange={(event) => setDraft({ ...draft, date: event.target.value })} /></label><label className="wide">Description or memo<input value={draft.note} onChange={(event) => setDraft({ ...draft, note: event.target.value })} placeholder="What the purchase was for" /></label><label className="wide checkLabel"><input type="checkbox" checked={draft.personal} onChange={(event) => setDraft({ ...draft, personal: event.target.checked })} /><span><strong>Personal purchase</strong><small>Keep this record for reference without including it in business expenses, COGS, inventory, or tax calculations.</small></span></label>{draft.category === "Cost of goods" && !draft.personal && <div className="formNotice wide"><strong>Avoid counting the same cost twice.</strong><span>Use this category only when the amount is not already included in a product&apos;s unit cost.</span></div>}</div><ModalActions onClose={onClose} label="Add expense" /></form></Modal>;
 }
 
 function Modal({ title, eyebrow, onClose, children }: { title: string; eyebrow: string; onClose: () => void; children: React.ReactNode }) { return <div className="modalBackdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}><section className="modal" role="dialog" aria-modal="true" aria-label={title}><button className="modalClose" onClick={onClose} aria-label="Close">×</button><p className="eyebrow">{eyebrow}</p><h2>{title}</h2>{children}</section></div>; }
 function ModalActions({ onClose, label }: { onClose: () => void; label: string }) { return <div className="modalActions"><button type="button" className="secondary" onClick={onClose}>Cancel</button><button className="primary" type="submit">{label}</button></div>; }
 function Empty({ text }: { text: string }) { return <div className="empty">{text}</div>; }
 
-function downloadExpenseTemplate() { const csv = "external_key,purchase_source,vendor,date,amount,category,note\nAMAZON-ORDER-ID,Amazon Business,Amazon,2026-01-15,49.95,Office supplies,Printer paper\n"; const blob = new Blob([csv], { type: "text/csv;charset=utf-8" }); const url = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = url; anchor.download = "stockbot-expense-import-template.csv"; anchor.click(); URL.revokeObjectURL(url); }
+function downloadExpenseTemplate() { const csv = "external_key,purchase_source,vendor,date,amount,category,personal,note\nAMAZON-ORDER-ID,Amazon Business,Amazon,2026-01-15,49.95,Office supplies,false,Printer paper\n"; const blob = new Blob([csv], { type: "text/csv;charset=utf-8" }); const url = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = url; anchor.download = "stockbot-expense-import-template.csv"; anchor.click(); URL.revokeObjectURL(url); }
 function downloadInvoiceTemplate() { const csv = "Invoice Number,Line Item ID,Invoice Date,Customer ID,Customer Name,Customer Email,Customer Phone,Shipping Address,Shipping City,Shipping State,Shipping ZIP,SKU,Product Name,Category,Quantity,Unit Price,Unit Cost,Line Sales Tax\nINV-1001,1,2025-01-15,CUST-42,Harbor Market,orders@harbormarket.example,555-0100,210 Market St,San Diego,CA,92101,CER-101,Speckled Ceramic Mug,Home,3,24.00,8.50,5.22\n"; const blob = new Blob([csv], { type: "text/csv;charset=utf-8" }); const url = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = url; anchor.download = "stockbot-historical-invoice-template.csv"; anchor.click(); URL.revokeObjectURL(url); }
 function exportState(state: AppState) { const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" }); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = `stockbot-backup-${dateOnly()}.json`; a.click(); URL.revokeObjectURL(url); }
 function importState(event: ChangeEvent<HTMLInputElement>, setState: React.Dispatch<React.SetStateAction<AppState>>) { const file = event.target.files?.[0]; if (!file) return; file.text().then((text) => { const parsed: unknown = JSON.parse(text); const normalized = normalizeState(parsed); if (!Array.isArray((parsed as Partial<AppState>)?.products) || !Array.isArray((parsed as Partial<AppState>)?.movements) || !Array.isArray((parsed as Partial<AppState>)?.expenses)) throw new Error(); if (confirm(`Import ${normalized.products.length} products and replace the current workspace?`)) setState(normalized); }).catch(() => alert("That file is not a valid StockBot backup.")); event.target.value = ""; }
@@ -1090,6 +1120,7 @@ function importState(event: ChangeEvent<HTMLInputElement>, setState: React.Dispa
 function normalizeState(raw: unknown): AppState {
   if (!raw || typeof raw !== "object") return seed;
   const incoming = raw as Partial<AppState> & { settings?: Partial<Settings> & { defaultTaxRate?: number } };
+  const savedVersion = Number(incoming.version) || 0;
   const ownAddress = { ...blankAddress("CA"), ...(incoming.settings?.ownAddress ?? {}) };
   const savedTaxes = incoming.settings?.stateTaxes ?? {};
   const legacyRate = incoming.settings?.defaultTaxRate;
@@ -1105,6 +1136,7 @@ function normalizeState(raw: unknown): AppState {
     amount: Number(expense.amount) || 0,
     date: normalizeExpenseDate(expense.date) || dateOnly(),
     note: String(expense.note || "").trim(),
+    personal: Boolean(expense.personal),
     source: expense.source === "import" ? "import" : "manual",
     importedAt: expense.importedAt,
     fields: expense.fields && typeof expense.fields === "object" && !Array.isArray(expense.fields) ? Object.fromEntries(Object.entries(expense.fields).map(([key, value]) => [key, String(value ?? "")])) : undefined,
@@ -1117,14 +1149,22 @@ function normalizeState(raw: unknown): AppState {
   const mergedExpenseColumnOrder = mergeExpenseColumnOrder(Array.isArray(incoming.settings?.expenseColumnOrder) ? incoming.settings.expenseColumnOrder.filter((key): key is string => typeof key === "string") : defaultExpenseColumnOrder, expenseColumns);
   const legacyOrderWithoutSource = mergedExpenseColumnOrder.filter((key) => key !== "purchaseSource");
   const vendorColumnIndex = legacyOrderWithoutSource.indexOf("vendor");
-  const expenseColumnOrder = incoming.version !== 10
+  const sourceMigratedColumnOrder = savedVersion < 10
     ? [...legacyOrderWithoutSource.slice(0, vendorColumnIndex + 1), "purchaseSource", ...legacyOrderWithoutSource.slice(vendorColumnIndex + 1)]
     : mergedExpenseColumnOrder;
+  const legacyOrderWithoutPersonal = sourceMigratedColumnOrder.filter((key) => key !== "personal");
+  const categoryColumnIndex = legacyOrderWithoutPersonal.indexOf("category");
+  const expenseColumnOrder = savedVersion < 11
+    ? [...legacyOrderWithoutPersonal.slice(0, categoryColumnIndex + 1), "personal", ...legacyOrderWithoutPersonal.slice(categoryColumnIndex + 1)]
+    : sourceMigratedColumnOrder;
   const expenseColumnKeys = new Set(expenseColumns.map((column) => column.key));
   const savedVisibleColumns = Array.isArray(incoming.settings?.expenseVisibleColumns) ? incoming.settings.expenseVisibleColumns.filter((key): key is string => typeof key === "string" && expenseColumnKeys.has(key)) : [];
-  const migratedVisibleColumns = incoming.version !== 10 && savedVisibleColumns.length && !savedVisibleColumns.includes("purchaseSource")
+  const sourceMigratedVisibleColumns = savedVersion < 10 && savedVisibleColumns.length && !savedVisibleColumns.includes("purchaseSource")
     ? [...savedVisibleColumns.slice(0, 2), "purchaseSource", ...savedVisibleColumns.slice(2)]
     : savedVisibleColumns;
+  const migratedVisibleColumns = savedVersion < 11 && sourceMigratedVisibleColumns.length && !sourceMigratedVisibleColumns.includes("personal")
+    ? [...sourceMigratedVisibleColumns.slice(0, Math.max(0, sourceMigratedVisibleColumns.indexOf("category") + 1)), "personal", ...sourceMigratedVisibleColumns.slice(Math.max(0, sourceMigratedVisibleColumns.indexOf("category") + 1))]
+    : sourceMigratedVisibleColumns;
   const products = (Array.isArray(incoming.products) ? incoming.products : seed.products).map((product) => ({ ...product, vendor: typeof product.vendor === "string" ? product.vendor.trim() : "" }));
   const seenCustomerKeys = new Set<string>();
   const customers = (Array.isArray(incoming.customers) ? incoming.customers : []).map((customer, index): Customer => {
@@ -1161,7 +1201,7 @@ function normalizeState(raw: unknown): AppState {
     seenMovementSourceKeys.add(key); return true;
   });
   return {
-    version: 10,
+    version: 11,
     products,
     movements,
     expenses,

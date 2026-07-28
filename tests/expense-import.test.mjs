@@ -51,6 +51,20 @@ test("suggests and imports purchase source keys", () => {
   assert.equal(genericPreview.ready[0].purchaseSource, "Wholesale portal");
 });
 
+test("imports an optional personal flag without defaulting missing values", () => {
+  const text = [
+    "external_key,purchase_source,vendor,date,amount,category,personal,note",
+    "PERSONAL-1,Amazon Personal,Amazon,2026-01-17,18.00,Office supplies,yes,Home printer paper",
+    "BUSINESS-1,Amazon Business,Amazon,2026-01-18,28.00,Office supplies,false,Business printer paper",
+    "UNSET-1,Wholesale,Supply Co.,2026-01-19,38.00,Office supplies,,Shipping labels",
+  ].join("\n");
+  const preview = parseExpenseImportText(text, "mixed-purchases.csv", []);
+
+  assert.equal(preview.ready[0].personal, true);
+  assert.equal(preview.ready[1].personal, false);
+  assert.equal(preview.ready[2].personal, undefined);
+});
+
 test("defines every column in the provided Amazon Business export", () => {
   assert.equal(amazonBusinessCsvColumns.length, 73);
   assert.equal(amazonBusinessCsvColumns[0], "Order Date");

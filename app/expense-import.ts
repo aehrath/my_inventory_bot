@@ -43,6 +43,7 @@ export type ImportedExpense = {
   amount: number;
   date: string;
   note: string;
+  personal?: boolean;
   source: "import";
   importedAt: string;
   fields: Record<string, string>;
@@ -96,6 +97,14 @@ const parseExpenseAmount = (value: unknown) => {
   const negative = /^\(.*\)$/.test(raw);
   const parsed = Number(raw.replace(/[,$()\s]/g, ""));
   return negative ? -parsed : parsed;
+};
+
+const parseOptionalPersonal = (value: unknown) => {
+  const label = String(value ?? "").trim().toLowerCase();
+  if (!label) return undefined;
+  if (["1", "true", "yes", "y", "personal"].includes(label)) return true;
+  if (["0", "false", "no", "n", "business"].includes(label)) return false;
+  return undefined;
 };
 
 const canonicalField = (value: string) => value.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -228,6 +237,7 @@ export function parseExpenseImportText(
     amount: ["amount", "ordernettotal", "itemnettotal", "paymentamount", "totalamount", "total", "ordertotal", "charge", "price", "expenseamount"],
     date: ["date", "orderdate", "transactiondate", "purchasedate", "posteddate"],
     note: ["note", "title", "description", "memo", "item", "product", "details"],
+    personal: ["personal", "ispersonal", "personaluse"],
   } as const;
 
   records.forEach((record, index) => {
@@ -257,6 +267,7 @@ export function parseExpenseImportText(
       amount,
       date,
       note: String(valueFor(record, aliases.note) ?? "").trim(),
+      personal: parseOptionalPersonal(valueFor(record, aliases.personal)),
       source: "import",
       importedAt,
       fields,

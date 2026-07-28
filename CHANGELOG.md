@@ -4,6 +4,19 @@ All notable changes to StockBot are documented here.
 
 ## Unreleased
 
+## 0.24.0 - 2026-07-28
+
+### Added
+
+- Added a configurable, sortable **Personal** expense column and a Business/Personal ledger filter.
+- Added Personal support to manual expense entry, CSV/JSON imports, backups, and indexed D1 storage.
+- Personal changes apply to every selected expense when editing a multi-selected group.
+
+### Changed
+
+- Personal expenses stay in the ledger but are excluded from business expenses, COGS, purchase inventory, taxable income, and tax-center calculations.
+- **Clear all** now waits for the database to confirm the deletion and then reloads a fresh view.
+
 ## 0.23.0 - 2026-07-28
 
 ### Changed

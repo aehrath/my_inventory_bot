@@ -1,12 +1,14 @@
 import { loadInventoryState, saveInventoryState } from "../../../db/inventory-repository";
 
+type InventoryRecord = Record<string, unknown>;
+
 type InventoryState = {
   version?: number;
-  products?: unknown[];
-  movements?: Array<Record<string, unknown>>;
-  expenses?: Array<Record<string, unknown>>;
-  customers?: Array<Record<string, unknown>>;
-  settings?: Record<string, unknown>;
+  products?: InventoryRecord[];
+  movements?: InventoryRecord[];
+  expenses?: InventoryRecord[];
+  customers?: InventoryRecord[];
+  settings?: InventoryRecord;
 };
 
 const normalizedKey = (value: unknown) => String(value ?? "").trim().toLowerCase().replace(/\s+/g, "");
@@ -36,7 +38,7 @@ function validateState(state: InventoryState) {
   }
 
   const productSkus = new Set<string>();
-  for (const product of state.products as Array<Record<string, unknown>>) {
+  for (const product of state.products) {
     const sku = normalizedKey(product?.sku);
     if (!sku) return { error: "Every product needs a SKU.", status: 400 };
     if (productSkus.has(sku)) return { error: `Duplicate product SKU: ${product.sku}`, status: 409 };
