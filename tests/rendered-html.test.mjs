@@ -21,6 +21,7 @@ test("includes a visible release changelog", async () => {
   assert.match(page, /label: "Changelog"/);
   assert.match(page, /What&apos;s new in StockBot/);
   assert.match(page, /changelogReleases\.map/);
+  assert.match(changelog, /version: "0\.24\.0"/);
   assert.match(changelog, /version: "0\.23\.0"/);
   assert.match(changelog, /version: "0\.22\.0"/);
   assert.match(changelog, /version: "0\.21\.0"/);
@@ -40,6 +41,7 @@ test("includes a visible release changelog", async () => {
   assert.match(changelog, /version: "0\.7\.0"/);
   assert.match(changelog, /version: "0\.6\.0"/);
   assert.match(changelog, /version: "0\.1\.0"/);
+  assert.match(markdown, /## 0\.24\.0 - 2026-07-28/);
   assert.match(markdown, /## 0\.23\.0 - 2026-07-28/);
   assert.match(markdown, /## 0\.22\.0 - 2026-07-28/);
   assert.match(markdown, /## 0\.21\.0 - 2026-07-23/);
@@ -101,7 +103,7 @@ test("includes item-level COGS and final-product tracking", async () => {
   assert.match(page, /href=\{`#product-\$\{linkedProduct\.id\}`\}/);
   assert.match(page, /onOpenProduct\(linkedProduct\)/);
   assert.match(page, /linkedFinalProductFor/);
-  assert.match(page, /version: 10/);
+  assert.match(page, /version: 11/);
   assert.match(styles, /\.cogsHead,.cogsRow/);
   assert.match(styles, /\.cogsProductLink/);
   assert.match(styles, /activityTag\.production_use/);
@@ -207,7 +209,7 @@ test("builds synchronized purchase inventory from expense categories", async () 
   assert.match(page, /isExpenseInventoryCategory\(expense\.category\)/);
   assert.match(page, /parseExpenseInventoryDescription\(expense\.note, expense\.amount\)/);
   assert.match(page, /expense\.category !== "Cost of goods" && !isExpenseInventoryCategory\(expense\.category\)/);
-  assert.match(page, /Excludes COGS and inventory purchases/);
+  assert.match(page, /Excludes COGS, inventory, and personal/);
   assert.match(page, /className="expenseCategorySelect"/);
   assert.match(page, /Category for \$\{expense\.externalKey\}/);
   assert.match(page, /targetIds\.has\(item\.id\) \? \{ \.\.\.item, category \} : item/);
@@ -246,13 +248,35 @@ test("offers separate clear-all and demo-reset workspace actions", async () => {
     read("app/page.tsx"),
     read("app/globals.css"),
   ]);
-  assert.match(page, /const clearAllRecords = \(\) => setState/);
+  assert.match(page, /const clearAllRecords = async \(\) =>/);
   assert.match(page, /products: \[\],\s+movements: \[\],\s+expenses: \[\],\s+customers: \[\]/);
-  assert.match(page, /settings: \{ \.\.\.current\.settings, beginningInventory: 0 \}/);
-  assert.match(page, />Clear all<\/button>/);
+  assert.match(page, /settings: \{ \.\.\.state\.settings, beginningInventory: 0 \}/);
+  assert.match(page, /fetch\("\/api\/state", \{ method: "PUT"/);
+  assert.match(page, /window\.location\.reload\(\)/);
+  assert.match(page, /clearing \? "Clearing…" : "Clear all"/);
   assert.match(page, />Reset demo<\/button>/);
   assert.match(page, /Business and tax settings will be kept/);
   assert.match(styles, /\.dangerActions/);
+});
+
+test("keeps personal expenses visible but out of business calculations", async () => {
+  const [page, styles] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/globals.css"),
+  ]);
+  assert.match(page, /personal: boolean/);
+  assert.match(page, /key: "personal", label: "Personal"/);
+  assert.match(page, /Expense business or personal use/);
+  assert.match(page, /expenseSort\.key === "personal"/);
+  assert.match(page, /!e\.personal && new Date/);
+  assert.match(page, /!expense\.personal && isExpenseInventoryCategory/);
+  assert.match(page, /const businessExpenses = selectedExpenses\.filter\(\(expense\) => !expense\.personal\)/);
+  assert.match(page, /Personal expense \$\{expense\.externalKey\}/);
+  assert.match(page, /targetIds\.has\(item\.id\) \? \{ \.\.\.item, personal \} : item/);
+  assert.match(page, /personal: Boolean\(expense\.personal\)/);
+  assert.match(page, /category,personal,note/);
+  assert.match(styles, /\.expenseRow\.personal/);
+  assert.match(styles, /\.expensePersonalToggle/);
 });
 
 test("imports historical invoices into duplicate-safe sales and customers", async () => {

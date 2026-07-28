@@ -15,7 +15,7 @@ type MetadataRow = { state_version: number; updated_at: string; migrated_at: str
 type LegacyRow = { payload: string; updated_at: string };
 type SaveResult = { updatedAt: string; written: number; deleted: number };
 
-const schemaVersion = 1;
+const schemaVersion = 2;
 let schemaReady: Promise<typeof env.DB> | null = null;
 
 const stringValue = (value: unknown) => typeof value === "string" ? value : String(value ?? "");
@@ -43,9 +43,15 @@ const chunks = <T>(values: T[], size: number) => {
 export async function inventoryDatabase() {
   if (!env.DB) throw new Error("Local database is unavailable.");
   if (!schemaReady) {
-    schemaReady = env.DB
-      .batch(inventorySchemaStatements.map((statement) => env.DB.prepare(statement)))
-      .then(() => env.DB)
+    schemaReady = (async () => {
+      await env.DB.batch(inventorySchemaStatements.map((statement) => env.DB.prepare(statement)));
+      const expenseColumns = await env.DB.prepare("PRAGMA table_info(expenses)").all() as { results: Array<{ name: string }> };
+      if (!expenseColumns.results.some((column) => column.name === "personal")) {
+        await env.DB.prepare("ALTER TABLE expenses ADD COLUMN personal INTEGER NOT NULL DEFAULT 0").run();
+      }
+      await env.DB.prepare("CREATE INDEX IF NOT EXISTS expenses_personal_date_idx ON expenses (personal, date)").run();
+      return env.DB;
+    })()
       .catch((error) => {
         schemaReady = null;
         throw error;
@@ -76,12 +82,12 @@ const tableConfigs = [
   },
   {
     name: "expenses",
-    columns: ["id", "external_key", "normalized_external_key", "purchase_source", "vendor", "category", "amount", "date", "source", "record_json"],
+    columns: ["id", "external_key", "normalized_external_key", "purchase_source", "vendor", "category", "personal", "amount", "date", "source", "record_json"],
     records: (state: InventoryState) => state.expenses,
     values: (record: InventoryRecord, recordJson: string) => [
       stringValue(record.id), stringValue(record.externalKey), normalizedKey(record.externalKey),
       stringValue(record.purchaseSource), stringValue(record.vendor), stringValue(record.category),
-      numberValue(record.amount), stringValue(record.date), stringValue(record.source), recordJson,
+      booleanValue(record.personal), numberValue(record.amount), stringValue(record.date), stringValue(record.source), recordJson,
     ],
   },
   {

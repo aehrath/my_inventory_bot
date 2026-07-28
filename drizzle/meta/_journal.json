@@ -8,6 +8,13 @@
       "when": 1785224802660,
       "tag": "0000_burly_sage",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1785226100519,
+      "tag": "0001_third_rockslide",
+      "breakpoints": true
     }
   ]
 }

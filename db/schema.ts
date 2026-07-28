@@ -54,6 +54,7 @@ export const expenses = sqliteTable("expenses", {
   purchaseSource: text("purchase_source").notNull(),
   vendor: text("vendor").notNull(),
   category: text("category").notNull(),
+  personal: integer("personal", { mode: "boolean" }).notNull().default(false),
   amount: real("amount").notNull(),
   date: text("date").notNull(),
   source: text("source").notNull(),
@@ -62,6 +63,7 @@ export const expenses = sqliteTable("expenses", {
   uniqueIndex("expenses_external_key_idx").on(table.normalizedExternalKey),
   index("expenses_purchase_source_idx").on(table.purchaseSource),
   index("expenses_category_date_idx").on(table.category, table.date),
+  index("expenses_personal_date_idx").on(table.personal, table.date),
   index("expenses_vendor_idx").on(table.vendor),
 ]);
 
@@ -135,6 +137,7 @@ export const inventorySchemaStatements = [
     purchase_source TEXT NOT NULL DEFAULT '',
     vendor TEXT NOT NULL,
     category TEXT NOT NULL,
+    personal INTEGER NOT NULL DEFAULT 0,
     amount REAL NOT NULL,
     date TEXT NOT NULL,
     source TEXT NOT NULL,
