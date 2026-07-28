@@ -4,6 +4,19 @@ All notable changes to StockBot are documented here.
 
 ## Unreleased
 
+## 0.23.0 - 2026-07-28
+
+### Changed
+
+- Moved products, activity, expenses, purchase sources, and customers from one state snapshot into dedicated D1/SQLite tables.
+- Kept compact nested settings and raw import details as JSON only where that is lighter than additional relational tables.
+- Changed saving to update only records whose contents changed and to delete only records removed from StockBot.
+
+### Added
+
+- Added database indexes for product SKUs, vendors, expense keys, purchase sources, categories, dates, customers, and imported invoice keys.
+- Added an automatic one-time migration that preserves existing StockBot data and retains the original snapshot as a migration safety fallback.
+
 ## 0.22.0 - 2026-07-28
 
 ### Added

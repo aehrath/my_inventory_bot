@@ -13,6 +13,29 @@ export type ChangelogRelease = {
 
 export const changelogReleases: readonly ChangelogRelease[] = [
   {
+    version: "0.23.0",
+    date: "July 28, 2026",
+    title: "Lightweight relational storage",
+    summary: "StockBot now stores business records in indexed D1/SQLite tables with automatic migration from the legacy snapshot.",
+    sections: [
+      {
+        title: "Changed",
+        items: [
+          "Moved products, activity, expenses, purchase sources, and customers from one state snapshot into dedicated relational tables.",
+          "Kept compact nested settings and raw import details as JSON only where that is lighter than additional tables.",
+          "Changed saving to update only records whose contents changed and to remove only deleted records.",
+        ],
+      },
+      {
+        title: "Added",
+        items: [
+          "Added database indexes for product SKUs, vendors, expense keys, purchase sources, categories, dates, customers, and imported invoice keys.",
+          "Added an automatic one-time migration that preserves existing StockBot data and the original snapshot as a safety fallback.",
+        ],
+      },
+    ],
+  },
+  {
     version: "0.22.0",
     date: "July 28, 2026",
     title: "Purchase source tracking",

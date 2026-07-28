@@ -1,6 +1,14 @@
 # StockBot Inventory
 
-StockBot is a TypeScript inventory and tax workspace for a small business. It stores inventory, activity, expenses, tax settings, address-rate caches, and tax-update audit history in the server's D1 database. JSON import/export provides portable backups.
+StockBot is a TypeScript inventory and tax workspace for a small business. It
+uses Cloudflare D1, a serverless SQLite database, with indexed relational tables
+for products, activity, expenses, purchase sources, and customers. Compact
+nested settings remain JSON where extra tables would add overhead. JSON
+import/export provides portable backups.
+
+Existing installations migrate automatically from the original single-record
+state snapshot. After migration, saves compare individual records and write only
+the rows that changed.
 
 ## Expense imports
 
