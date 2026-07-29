@@ -59,6 +59,7 @@ export type ImportedExpense = {
   externalKey: string;
   purchaseSource: string;
   vendor: string;
+  asins: string[];
   category: ExpenseCategory;
   amount: number;
   date: string;
@@ -82,6 +83,10 @@ export type ExpenseImportPreview = {
 };
 
 export const normalizeExpenseKey = (key: string) => key.trim().toLowerCase().replace(/\s+/g, "");
+
+export const normalizeExpenseAsins = (value: unknown) => Array.from(new Set(
+  (Array.isArray(value) ? value : [value]).flatMap((entry) => String(entry ?? "").toUpperCase().match(/\b[A-Z0-9]{10}\b/g) ?? []),
+));
 
 export const normalizeExpenseCategory = (value: unknown, customCategories: readonly string[] = []): ExpenseCategory => {
   const label = String(value ?? "").trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
@@ -239,6 +244,7 @@ export function parseExpenseImportText(
         externalkey: orderId,
         purchasesource: accountGroups.length ? `Amazon · ${accountGroups.join(" · ")}` : "Amazon",
         vendor: sellers.slice(0, 3).join(", ") || "Amazon",
+        asin: uniqueValues(["asin"]).join(" · "),
         category: categoryForAmazonOrder(orderRows),
         amount: valueFor(first, ["ordernettotal"]),
         date: valueFor(first, ["orderdate"]),
@@ -281,6 +287,7 @@ export function parseExpenseImportText(
         externalkey: orderId,
         purchasesource: websites.length ? `Amazon · ${websites.join(" · ")}` : "Amazon",
         vendor: websites[0] || "Amazon",
+        asin: uniqueValues(["asin"]).join(" · "),
         category: "Other",
         amount,
         date: valueFor(first, ["orderdate"]),
@@ -302,6 +309,7 @@ export function parseExpenseImportText(
     key: ["externalkey", "amazonorderid", "orderid", "transactionid", "invoiceid", "receiptid", "recordid", "uniqueid", "id"],
     purchaseSource: ["purchasesource", "purchasesourcekey", "sourcekey", "accountsource", "accountname", "importsource"],
     vendor: ["vendor", "merchant", "sellername", "seller", "supplier", "payee", "store"],
+    asin: ["asin", "amazonasin", "asinid", "asinnumber", "productasin"],
     category: ["category", "expensecategory", "amazoninternalproductcategory", "type", "account"],
     amount: ["amount", "ordernettotal", "itemnettotal", "paymentamount", "totalamount", "total", "ordertotal", "charge", "price", "expenseamount"],
     date: ["date", "orderdate", "transactiondate", "purchasedate", "posteddate"],
@@ -337,6 +345,7 @@ export function parseExpenseImportText(
       externalKey,
       purchaseSource: String(valueFor(record, aliases.purchaseSource) ?? "").trim(),
       vendor: String(valueFor(record, aliases.vendor) ?? "Unknown vendor").trim(),
+      asins: normalizeExpenseAsins(valueFor(record, aliases.asin)),
       category: normalizeExpenseCategory(valueFor(record, aliases.category), customCategories),
       amount,
       date,

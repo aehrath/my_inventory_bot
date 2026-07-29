@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { amazonBusinessCsvColumns, amazonOrderHistoryCsvColumns, expenseAccountingClasses, expenseCategories, expenseCategoryDefinitions, expenseCostTimings, normalizeExpenseCategory, parseExpenseImportText } from "../app/expense-import.ts";
+import { amazonBusinessCsvColumns, amazonOrderHistoryCsvColumns, expenseAccountingClasses, expenseCategories, expenseCategoryDefinitions, expenseCostTimings, normalizeExpenseAsins, normalizeExpenseCategory, parseExpenseImportText } from "../app/expense-import.ts";
 
 const fixture = new URL("./fixtures/amazon-business-orders.csv", import.meta.url);
 const amazonOrderHistoryFixture = new URL("./fixtures/amazon-order-history.csv", import.meta.url);
@@ -50,6 +50,7 @@ test("groups Amazon consumer Order History items and sums every line total", asy
   assert.equal(preview.ready[0].amount, 22.55);
   assert.equal(preview.ready[0].vendor, "Amazon.com");
   assert.equal(preview.ready[0].purchaseSource, "Amazon · Amazon.com");
+  assert.deepEqual(preview.ready[0].asins, ["B000000001", "B000000002"]);
   assert.equal(preview.ready[0].date, "2026-01-15");
   assert.match(preview.ready[0].note, /Shipping labels, 200 pieces/);
   assert.match(preview.ready[0].note, /Laminating pouches/);
@@ -112,6 +113,16 @@ test("defines every column in the Amazon consumer Order History export", () => {
   assert.equal(amazonOrderHistoryCsvColumns.at(-1), "Website");
   assert.ok(amazonOrderHistoryCsvColumns.includes("Product Name"));
   assert.ok(amazonOrderHistoryCsvColumns.includes("Total Amount"));
+});
+
+test("normalizes and deduplicates imported ASIN values", () => {
+  assert.deepEqual(normalizeExpenseAsins("b000000001 · B000000002 · b000000001"), ["B000000001", "B000000002"]);
+  const text = [
+    "external_key,vendor,ASIN,date,amount,category,note",
+    "ASIN-1,Amazon,b0test0001,2026-01-20,29.00,Office supplies,Printer paper",
+  ].join("\n");
+  const preview = parseExpenseImportText(text, "amazon.csv", []);
+  assert.deepEqual(preview.ready[0].asins, ["B0TEST0001"]);
 });
 
 test("includes inventory categories and normalizes their common labels", () => {

@@ -4,6 +4,19 @@ All notable changes to StockBot are documented here.
 
 ## Unreleased
 
+## 0.30.0 - 2026-07-28
+
+### Added
+
+- Added dedicated ASIN tracking to imported expense records, including every ASIN on multi-item Amazon orders.
+- Added an ASIN expense column that is visible by default and supports searching, sorting, reordering, and column configuration.
+- Added ASIN support to the expense CSV template and import-review details.
+
+### Changed
+
+- Existing Amazon expenses automatically recover their ASINs from previously saved source fields.
+- Re-importing an order refreshes its ASIN list without creating a duplicate or replacing its category and Personal setting.
+
 ## 0.29.0 - 2026-07-28
 
 ### Added

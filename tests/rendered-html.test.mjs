@@ -107,7 +107,7 @@ test("includes item-level COGS and final-product tracking", async () => {
   assert.match(page, /href=\{`#product-\$\{linkedProduct\.id\}`\}/);
   assert.match(page, /onOpenProduct\(linkedProduct\)/);
   assert.match(page, /linkedFinalProductFor/);
-  assert.match(page, /version: 15/);
+  assert.match(page, /version: 16/);
   assert.match(styles, /\.cogsHead,.cogsRow/);
   assert.match(styles, /\.cogsProductLink/);
   assert.match(styles, /activityTag\.production_use/);
@@ -192,6 +192,21 @@ test("tracks sortable and filterable purchase sources", async () => {
   assert.match(expenseImport, /purchasesourcekey/);
   assert.match(expenseImport, /Amazon · \$\{accountGroups\.join/);
   assert.match(styles, /min-width:1390px/);
+});
+
+test("tracks imported ASINs as a visible sortable expense field", async () => {
+  const [page, expenseImport] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/expense-import.ts"),
+  ]);
+  assert.match(page, /key: "asin", label: "ASIN"/);
+  assert.match(page, /expenseSort\.key === "asin"/);
+  assert.match(page, /expense\.asins\.join/);
+  assert.match(page, /ASIN \$\{expense\.asins/);
+  assert.match(page, /savedVersion < 16/);
+  assert.match(expenseImport, /asins: string\[\]/);
+  assert.match(expenseImport, /normalizeExpenseAsins/);
+  assert.match(expenseImport, /asinnumber/);
 });
 
 test("keeps expense imports isolated from products and inventory", async () => {

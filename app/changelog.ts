@@ -13,6 +13,29 @@ export type ChangelogRelease = {
 
 export const changelogReleases: readonly ChangelogRelease[] = [
   {
+    version: "0.30.0",
+    date: "July 28, 2026",
+    title: "ASIN tracking",
+    summary: "Imported Amazon expenses now keep every ASIN as a dedicated, searchable part of the purchase record.",
+    sections: [
+      {
+        title: "Added",
+        items: [
+          "Added dedicated ASIN tracking, including every ASIN attached to multi-item Amazon orders.",
+          "Added a visible-by-default ASIN expense column with search, sort, reorder, and display configuration support.",
+          "Added ASIN support to the expense CSV template and import-review details.",
+        ],
+      },
+      {
+        title: "Changed",
+        items: [
+          "Existing Amazon expenses automatically recover ASINs from their previously saved source fields.",
+          "Re-importing an order refreshes its ASIN list without creating a duplicate or replacing its category and Personal setting.",
+        ],
+      },
+    ],
+  },
+  {
     version: "0.29.0",
     date: "July 28, 2026",
     title: "Amazon Order History imports",

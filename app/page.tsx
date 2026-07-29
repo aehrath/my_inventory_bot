@@ -3,7 +3,7 @@
 
 import { ChangeEvent, CSSProperties, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { changelogReleases } from "./changelog";
-import { amazonBusinessCsvColumns, amazonOrderHistoryCsvColumns, expenseAccountingClasses, expenseCategories, expenseCategoryDefinitions, expenseCostTimings, normalizeExpenseCategory, normalizeExpenseDate, normalizeExpenseKey, parseExpenseImportText } from "./expense-import";
+import { amazonBusinessCsvColumns, amazonOrderHistoryCsvColumns, expenseAccountingClasses, expenseCategories, expenseCategoryDefinitions, expenseCostTimings, normalizeExpenseAsins, normalizeExpenseCategory, normalizeExpenseDate, normalizeExpenseKey, parseExpenseImportText } from "./expense-import";
 import type { ExpenseAccountingClass, ExpenseCategory, ExpenseCategoryDefinition, ExpenseCostTiming, ExpenseImportPreview } from "./expense-import";
 import { parseExpenseInventoryDescription } from "./expense-inventory";
 import { normalizeCustomerKey, normalizeInvoiceKey, normalizeProductIdentifier, parseInvoiceImportText } from "./invoice-import";
@@ -25,7 +25,7 @@ type Movement = {
   productName?: string; productSku?: string; finalProductId?: string; finalProductName?: string;
   sourceKey?: string; invoiceNumber?: string; customerId?: string; customerName?: string;
 };
-type Expense = { id: string; externalKey: string; purchaseSource: string; vendor: string; category: ExpenseCategory; amount: number; date: string; note: string; personal: boolean; source: "manual" | "import"; importedAt?: string; fields?: Record<string, string> };
+type Expense = { id: string; externalKey: string; purchaseSource: string; vendor: string; asins: string[]; category: ExpenseCategory; amount: number; date: string; note: string; personal: boolean; source: "manual" | "import"; importedAt?: string; fields?: Record<string, string> };
 type ExpenseDraft = Omit<Expense, "id">;
 type Address = TaxAddress;
 type Customer = { id: string; externalKey: string; name: string; email: string; phone: string; address: Address; createdAt: string; updatedAt: string };
@@ -37,7 +37,7 @@ type TaxUpdateAudit = { id: string; checkedAt: string; appliedAt: string | null;
 type CustomExpenseCategory = ExpenseCategoryDefinition;
 type ExpenseCategoryTreatment = Omit<ExpenseCategoryDefinition, "name">;
 type Settings = { businessName: string; taxYear: number; beginningInventory: number; ownAddress: Address; stateTaxes: Record<string, StateTaxSetting>; localTaxRules: LocalTaxRule[]; addressTaxRates: AddressTaxRate[]; taxUpdateHistory: TaxUpdateAudit[]; customExpenseCategories: CustomExpenseCategory[]; expenseCategoryOverrides: Record<string, ExpenseCategoryTreatment>; expenseColumnOrder: string[]; expenseVisibleColumns: string[] };
-type AppState = { version: 15; products: Product[]; movements: Movement[]; expenses: Expense[]; customers: Customer[]; settings: Settings };
+type AppState = { version: 16; products: Product[]; movements: Movement[]; expenses: Expense[]; customers: Customer[]; settings: Settings };
 type Metrics = { inventoryValue: number; units: number; revenue: number; inventoryCogs: number; additionalCogs: number; cogs: number; salesTax: number; stateSalesTax: number; localSalesTax: number; useTax: number; stateUseTax: number; localUseTax: number; expenses: number; expenseRecordsTotal: number; purchases: number; grossProfit: number; taxableIncome: number };
 type ExpenseColumnDefinition = { key: string; label: string; width: string; field?: string };
 type SortDirection = "asc" | "desc";
@@ -62,6 +62,7 @@ const expenseBaseColumns: ExpenseColumnDefinition[] = [
   { key: "date", label: "Date", width: "130px" },
   { key: "vendor", label: "Vendor", width: "190px" },
   { key: "purchaseSource", label: "Purchase source", width: "180px" },
+  { key: "asin", label: "ASIN", width: "205px" },
   { key: "note", label: "Description", width: "340px" },
   { key: "category", label: "Category", width: "175px" },
   { key: "accountingClass", label: "Accounting class", width: "155px" },
@@ -77,12 +78,13 @@ const expenseCsvColumnDefinition = (label: string): ExpenseColumnDefinition => (
   field: label,
   width: label === "Title" || label === "Product Name" ? "360px" : /Email|Account Group|Credentials/.test(label) ? "230px" : /Date|Amount|Total|Tax|Promotion|PPU|Quantity/.test(label) ? "145px" : /Order ID|Reference ID|Identifier|ASIN|UNSPSC|Code|Number/.test(label) ? "190px" : "175px",
 });
-const expenseImportCsvColumns = Array.from(new Set([...amazonBusinessCsvColumns, ...amazonOrderHistoryCsvColumns]));
+const trackedExpenseImportFields = Array.from(new Set([...amazonBusinessCsvColumns, ...amazonOrderHistoryCsvColumns]));
+const expenseImportCsvColumns = trackedExpenseImportFields.filter((label) => label !== "ASIN");
 const defaultExpenseColumnDefinitions = [...expenseBaseColumns, ...expenseImportCsvColumns.map(expenseCsvColumnDefinition)];
 const defaultExpenseColumnOrder = defaultExpenseColumnDefinitions.map((column) => column.key);
-const defaultExpenseVisibleColumns = ["date", "vendor", "purchaseSource", "note", "category", "accountingClass", "costTiming", "personal", "externalKey", "amount"];
+const defaultExpenseVisibleColumns = ["date", "vendor", "purchaseSource", "asin", "note", "category", "accountingClass", "costTiming", "personal", "externalKey", "amount"];
 const expenseColumnDefinitionsFor = (expenses: Expense[]) => {
-  const knownFields = new Set<string>(expenseImportCsvColumns);
+  const knownFields = new Set<string>(trackedExpenseImportFields);
   const dynamicFields = Array.from(new Set(expenses.flatMap((expense) => Object.keys(expense.fields ?? {})))).filter((field) => !knownFields.has(field));
   return [...defaultExpenseColumnDefinitions, ...dynamicFields.map(expenseCsvColumnDefinition)];
 };
@@ -196,7 +198,7 @@ const resolveAddressRate = (address: Address, settings: Settings, liveRate?: Tax
 };
 
 const seed: AppState = {
-  version: 15,
+  version: 16,
   settings: { businessName: "Juniper & Co.", taxYear: nowYear, beginningInventory: 3180, ownAddress: blankAddress("CA"), stateTaxes: defaultStateTaxSettings("CA"), localTaxRules: [], addressTaxRates: [], taxUpdateHistory: [], customExpenseCategories: [], expenseCategoryOverrides: {}, expenseColumnOrder: defaultExpenseColumnOrder, expenseVisibleColumns: defaultExpenseVisibleColumns },
   products: [
     { id: "p1", sku: "CER-101", name: "Speckled Ceramic Mug", vendor: "Clay & Kiln Supply", category: "Home", quantity: 24, unitCost: 8.5, salePrice: 24, reorderPoint: 8, salesTaxPaid: false, createdAt: `${nowYear}-01-05` },
@@ -215,8 +217,8 @@ const seed: AppState = {
     { id: "m4", productId: "p4", productName: "Linen Notebook", productSku: "NOT-118", finalProductName: "Stationery Gift Set", type: "production_use", quantity: 2, unitCost: 4.2, unitPrice: 0, salesTax: 0, date: `${nowYear}-03-02`, note: "Gift set assembly" },
   ],
   expenses: [
-    { id: "e1", externalKey: "seed-flyer-001", purchaseSource: "Direct purchase", vendor: "Town Print Shop", category: "Advertising & marketing", amount: 95, date: `${nowYear}-02-12`, note: "Local market flyer", personal: false, source: "manual" },
-    { id: "e2", externalKey: "seed-packaging-001", purchaseSource: "Direct purchase", vendor: "Packaging Supply Co.", category: "Office supplies", amount: 64.5, date: `${nowYear}-03-01`, note: "Packaging and labels", personal: false, source: "manual" },
+    { id: "e1", externalKey: "seed-flyer-001", purchaseSource: "Direct purchase", vendor: "Town Print Shop", asins: [], category: "Advertising & marketing", amount: 95, date: `${nowYear}-02-12`, note: "Local market flyer", personal: false, source: "manual" },
+    { id: "e2", externalKey: "seed-packaging-001", purchaseSource: "Direct purchase", vendor: "Packaging Supply Co.", asins: [], category: "Office supplies", amount: 64.5, date: `${nowYear}-03-01`, note: "Packaging and labels", personal: false, source: "manual" },
   ],
 };
 
@@ -540,7 +542,7 @@ function Customers({ state, setState }: { state: AppState; setState: React.Dispa
         });
         existingSourceKeys.add(normalizeInvoiceKey(line.sourceKey));
       }
-      return { ...current, version: 15, customers, products: [...productAdditions, ...current.products], movements: [...movementAdditions, ...current.movements] };
+      return { ...current, version: 16, customers, products: [...productAdditions, ...current.products], movements: [...movementAdditions, ...current.movements] };
     });
     setPreview(null);
   };
@@ -746,12 +748,13 @@ function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppS
     const matchesCostTiming = expenseCostTiming === "All" || expenseCostTimingFor(expense.category, state.settings) === expenseCostTiming;
     const matchesSource = expensePurchaseSource === "All" || (expensePurchaseSource === "__unassigned" ? !expense.purchaseSource : expense.purchaseSource === expensePurchaseSource);
     const matchesUse = expenseUse === "All" || (expenseUse === "Personal" ? expense.personal : !expense.personal);
-    const haystack = `${expense.vendor} ${expense.purchaseSource} ${expense.externalKey} ${expense.category} ${expenseAccountingClassFor(expense.category, state.settings)} ${expenseCostTimingFor(expense.category, state.settings) ?? ""} ${expense.note} ${Object.values(expense.fields ?? {}).join(" ")}`.toLowerCase();
+    const haystack = `${expense.vendor} ${expense.purchaseSource} ${expense.asins.join(" ")} ${expense.externalKey} ${expense.category} ${expenseAccountingClassFor(expense.category, state.settings)} ${expenseCostTimingFor(expense.category, state.settings) ?? ""} ${expense.note} ${Object.values(expense.fields ?? {}).join(" ")}`.toLowerCase();
     return matchesCategory && matchesAccountingClass && matchesCostTiming && matchesSource && matchesUse && haystack.includes(expenseQuery.toLowerCase());
   });
   const expenseSortValue = (expense: Expense): SortValue => {
     if (expenseSort.key === "vendor") return expense.vendor;
     if (expenseSort.key === "purchaseSource") return expense.purchaseSource;
+    if (expenseSort.key === "asin") return expense.asins.join(" ");
     if (expenseSort.key === "note") return expense.note;
     if (expenseSort.key === "category") return expense.category;
     if (expenseSort.key === "accountingClass") return expenseAccountingClassFor(expense.category, state.settings);
@@ -826,6 +829,7 @@ function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppS
         return update ? {
           ...expense,
           vendor: update.vendor,
+          asins: update.asins.length ? update.asins : expense.asins,
           amount: update.amount,
           date: update.date,
           note: update.note || expense.note,
@@ -835,7 +839,7 @@ function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppS
           importedAt: expense.importedAt ?? update.importedAt,
         } : expense;
       });
-      const importedColumnKeys = expenseImport.columns.map(expenseCsvColumnKey);
+      const importedColumnKeys = expenseImport.columns.filter((label) => label !== "ASIN").map(expenseCsvColumnKey);
       const expenseColumnOrder = [...current.settings.expenseColumnOrder, ...importedColumnKeys.filter((key) => !current.settings.expenseColumnOrder.includes(key))];
       return { ...current, expenses: [...additions, ...enriched], settings: { ...current.settings, expenseColumnOrder } };
     });
@@ -993,6 +997,10 @@ function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppS
     }
     if (column.key === "vendor") return <span className="expenseCell"><strong>{expense.vendor}</strong></span>;
     if (column.key === "purchaseSource") return <span className="expenseCell"><strong>{expense.purchaseSource || "Unassigned"}</strong></span>;
+    if (column.key === "asin") {
+      const value = expense.asins.join(" · ");
+      return <span className="expenseCell" title={value || undefined}><code>{value || "—"}</code></span>;
+    }
     if (column.key === "note") return <span className="expenseCell note" title={expense.note}>{expense.note || (expense.source === "import" ? "Imported record" : "Manual record")}</span>;
     if (column.key === "category") return <span className="expenseCell category"><select className="expenseCategorySelect" aria-label={`Category for ${expense.externalKey}`} value={expense.category} onClick={(event) => event.stopPropagation()} onChange={(event) => {
       const category = event.target.value as ExpenseCategory;
@@ -1035,7 +1043,7 @@ function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppS
       <div className="importSummary"><article><span>New records</span><strong>{expenseImport.ready.length}</strong></article><article><span>Existing records corrected</span><strong>{expenseImport.updates.length}</strong></article><article><span>Invalid records</span><strong>{expenseImport.invalid.length}</strong></article></div>
       <p className="settingsCopy"><strong>{expenseImport.fileName}</strong> contains {expenseImport.columns.length} source columns. {importPreviewExpenses.length > 0 && <>The importable total is <strong>{money.format(expenseImport.readyTotal)}</strong>{expenseImport.years.length ? ` across ${expenseImport.years.join(", ")}` : ""}. Existing expense keys refresh their imported order details and source fields but are never duplicated.</>}</p>
       {importPreviewExpenses.length > 0 && <div className="formGrid importSourceForm"><label className="wide">Purchase source key<input autoFocus required value={importPurchaseSource} onChange={(event) => setImportPurchaseSource(event.target.value)} placeholder="Amazon Business, Amazon Personal, wholesale account…" /><small>This label is saved on every record in this file so you can sort and filter purchases by account or source.</small></label></div>}
-      {importPreviewExpenses.length > 0 && <div className="importPreviewList">{importPreviewExpenses.slice(0, 6).map((expense) => <div key={expense.externalKey}><span><strong>{expense.vendor}</strong><small>{expense.externalKey} · {expense.category} · {expense.date}{expenseImport.updates.some((update) => update.externalKey === expense.externalKey) ? " · existing" : " · new"}</small></span><b>{money.format(expense.amount)}</b></div>)}{importPreviewExpenses.length > 6 && <small>+ {importPreviewExpenses.length - 6} more records</small>}</div>}
+      {importPreviewExpenses.length > 0 && <div className="importPreviewList">{importPreviewExpenses.slice(0, 6).map((expense) => <div key={expense.externalKey}><span><strong>{expense.vendor}</strong><small>{expense.externalKey} · {expense.category} · {expense.date}{expense.asins.length ? ` · ASIN ${expense.asins.slice(0, 2).join(", ")}${expense.asins.length > 2 ? ` +${expense.asins.length - 2}` : ""}` : ""}{expenseImport.updates.some((update) => update.externalKey === expense.externalKey) ? " · existing" : " · new"}</small></span><b>{money.format(expense.amount)}</b></div>)}{importPreviewExpenses.length > 6 && <small>+ {importPreviewExpenses.length - 6} more records</small>}</div>}
       {expenseImport.duplicates.length > 0 && <details className="importDetails"><summary>{expenseImport.duplicates.length} duplicate row{expenseImport.duplicates.length === 1 ? "" : "s"} inside this file skipped</summary><p>{expenseImport.duplicates.slice(0, 12).join(", ")}</p></details>}
       {expenseImport.skipped.length > 0 && <details className="importDetails"><summary>{expenseImport.skipped.length} cancelled or zero-dollar order{expenseImport.skipped.length === 1 ? "" : "s"} ignored</summary>{expenseImport.skipped.slice(0, 12).map((message) => <p key={message}>{message}</p>)}</details>}
       {expenseImport.invalid.length > 0 && <details className="importDetails"><summary>{expenseImport.invalid.length} invalid record{expenseImport.invalid.length === 1 ? "" : "s"} skipped</summary>{expenseImport.invalid.slice(0, 12).map((message) => <p key={message}>{message}</p>)}</details>}
@@ -1205,7 +1213,7 @@ function DataSettings({ state, setState, fileRef, onImport }: { state: AppState;
   const clearAllRecords = async () => {
     const clearedState: AppState = {
       ...state,
-      version: 15,
+      version: 16,
       products: [],
       movements: [],
       expenses: [],
@@ -1322,7 +1330,7 @@ function MovementModal({ products, initialProduct, initialType, settings, onSave
 }
 
 function ExpenseModal({ categories, onSave, onClose }: { categories: readonly ExpenseCategoryDefinition[]; onSave: (expense: ExpenseDraft) => void; onClose: () => void }) {
-  const [draft, setDraft] = useState<ExpenseDraft>({ externalKey: "", purchaseSource: "", vendor: "", category: "Office supplies", amount: 0, date: dateOnly(), note: "", personal: false, source: "manual" });
+  const [draft, setDraft] = useState<ExpenseDraft>({ externalKey: "", purchaseSource: "", vendor: "", asins: [], category: "Office supplies", amount: 0, date: dateOnly(), note: "", personal: false, source: "manual" });
   const selectedCategory: ExpenseCategoryDefinition = categories.find((category) => category.name === draft.category) ?? { name: draft.category, accountingClass: "Operating expense" };
   const treatmentLabel = `${selectedCategory.accountingClass}${selectedCategory.costTiming ? ` · ${selectedCategory.costTiming}` : ""}`;
   return <Modal title="Add an expense record" eyebrow="Expense ledger" onClose={onClose}><form onSubmit={(event) => { event.preventDefault(); onSave({ ...draft, externalKey: draft.externalKey.trim(), purchaseSource: draft.purchaseSource.trim(), vendor: draft.vendor.trim(), note: draft.note.trim() }); }}><div className="formGrid"><label className="wide">Unique record key<input autoFocus required value={draft.externalKey} onChange={(event) => setDraft({ ...draft, externalKey: event.target.value })} placeholder="Amazon order ID, invoice ID, or transaction ID" /><small>StockBot blocks any future record with this same key.</small></label><label>Vendor or merchant<input required value={draft.vendor} onChange={(event) => setDraft({ ...draft, vendor: event.target.value })} placeholder="Amazon, electric company, landlord…" /></label><label>Purchase source<input value={draft.purchaseSource} onChange={(event) => setDraft({ ...draft, purchaseSource: event.target.value })} placeholder="Account or purchase channel" /><small>Optional for manually entered expenses.</small></label><label>Category<select value={draft.category} onChange={(event) => setDraft({ ...draft, category: event.target.value as ExpenseCategory })}>{expenseAccountingClasses.map((accountingClass) => <optgroup label={accountingClass} key={accountingClass}>{categories.filter((category) => category.accountingClass === accountingClass).map((category) => <option key={category.name} value={category.name}>{category.name}{category.costTiming ? ` · ${category.costTiming}` : ""}</option>)}</optgroup>)}</select><small>{treatmentLabel}</small></label><label>Amount<input required min="0.01" step="0.01" type="number" value={draft.amount} onChange={(event) => setDraft({ ...draft, amount: Number(event.target.value) })} /></label><label>Date<input required type="date" value={draft.date} onChange={(event) => setDraft({ ...draft, date: event.target.value })} /></label><label className="wide">Description or memo<input value={draft.note} onChange={(event) => setDraft({ ...draft, note: event.target.value })} placeholder="What the purchase was for" /></label><label className="wide checkLabel"><input type="checkbox" checked={draft.personal} onChange={(event) => setDraft({ ...draft, personal: event.target.checked })} /><span><strong>Personal purchase</strong><small>Keep this record for reference without including it in business expenses, COGS, inventory, or tax calculations.</small></span></label>{selectedCategory.accountingClass === "Product cost" && selectedCategory.costTiming === "Recognize directly as COGS" && !draft.personal && <div className="formNotice wide"><strong>Avoid counting the same cost twice.</strong><span>Recognize a product cost directly only when the amount is not already included in a product&apos;s unit cost.</span></div>}</div><ModalActions onClose={onClose} label="Add expense" /></form></Modal>;
@@ -1332,7 +1340,7 @@ function Modal({ title, eyebrow, onClose, children, className = "" }: { title: s
 function ModalActions({ onClose, label }: { onClose: () => void; label: string }) { return <div className="modalActions"><button type="button" className="secondary" onClick={onClose}>Cancel</button><button className="primary" type="submit">{label}</button></div>; }
 function Empty({ text }: { text: string }) { return <div className="empty">{text}</div>; }
 
-function downloadExpenseTemplate() { const csv = "external_key,purchase_source,vendor,date,amount,category,personal,note\nAMAZON-ORDER-ID,Amazon Business,Amazon,2026-01-15,49.95,Office supplies,false,Printer paper\n"; const blob = new Blob([csv], { type: "text/csv;charset=utf-8" }); const url = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = url; anchor.download = "stockbot-expense-import-template.csv"; anchor.click(); URL.revokeObjectURL(url); }
+function downloadExpenseTemplate() { const csv = "external_key,purchase_source,vendor,asin,date,amount,category,personal,note\nAMAZON-ORDER-ID,Amazon Business,Amazon,B0TEST0001,2026-01-15,49.95,Office supplies,false,Printer paper\n"; const blob = new Blob([csv], { type: "text/csv;charset=utf-8" }); const url = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = url; anchor.download = "stockbot-expense-import-template.csv"; anchor.click(); URL.revokeObjectURL(url); }
 function downloadInvoiceTemplate() { const csv = "Invoice Number,Line Item ID,Invoice Date,Customer ID,Customer Name,Customer Email,Customer Phone,Shipping Address,Shipping City,Shipping State,Shipping ZIP,SKU,Product Name,Category,Quantity,Unit Price,Unit Cost,Line Sales Tax\nINV-1001,1,2025-01-15,CUST-42,Harbor Market,orders@harbormarket.example,555-0100,210 Market St,San Diego,CA,92101,CER-101,Speckled Ceramic Mug,Home,3,24.00,8.50,5.22\n"; const blob = new Blob([csv], { type: "text/csv;charset=utf-8" }); const url = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = url; anchor.download = "stockbot-historical-invoice-template.csv"; anchor.click(); URL.revokeObjectURL(url); }
 function exportState(state: AppState) { const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" }); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = `stockbot-backup-${dateOnly()}.json`; a.click(); URL.revokeObjectURL(url); }
 function importState(event: ChangeEvent<HTMLInputElement>, setState: React.Dispatch<React.SetStateAction<AppState>>) { const file = event.target.files?.[0]; if (!file) return; file.text().then((text) => { const parsed: unknown = JSON.parse(text); const normalized = normalizeState(parsed); if (!Array.isArray((parsed as Partial<AppState>)?.products) || !Array.isArray((parsed as Partial<AppState>)?.movements) || !Array.isArray((parsed as Partial<AppState>)?.expenses)) throw new Error(); if (confirm(`Import ${normalized.products.length} products and replace the current workspace?`)) setState(normalized); }).catch(() => alert("That file is not a valid StockBot backup.")); event.target.value = ""; }
@@ -1349,20 +1357,25 @@ function normalizeState(raw: unknown): AppState {
   const stateTaxes = { ...defaultStateTaxSettings(ownAddress.state), ...savedTaxes };
   if (legacyRate !== undefined && !incoming.settings?.stateTaxes) stateTaxes[ownAddress.state] = { enabled: true, rate: legacyRate };
   const seenExpenseKeys = new Set<string>();
-  const expenses = (Array.isArray(incoming.expenses) ? incoming.expenses : seed.expenses).map((expense, index): Expense => ({
-    id: expense.id || `legacy-expense-${index + 1}`,
-    externalKey: String(expense.externalKey || `legacy:${expense.id || index + 1}`).trim(),
-    purchaseSource: typeof expense.purchaseSource === "string" ? expense.purchaseSource.trim() : "",
-    vendor: String(expense.vendor || "Unknown vendor").trim(),
-    category: normalizeExpenseCategory(expense.category, customExpenseCategories.map((category) => category.name)),
-    amount: Number(expense.amount) || 0,
-    date: normalizeExpenseDate(expense.date) || dateOnly(),
-    note: String(expense.note || "").trim(),
-    personal: Boolean(expense.personal),
-    source: expense.source === "import" ? "import" : "manual",
-    importedAt: expense.importedAt,
-    fields: expense.fields && typeof expense.fields === "object" && !Array.isArray(expense.fields) ? Object.fromEntries(Object.entries(expense.fields).map(([key, value]) => [key, String(value ?? "")])) : undefined,
-  })).filter((expense) => {
+  const expenses = (Array.isArray(incoming.expenses) ? incoming.expenses : seed.expenses).map((expense, index): Expense => {
+    const fields = expense.fields && typeof expense.fields === "object" && !Array.isArray(expense.fields) ? Object.fromEntries(Object.entries(expense.fields).map(([key, value]) => [key, String(value ?? "")])) : undefined;
+    const importedAsin = fields ? Object.entries(fields).find(([key]) => key.trim().toLowerCase().replace(/[^a-z0-9]/g, "") === "asin")?.[1] : undefined;
+    return {
+      id: expense.id || `legacy-expense-${index + 1}`,
+      externalKey: String(expense.externalKey || `legacy:${expense.id || index + 1}`).trim(),
+      purchaseSource: typeof expense.purchaseSource === "string" ? expense.purchaseSource.trim() : "",
+      vendor: String(expense.vendor || "Unknown vendor").trim(),
+      asins: normalizeExpenseAsins(expense.asins?.length ? expense.asins : importedAsin),
+      category: normalizeExpenseCategory(expense.category, customExpenseCategories.map((category) => category.name)),
+      amount: Number(expense.amount) || 0,
+      date: normalizeExpenseDate(expense.date) || dateOnly(),
+      note: String(expense.note || "").trim(),
+      personal: Boolean(expense.personal),
+      source: expense.source === "import" ? "import" : "manual",
+      importedAt: expense.importedAt,
+      fields,
+    };
+  }).filter((expense) => {
     const key = normalizeExpenseKey(expense.externalKey);
     if (!key || seenExpenseKeys.has(key)) return false;
     seenExpenseKeys.add(key); return true;
@@ -1381,9 +1394,14 @@ function normalizeState(raw: unknown): AppState {
     : sourceMigratedColumnOrder;
   const orderWithoutTreatment = personalMigratedColumnOrder.filter((key) => key !== "categoryType" && key !== "accountingClass" && key !== "costTiming");
   const migratedCategoryColumnIndex = orderWithoutTreatment.indexOf("category");
-  const expenseColumnOrder = savedVersion < 15
+  const treatmentMigratedColumnOrder = savedVersion < 15
     ? [...orderWithoutTreatment.slice(0, migratedCategoryColumnIndex + 1), "accountingClass", "costTiming", ...orderWithoutTreatment.slice(migratedCategoryColumnIndex + 1)]
     : personalMigratedColumnOrder;
+  const orderWithoutAsin = treatmentMigratedColumnOrder.filter((key) => key !== "asin" && key !== expenseCsvColumnKey("ASIN"));
+  const asinColumnIndex = Math.max(0, orderWithoutAsin.indexOf("purchaseSource") + 1);
+  const expenseColumnOrder = savedVersion < 16
+    ? [...orderWithoutAsin.slice(0, asinColumnIndex), "asin", ...orderWithoutAsin.slice(asinColumnIndex)]
+    : treatmentMigratedColumnOrder;
   const expenseColumnKeys = new Set(expenseColumns.map((column) => column.key));
   const savedVisibleColumns = Array.isArray(incoming.settings?.expenseVisibleColumns) ? incoming.settings.expenseVisibleColumns.filter((key): key is string => typeof key === "string" && expenseColumnKeys.has(key)) : [];
   const sourceMigratedVisibleColumns = savedVersion < 10 && savedVisibleColumns.length && !savedVisibleColumns.includes("purchaseSource")
@@ -1393,9 +1411,14 @@ function normalizeState(raw: unknown): AppState {
     ? [...sourceMigratedVisibleColumns.slice(0, Math.max(0, sourceMigratedVisibleColumns.indexOf("category") + 1)), "personal", ...sourceMigratedVisibleColumns.slice(Math.max(0, sourceMigratedVisibleColumns.indexOf("category") + 1))]
     : sourceMigratedVisibleColumns;
   const visibleWithoutTreatment = personalMigratedVisibleColumns.filter((key) => key !== "categoryType" && key !== "accountingClass" && key !== "costTiming");
-  const migratedVisibleColumns = savedVersion < 15 && visibleWithoutTreatment.length
+  const treatmentMigratedVisibleColumns = savedVersion < 15 && visibleWithoutTreatment.length
     ? [...visibleWithoutTreatment.slice(0, Math.max(0, visibleWithoutTreatment.indexOf("category") + 1)), "accountingClass", "costTiming", ...visibleWithoutTreatment.slice(Math.max(0, visibleWithoutTreatment.indexOf("category") + 1))]
     : personalMigratedVisibleColumns;
+  const visibleWithoutAsin = treatmentMigratedVisibleColumns.filter((key) => key !== "asin" && key !== expenseCsvColumnKey("ASIN"));
+  const asinVisibleColumnIndex = Math.max(0, visibleWithoutAsin.indexOf("purchaseSource") + 1);
+  const migratedVisibleColumns = savedVersion < 16 && visibleWithoutAsin.length
+    ? [...visibleWithoutAsin.slice(0, asinVisibleColumnIndex), "asin", ...visibleWithoutAsin.slice(asinVisibleColumnIndex)]
+    : treatmentMigratedVisibleColumns;
   const products = (Array.isArray(incoming.products) ? incoming.products : seed.products).map((product) => ({ ...product, vendor: typeof product.vendor === "string" ? product.vendor.trim() : "" }));
   const seenCustomerKeys = new Set<string>();
   const customers = (Array.isArray(incoming.customers) ? incoming.customers : []).map((customer, index): Customer => {
@@ -1432,7 +1455,7 @@ function normalizeState(raw: unknown): AppState {
     seenMovementSourceKeys.add(key); return true;
   });
   return {
-    version: 15,
+    version: 16,
     products,
     movements,
     expenses,
