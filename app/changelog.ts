@@ -13,6 +13,22 @@ export type ChangelogRelease = {
 
 export const changelogReleases: readonly ChangelogRelease[] = [
   {
+    version: "0.32.0",
+    date: "July 28, 2026",
+    title: "Sticky ASIN links",
+    summary: "Every ASIN in an order remains selectable inside an interactive hover card.",
+    sections: [
+      {
+        title: "Changed",
+        items: [
+          "Replaced the native ASIN title tooltip with an interactive card containing every ASIN in the order.",
+          "Kept the card open while hovering it or focusing its links so any ASIN remains selectable.",
+          "Added keyboard-accessible Amazon links inside the ASIN card.",
+        ],
+      },
+    ],
+  },
+  {
     version: "0.31.0",
     date: "July 28, 2026",
     title: "Linked ASINs",

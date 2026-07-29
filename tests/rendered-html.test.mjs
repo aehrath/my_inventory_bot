@@ -209,6 +209,11 @@ test("tracks imported ASINs as a visible sortable expense field", async () => {
   assert.match(page, /target="_blank"/);
   assert.match(page, /Open Amazon product \$\{asin\}/);
   assert.match(styles, /\.asinLinks a/);
+  assert.match(page, /className="asinTooltip" role="group" aria-label="ASIN links for this order"/);
+  assert.match(page, /ASINs in this order/);
+  assert.match(page, /Open Amazon product \$\{asin\} from tooltip/);
+  assert.match(styles, /\.asinLinks:hover>\.asinTooltip,.asinLinks:focus-within>\.asinTooltip\{display:block\}/);
+  assert.match(styles, /\.asinTooltipList a/);
   assert.match(page, /savedVersion < 16/);
   assert.match(expenseImport, /asins: string\[\]/);
   assert.match(expenseImport, /normalizeExpenseAsins/);

@@ -999,7 +999,10 @@ function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppS
     if (column.key === "purchaseSource") return <span className="expenseCell"><strong>{expense.purchaseSource || "Unassigned"}</strong></span>;
     if (column.key === "asin") {
       const value = expense.asins.join(", ");
-      return <span className="expenseCell asinLinks" title={value || undefined}>{expense.asins.length ? expense.asins.map((asin, index) => <span key={asin}>{index ? ", " : ""}<a href={`https://www.amazon.com/dp/${asin}`} target="_blank" rel="noreferrer" aria-label={`Open Amazon product ${asin}`} onClick={(event) => event.stopPropagation()}>{asin}</a></span>) : "—"}</span>;
+      return <span className="expenseCell asinLinks" aria-label={value ? `ASINs ${value}` : "No ASIN"}>
+        <span className="asinInline">{expense.asins.length ? expense.asins.map((asin, index) => <span key={asin}>{index ? ", " : ""}<a href={`https://www.amazon.com/dp/${asin}`} target="_blank" rel="noreferrer" aria-label={`Open Amazon product ${asin}`} onClick={(event) => event.stopPropagation()}>{asin}</a></span>) : "—"}</span>
+        {expense.asins.length > 0 && <span className="asinTooltip" role="group" aria-label="ASIN links for this order" onClick={(event) => event.stopPropagation()}><strong>ASINs in this order</strong><span className="asinTooltipList">{expense.asins.map((asin) => <a href={`https://www.amazon.com/dp/${asin}`} target="_blank" rel="noreferrer" aria-label={`Open Amazon product ${asin} from tooltip`} key={asin}>{asin}</a>)}</span></span>}
+      </span>;
     }
     if (column.key === "note") return <span className="expenseCell note" title={expense.note}>{expense.note || (expense.source === "import" ? "Imported record" : "Manual record")}</span>;
     if (column.key === "category") return <span className="expenseCell category"><select className="expenseCategorySelect" aria-label={`Category for ${expense.externalKey}`} value={expense.category} onClick={(event) => event.stopPropagation()} onChange={(event) => {

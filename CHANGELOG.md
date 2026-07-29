@@ -4,6 +4,14 @@ All notable changes to StockBot are documented here.
 
 ## Unreleased
 
+## 0.32.0 - 2026-07-28
+
+### Changed
+
+- Replaced the native ASIN title tooltip with an interactive hover card containing every ASIN in the order.
+- Kept the card open while hovering it or focusing its links so any ASIN remains selectable.
+- Added keyboard-accessible Amazon links inside the ASIN hover card.
+
 ## 0.31.0 - 2026-07-28
 
 ### Changed
