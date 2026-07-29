@@ -13,6 +13,30 @@ export type ChangelogRelease = {
 
 export const changelogReleases: readonly ChangelogRelease[] = [
   {
+    version: "0.27.0",
+    date: "July 28, 2026",
+    title: "Category editor",
+    summary: "Expense categories now have one visible workspace for creation, accounting setup, renaming, and safe removal.",
+    sections: [
+      {
+        title: "Added",
+        items: [
+          "Added an Edit categories control to the Expenses summary and a dedicated editor for every built-in and custom category.",
+          "Added persistent accounting-type overrides for built-in categories with their original defaults clearly identified.",
+          "Added custom-category rename and delete actions with usage counts.",
+        ],
+      },
+      {
+        title: "Changed",
+        items: [
+          "Moved new-category creation into the editor so category administration lives in one place.",
+          "Deleting a used custom category now reassigns its expense records to a safe built-in category with the same accounting purpose.",
+          "Built-in names remain protected so imported categories continue to map consistently.",
+        ],
+      },
+    ],
+  },
+  {
     version: "0.26.0",
     date: "July 28, 2026",
     title: "One COGS workspace",

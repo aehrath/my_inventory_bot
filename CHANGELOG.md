@@ -4,6 +4,20 @@ All notable changes to StockBot are documented here.
 
 ## Unreleased
 
+## 0.27.0 - 2026-07-28
+
+### Added
+
+- Added an **Edit categories** control to Expenses and a dedicated editor for every built-in and custom expense category.
+- Added persistent accounting-type overrides for built-in categories with their original defaults clearly labeled.
+- Added custom-category rename and delete actions with live usage counts.
+
+### Changed
+
+- Moved new-category creation into the category editor so category administration lives in one place.
+- Deleting a used custom category now reassigns its expense records to a safe built-in category with the same accounting purpose.
+- Built-in names remain protected so expense imports continue to map consistently.
+
 ## 0.26.0 - 2026-07-28
 
 ### Added

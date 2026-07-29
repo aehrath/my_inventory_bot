@@ -107,7 +107,7 @@ test("includes item-level COGS and final-product tracking", async () => {
   assert.match(page, /href=\{`#product-\$\{linkedProduct\.id\}`\}/);
   assert.match(page, /onOpenProduct\(linkedProduct\)/);
   assert.match(page, /linkedFinalProductFor/);
-  assert.match(page, /version: 13/);
+  assert.match(page, /version: 14/);
   assert.match(styles, /\.cogsHead,.cogsRow/);
   assert.match(styles, /\.cogsProductLink/);
   assert.match(styles, /activityTag\.production_use/);
@@ -291,11 +291,20 @@ test("creates persistent typed expense categories for every category dropdown", 
     read("app/globals.css"),
   ]);
   assert.match(page, /customExpenseCategories: CustomExpenseCategory\[\]/);
+  assert.match(page, /expenseCategoryTypeOverrides: Record<string, ExpenseCategoryType>/);
   assert.match(page, /const normalizeCustomExpenseCategories/);
+  assert.match(page, /const normalizeExpenseCategoryTypeOverrides/);
   assert.match(page, /const expenseCategoryDefinitionsFor/);
   assert.match(page, /const expenseCategoriesFor/);
   assert.match(page, /const expenseCategoryTypeFor/);
   assert.match(page, /const createExpenseCategory = \(event: FormEvent\)/);
+  assert.match(page, /const updateExpenseCategoryType =/);
+  assert.match(page, /const renameExpenseCategory =/);
+  assert.match(page, /const deleteExpenseCategory =/);
+  assert.match(page, />Edit categories<\/button>/);
+  assert.match(page, /title="Edit expense categories"/);
+  assert.match(page, /Built-in category names stay fixed/);
+  assert.match(page, /expense\.category === name \? \{ \.\.\.expense, category: fallback \}/);
   assert.match(page, /aria-label="New expense category"/);
   assert.match(page, /aria-label="New expense category type"/);
   assert.match(page, /customExpenseCategories: \[\.\.\.current\.settings\.customExpenseCategories, \{ name: category, type: newExpenseCategoryType \}\]/);
@@ -309,6 +318,7 @@ test("creates persistent typed expense categories for every category dropdown", 
   assert.match(expenseImport, /expenseCategoryTypes = \["Inventory", "COGS", "Operating expense", "Taxes & fees"\]/);
   assert.match(expenseImport, /normalizeExpenseCategory\(valueFor\(record, aliases\.category\), customCategories\)/);
   assert.match(styles, /\.expenseCategoryCreator/);
+  assert.match(styles, /\.categoryEditorRow/);
   assert.match(styles, /\.categoryTypeBadge/);
 });
 
