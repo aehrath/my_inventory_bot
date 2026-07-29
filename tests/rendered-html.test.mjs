@@ -195,14 +195,20 @@ test("tracks sortable and filterable purchase sources", async () => {
 });
 
 test("tracks imported ASINs as a visible sortable expense field", async () => {
-  const [page, expenseImport] = await Promise.all([
+  const [page, expenseImport, styles] = await Promise.all([
     read("app/page.tsx"),
     read("app/expense-import.ts"),
+    read("app/globals.css"),
   ]);
-  assert.match(page, /key: "asin", label: "ASIN"/);
+  assert.match(page, /key: "asin", label: "ASIN\(s\)"/);
   assert.match(page, /expenseSort\.key === "asin"/);
   assert.match(page, /expense\.asins\.join/);
   assert.match(page, /ASIN \$\{expense\.asins/);
+  assert.match(page, /expense\.asins\.join\(", "\)/);
+  assert.match(page, /https:\/\/www\.amazon\.com\/dp\/\$\{asin\}/);
+  assert.match(page, /target="_blank"/);
+  assert.match(page, /Open Amazon product \$\{asin\}/);
+  assert.match(styles, /\.asinLinks a/);
   assert.match(page, /savedVersion < 16/);
   assert.match(expenseImport, /asins: string\[\]/);
   assert.match(expenseImport, /normalizeExpenseAsins/);

@@ -62,7 +62,7 @@ const expenseBaseColumns: ExpenseColumnDefinition[] = [
   { key: "date", label: "Date", width: "130px" },
   { key: "vendor", label: "Vendor", width: "190px" },
   { key: "purchaseSource", label: "Purchase source", width: "180px" },
-  { key: "asin", label: "ASIN", width: "205px" },
+  { key: "asin", label: "ASIN(s)", width: "190px" },
   { key: "note", label: "Description", width: "340px" },
   { key: "category", label: "Category", width: "175px" },
   { key: "accountingClass", label: "Accounting class", width: "155px" },
@@ -998,8 +998,8 @@ function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppS
     if (column.key === "vendor") return <span className="expenseCell"><strong>{expense.vendor}</strong></span>;
     if (column.key === "purchaseSource") return <span className="expenseCell"><strong>{expense.purchaseSource || "Unassigned"}</strong></span>;
     if (column.key === "asin") {
-      const value = expense.asins.join(" · ");
-      return <span className="expenseCell" title={value || undefined}><code>{value || "—"}</code></span>;
+      const value = expense.asins.join(", ");
+      return <span className="expenseCell asinLinks" title={value || undefined}>{expense.asins.length ? expense.asins.map((asin, index) => <span key={asin}>{index ? ", " : ""}<a href={`https://www.amazon.com/dp/${asin}`} target="_blank" rel="noreferrer" aria-label={`Open Amazon product ${asin}`} onClick={(event) => event.stopPropagation()}>{asin}</a></span>) : "—"}</span>;
     }
     if (column.key === "note") return <span className="expenseCell note" title={expense.note}>{expense.note || (expense.source === "import" ? "Imported record" : "Manual record")}</span>;
     if (column.key === "category") return <span className="expenseCell category"><select className="expenseCategorySelect" aria-label={`Category for ${expense.externalKey}`} value={expense.category} onClick={(event) => event.stopPropagation()} onChange={(event) => {

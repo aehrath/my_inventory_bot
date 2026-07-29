@@ -4,6 +4,14 @@ All notable changes to StockBot are documented here.
 
 ## Unreleased
 
+## 0.31.0 - 2026-07-28
+
+### Changed
+
+- Renamed the expense-ledger header to **ASIN(s)**.
+- Displayed multiple ASINs as a compact comma-separated list.
+- Made every ASIN a direct link to its Amazon product page.
+
 ## 0.30.0 - 2026-07-28
 
 ### Added

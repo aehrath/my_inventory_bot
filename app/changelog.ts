@@ -13,6 +13,22 @@ export type ChangelogRelease = {
 
 export const changelogReleases: readonly ChangelogRelease[] = [
   {
+    version: "0.31.0",
+    date: "July 28, 2026",
+    title: "Linked ASINs",
+    summary: "ASINs take less ledger space and open their Amazon product pages directly.",
+    sections: [
+      {
+        title: "Changed",
+        items: [
+          "Renamed the expense-ledger header to ASIN(s).",
+          "Displayed multiple ASINs as a compact comma-separated list.",
+          "Made every ASIN a direct link to its Amazon product page.",
+        ],
+      },
+    ],
+  },
+  {
     version: "0.30.0",
     date: "July 28, 2026",
     title: "ASIN tracking",
