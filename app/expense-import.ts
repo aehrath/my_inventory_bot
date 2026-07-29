@@ -1,25 +1,31 @@
-export const expenseCategoryTypes = ["Inventory", "COGS", "Operating expense", "Taxes & fees"] as const;
-export type ExpenseCategoryType = typeof expenseCategoryTypes[number];
-export type ExpenseCategoryDefinition = { name: string; type: ExpenseCategoryType };
+export const expenseAccountingClasses = ["Product cost", "Operating expense", "Taxes & fees"] as const;
+export type ExpenseAccountingClass = typeof expenseAccountingClasses[number];
+export const expenseCostTimings = ["Track in inventory", "Recognize directly as COGS"] as const;
+export type ExpenseCostTiming = typeof expenseCostTimings[number];
+export type ExpenseCategoryDefinition = {
+  name: string;
+  accountingClass: ExpenseAccountingClass;
+  costTiming?: ExpenseCostTiming;
+};
 
 export const expenseCategoryDefinitions: readonly ExpenseCategoryDefinition[] = [
-  { name: "Cost of goods", type: "COGS" },
-  { name: "Raw materials", type: "Inventory" },
-  { name: "Resale item", type: "Inventory" },
-  { name: "Utilities", type: "Operating expense" },
-  { name: "Rent", type: "Operating expense" },
-  { name: "Office equipment", type: "Operating expense" },
-  { name: "Office supplies", type: "Operating expense" },
-  { name: "Advertising & marketing", type: "Operating expense" },
-  { name: "Shipping & postage", type: "Operating expense" },
-  { name: "Insurance", type: "Operating expense" },
-  { name: "Professional services", type: "Operating expense" },
-  { name: "Repairs & maintenance", type: "Operating expense" },
-  { name: "Travel", type: "Operating expense" },
-  { name: "Meals", type: "Operating expense" },
-  { name: "Taxes & licenses", type: "Taxes & fees" },
-  { name: "Bank & processing fees", type: "Taxes & fees" },
-  { name: "Other", type: "Operating expense" },
+  { name: "Cost of goods", accountingClass: "Product cost", costTiming: "Recognize directly as COGS" },
+  { name: "Raw materials", accountingClass: "Product cost", costTiming: "Track in inventory" },
+  { name: "Resale item", accountingClass: "Product cost", costTiming: "Track in inventory" },
+  { name: "Utilities", accountingClass: "Operating expense" },
+  { name: "Rent", accountingClass: "Operating expense" },
+  { name: "Office equipment", accountingClass: "Operating expense" },
+  { name: "Office supplies", accountingClass: "Operating expense" },
+  { name: "Advertising & marketing", accountingClass: "Operating expense" },
+  { name: "Shipping & postage", accountingClass: "Operating expense" },
+  { name: "Insurance", accountingClass: "Operating expense" },
+  { name: "Professional services", accountingClass: "Operating expense" },
+  { name: "Repairs & maintenance", accountingClass: "Operating expense" },
+  { name: "Travel", accountingClass: "Operating expense" },
+  { name: "Meals", accountingClass: "Operating expense" },
+  { name: "Taxes & licenses", accountingClass: "Taxes & fees" },
+  { name: "Bank & processing fees", accountingClass: "Taxes & fees" },
+  { name: "Other", accountingClass: "Operating expense" },
 ] as const;
 
 export const expenseCategories = expenseCategoryDefinitions.map((category) => category.name);

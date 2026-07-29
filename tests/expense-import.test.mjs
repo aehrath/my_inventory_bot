@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { amazonBusinessCsvColumns, expenseCategories, expenseCategoryDefinitions, expenseCategoryTypes, normalizeExpenseCategory, parseExpenseImportText } from "../app/expense-import.ts";
+import { amazonBusinessCsvColumns, expenseAccountingClasses, expenseCategories, expenseCategoryDefinitions, expenseCostTimings, normalizeExpenseCategory, parseExpenseImportText } from "../app/expense-import.ts";
 
 const fixture = new URL("./fixtures/amazon-business-orders.csv", import.meta.url);
 
@@ -78,13 +78,14 @@ test("includes inventory categories and normalizes their common labels", () => {
   assert.equal(normalizeExpenseCategory("resale inventory"), "Resale item");
 });
 
-test("assigns practical accounting types to every built-in expense category", () => {
-  assert.deepEqual(expenseCategoryTypes, ["Inventory", "COGS", "Operating expense", "Taxes & fees"]);
+test("separates accounting class from product-cost timing", () => {
+  assert.deepEqual(expenseAccountingClasses, ["Product cost", "Operating expense", "Taxes & fees"]);
+  assert.deepEqual(expenseCostTimings, ["Track in inventory", "Recognize directly as COGS"]);
   assert.equal(expenseCategoryDefinitions.length, expenseCategories.length);
-  assert.deepEqual(expenseCategoryDefinitions.find((category) => category.name === "Raw materials"), { name: "Raw materials", type: "Inventory" });
-  assert.deepEqual(expenseCategoryDefinitions.find((category) => category.name === "Cost of goods"), { name: "Cost of goods", type: "COGS" });
-  assert.deepEqual(expenseCategoryDefinitions.find((category) => category.name === "Utilities"), { name: "Utilities", type: "Operating expense" });
-  assert.deepEqual(expenseCategoryDefinitions.find((category) => category.name === "Taxes & licenses"), { name: "Taxes & licenses", type: "Taxes & fees" });
+  assert.deepEqual(expenseCategoryDefinitions.find((category) => category.name === "Raw materials"), { name: "Raw materials", accountingClass: "Product cost", costTiming: "Track in inventory" });
+  assert.deepEqual(expenseCategoryDefinitions.find((category) => category.name === "Cost of goods"), { name: "Cost of goods", accountingClass: "Product cost", costTiming: "Recognize directly as COGS" });
+  assert.deepEqual(expenseCategoryDefinitions.find((category) => category.name === "Utilities"), { name: "Utilities", accountingClass: "Operating expense" });
+  assert.deepEqual(expenseCategoryDefinitions.find((category) => category.name === "Taxes & licenses"), { name: "Taxes & licenses", accountingClass: "Taxes & fees" });
 });
 
 test("preserves configured custom categories during expense import", () => {

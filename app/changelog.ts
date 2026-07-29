@@ -13,6 +13,29 @@ export type ChangelogRelease = {
 
 export const changelogReleases: readonly ChangelogRelease[] = [
   {
+    version: "0.28.0",
+    date: "July 28, 2026",
+    title: "Product-cost lifecycle",
+    summary: "Inventory and COGS now appear as stages of a product cost instead of competing category types.",
+    sections: [
+      {
+        title: "Changed",
+        items: [
+          "Replaced the Inventory and COGS accounting types with a shared Product cost accounting class.",
+          "Added separate cost timing for product costs: Track in inventory or Recognize directly as COGS.",
+          "Updated the COGS workspace, expense totals, filters, sortable columns, manual entry, and category summaries to follow the two-part treatment.",
+        ],
+      },
+      {
+        title: "Added",
+        items: [
+          "Added independent Accounting class and Cost timing controls to the category editor.",
+          "Added automatic migration from every saved Inventory or COGS category and built-in override without changing its accounting result.",
+        ],
+      },
+    ],
+  },
+  {
     version: "0.27.0",
     date: "July 28, 2026",
     title: "Category editor",

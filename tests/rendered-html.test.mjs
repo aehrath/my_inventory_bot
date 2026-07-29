@@ -107,7 +107,7 @@ test("includes item-level COGS and final-product tracking", async () => {
   assert.match(page, /href=\{`#product-\$\{linkedProduct\.id\}`\}/);
   assert.match(page, /onOpenProduct\(linkedProduct\)/);
   assert.match(page, /linkedFinalProductFor/);
-  assert.match(page, /version: 14/);
+  assert.match(page, /version: 15/);
   assert.match(styles, /\.cogsHead,.cogsRow/);
   assert.match(styles, /\.cogsProductLink/);
   assert.match(styles, /activityTag\.production_use/);
@@ -211,16 +211,16 @@ test("combines purchased inventory and recognized costs in the COGS workspace", 
   assert.doesNotMatch(page, /\{ id: "purchaseInventory"/);
   assert.match(page, /function PurchasedInventorySection/);
   assert.match(page, /<PurchasedInventorySection state=\{state\}/);
-  assert.match(page, /expenseCategoryTypeFor\(expense\.category, state\.settings\) === "Inventory"/);
-  assert.match(page, /expenseCategoryTypeFor\(expense\.category, state\.settings\) === "COGS"/);
+  assert.match(page, /isTrackedInventoryCategory\(expense\.category, state\.settings\)/);
+  assert.match(page, /isDirectCogsCategory\(expense\.category, state\.settings\)/);
   assert.match(page, /parseExpenseInventoryDescription\(expense\.note, expense\.amount\)/);
   assert.match(page, /Inventory waiting to become COGS/);
-  assert.match(page, /Not deducted until it becomes COGS/);
+  assert.match(page, /Product costs waiting to become COGS/);
   assert.match(page, /className="expenseCategorySelect"/);
   assert.match(page, /Category for \$\{expense\.externalKey\}/);
   assert.match(page, /targetIds\.has\(item\.id\) \? \{ \.\.\.item, category \} : item/);
-  assert.match(expenseImport, /\{ name: "Raw materials", type: "Inventory" \}/);
-  assert.match(expenseImport, /\{ name: "Resale item", type: "Inventory" \}/);
+  assert.match(expenseImport, /\{ name: "Raw materials", accountingClass: "Product cost", costTiming: "Track in inventory" \}/);
+  assert.match(expenseImport, /\{ name: "Resale item", accountingClass: "Product cost", costTiming: "Track in inventory" \}/);
   assert.match(inventory, /totalCost \/ quantity/);
   assert.match(styles, /\.purchaseInventoryHead/);
   assert.match(styles, /\.expenseCategorySelect/);
@@ -274,7 +274,7 @@ test("keeps personal expenses visible but out of business calculations", async (
   assert.match(page, /Expense business or personal use/);
   assert.match(page, /expenseSort\.key === "personal"/);
   assert.match(page, /!e\.personal && new Date/);
-  assert.match(page, /!expense\.personal && expenseCategoryTypeFor/);
+  assert.match(page, /!expense\.personal && isTrackedInventoryCategory/);
   assert.match(page, /const businessExpenses = selectedExpenses\.filter\(\(expense\) => !expense\.personal\)/);
   assert.match(page, /Personal expense \$\{expense\.externalKey\}/);
   assert.match(page, /targetIds\.has\(item\.id\) \? \{ \.\.\.item, personal \} : item/);
@@ -284,42 +284,57 @@ test("keeps personal expenses visible but out of business calculations", async (
   assert.match(styles, /\.expensePersonalToggle/);
 });
 
-test("creates persistent typed expense categories for every category dropdown", async () => {
+test("separates persistent expense accounting class from product-cost timing", async () => {
   const [page, expenseImport, styles] = await Promise.all([
     read("app/page.tsx"),
     read("app/expense-import.ts"),
     read("app/globals.css"),
   ]);
   assert.match(page, /customExpenseCategories: CustomExpenseCategory\[\]/);
-  assert.match(page, /expenseCategoryTypeOverrides: Record<string, ExpenseCategoryType>/);
+  assert.match(page, /expenseCategoryOverrides: Record<string, ExpenseCategoryTreatment>/);
   assert.match(page, /const normalizeCustomExpenseCategories/);
-  assert.match(page, /const normalizeExpenseCategoryTypeOverrides/);
+  assert.match(page, /const normalizeExpenseCategoryOverrides/);
   assert.match(page, /const expenseCategoryDefinitionsFor/);
   assert.match(page, /const expenseCategoriesFor/);
-  assert.match(page, /const expenseCategoryTypeFor/);
+  assert.match(page, /const expenseAccountingClassFor/);
+  assert.match(page, /const expenseCostTimingFor/);
+  assert.match(page, /const isTrackedInventoryCategory/);
+  assert.match(page, /const isDirectCogsCategory/);
+  assert.match(page, /if \(type === "Inventory"\) return \{ accountingClass: "Product cost", costTiming: "Track in inventory" \}/);
+  assert.match(page, /if \(type === "COGS"\) return \{ accountingClass: "Product cost", costTiming: "Recognize directly as COGS" \}/);
+  assert.match(page, /normalizeExpenseCategoryOverrides\(incoming\.settings\?\.expenseCategoryOverrides, incoming\.settings\?\.expenseCategoryTypeOverrides\)/);
+  assert.match(page, /savedVersion < 15/);
   assert.match(page, /const createExpenseCategory = \(event: FormEvent\)/);
-  assert.match(page, /const updateExpenseCategoryType =/);
+  assert.match(page, /const updateExpenseCategoryTreatment =/);
+  assert.match(page, /const updateExpenseAccountingClass =/);
+  assert.match(page, /const updateExpenseCostTiming =/);
   assert.match(page, /const renameExpenseCategory =/);
   assert.match(page, /const deleteExpenseCategory =/);
   assert.match(page, />Edit categories<\/button>/);
   assert.match(page, /title="Edit expense categories"/);
-  assert.match(page, /Built-in category names stay fixed/);
+  assert.match(page, /Built-in names stay fixed/);
   assert.match(page, /expense\.category === name \? \{ \.\.\.expense, category: fallback \}/);
   assert.match(page, /aria-label="New expense category"/);
-  assert.match(page, /aria-label="New expense category type"/);
-  assert.match(page, /customExpenseCategories: \[\.\.\.current\.settings\.customExpenseCategories, \{ name: category, type: newExpenseCategoryType \}\]/);
+  assert.match(page, /aria-label="New expense accounting class"/);
+  assert.match(page, /aria-label="New expense cost timing"/);
+  assert.match(page, /customExpenseCategories: \[\.\.\.current\.settings\.customExpenseCategories, \{ name: category, \.\.\.treatment \}\]/);
   assert.match(page, /availableExpenseCategories\.map\(\(category\) => <option/);
   assert.match(page, /<ExpenseModal categories=\{expenseCategoryDefinitionsFor\(state\.settings\)\}/);
   assert.match(page, /normalizeExpenseCategory\(expense\.category, customExpenseCategories\.map/);
-  assert.match(page, /key: "categoryType", label: "Category type"/);
-  assert.match(page, /expenseSort\.key === "categoryType"/);
-  assert.match(page, /aria-label="Expense category type"/);
+  assert.match(page, /key: "accountingClass", label: "Accounting class"/);
+  assert.match(page, /key: "costTiming", label: "Cost timing"/);
+  assert.match(page, /expenseSort\.key === "accountingClass"/);
+  assert.match(page, /expenseSort\.key === "costTiming"/);
+  assert.match(page, /aria-label="Expense accounting class"/);
+  assert.match(page, /aria-label="Expense cost timing"/);
   assert.match(expenseImport, /customCategories: readonly string\[\] = \[\]/);
-  assert.match(expenseImport, /expenseCategoryTypes = \["Inventory", "COGS", "Operating expense", "Taxes & fees"\]/);
+  assert.match(expenseImport, /expenseAccountingClasses = \["Product cost", "Operating expense", "Taxes & fees"\]/);
+  assert.match(expenseImport, /expenseCostTimings = \["Track in inventory", "Recognize directly as COGS"\]/);
   assert.match(expenseImport, /normalizeExpenseCategory\(valueFor\(record, aliases\.category\), customCategories\)/);
   assert.match(styles, /\.expenseCategoryCreator/);
   assert.match(styles, /\.categoryEditorRow/);
-  assert.match(styles, /\.categoryTypeBadge/);
+  assert.match(styles, /\.accountingClassBadge/);
+  assert.match(styles, /\.costTimingBadge/);
 });
 
 test("imports historical invoices into duplicate-safe sales and customers", async () => {

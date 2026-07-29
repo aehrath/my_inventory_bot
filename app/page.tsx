@@ -3,8 +3,8 @@
 
 import { ChangeEvent, CSSProperties, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { changelogReleases } from "./changelog";
-import { amazonBusinessCsvColumns, expenseCategories, expenseCategoryDefinitions, expenseCategoryTypes, normalizeExpenseCategory, normalizeExpenseDate, normalizeExpenseKey, parseExpenseImportText } from "./expense-import";
-import type { ExpenseCategory, ExpenseCategoryDefinition, ExpenseCategoryType, ExpenseImportPreview } from "./expense-import";
+import { amazonBusinessCsvColumns, expenseAccountingClasses, expenseCategories, expenseCategoryDefinitions, expenseCostTimings, normalizeExpenseCategory, normalizeExpenseDate, normalizeExpenseKey, parseExpenseImportText } from "./expense-import";
+import type { ExpenseAccountingClass, ExpenseCategory, ExpenseCategoryDefinition, ExpenseCostTiming, ExpenseImportPreview } from "./expense-import";
 import { parseExpenseInventoryDescription } from "./expense-inventory";
 import { normalizeCustomerKey, normalizeInvoiceKey, normalizeProductIdentifier, parseInvoiceImportText } from "./invoice-import";
 import type { InvoiceImportPreview } from "./invoice-import";
@@ -35,8 +35,9 @@ type LocalTaxRule = { id: string; name: string; state: string; city: string; pos
 type AddressTaxRate = TaxRateLookup & { addressKey: string; checkedAt: string };
 type TaxUpdateAudit = { id: string; checkedAt: string; appliedAt: string | null; checkedAddresses: number; availableUpdates: number; appliedUpdates: number; status: "checked" | "applied"; sources: string[] };
 type CustomExpenseCategory = ExpenseCategoryDefinition;
-type Settings = { businessName: string; taxYear: number; beginningInventory: number; ownAddress: Address; stateTaxes: Record<string, StateTaxSetting>; localTaxRules: LocalTaxRule[]; addressTaxRates: AddressTaxRate[]; taxUpdateHistory: TaxUpdateAudit[]; customExpenseCategories: CustomExpenseCategory[]; expenseCategoryTypeOverrides: Record<string, ExpenseCategoryType>; expenseColumnOrder: string[]; expenseVisibleColumns: string[] };
-type AppState = { version: 14; products: Product[]; movements: Movement[]; expenses: Expense[]; customers: Customer[]; settings: Settings };
+type ExpenseCategoryTreatment = Omit<ExpenseCategoryDefinition, "name">;
+type Settings = { businessName: string; taxYear: number; beginningInventory: number; ownAddress: Address; stateTaxes: Record<string, StateTaxSetting>; localTaxRules: LocalTaxRule[]; addressTaxRates: AddressTaxRate[]; taxUpdateHistory: TaxUpdateAudit[]; customExpenseCategories: CustomExpenseCategory[]; expenseCategoryOverrides: Record<string, ExpenseCategoryTreatment>; expenseColumnOrder: string[]; expenseVisibleColumns: string[] };
+type AppState = { version: 15; products: Product[]; movements: Movement[]; expenses: Expense[]; customers: Customer[]; settings: Settings };
 type Metrics = { inventoryValue: number; units: number; revenue: number; inventoryCogs: number; additionalCogs: number; cogs: number; salesTax: number; stateSalesTax: number; localSalesTax: number; useTax: number; stateUseTax: number; localUseTax: number; expenses: number; expenseRecordsTotal: number; purchases: number; grossProfit: number; taxableIncome: number };
 type ExpenseColumnDefinition = { key: string; label: string; width: string; field?: string };
 type SortDirection = "asc" | "desc";
@@ -63,7 +64,8 @@ const expenseBaseColumns: ExpenseColumnDefinition[] = [
   { key: "purchaseSource", label: "Purchase source", width: "180px" },
   { key: "note", label: "Description", width: "340px" },
   { key: "category", label: "Category", width: "175px" },
-  { key: "categoryType", label: "Category type", width: "155px" },
+  { key: "accountingClass", label: "Accounting class", width: "155px" },
+  { key: "costTiming", label: "Cost timing", width: "190px" },
   { key: "personal", label: "Personal", width: "105px" },
   { key: "externalKey", label: "Unique key", width: "195px" },
   { key: "amount", label: "Amount", width: "125px" },
@@ -77,7 +79,7 @@ const expenseCsvColumnDefinition = (label: string): ExpenseColumnDefinition => (
 });
 const defaultExpenseColumnDefinitions = [...expenseBaseColumns, ...amazonBusinessCsvColumns.map(expenseCsvColumnDefinition)];
 const defaultExpenseColumnOrder = defaultExpenseColumnDefinitions.map((column) => column.key);
-const defaultExpenseVisibleColumns = ["date", "vendor", "purchaseSource", "note", "category", "categoryType", "personal", "externalKey", "amount"];
+const defaultExpenseVisibleColumns = ["date", "vendor", "purchaseSource", "note", "category", "accountingClass", "costTiming", "personal", "externalKey", "amount"];
 const expenseColumnDefinitionsFor = (expenses: Expense[]) => {
   const knownFields = new Set(amazonBusinessCsvColumns);
   const dynamicFields = Array.from(new Set(expenses.flatMap((expense) => Object.keys(expense.fields ?? {})))).filter((field) => !knownFields.has(field as typeof amazonBusinessCsvColumns[number]));
@@ -88,6 +90,31 @@ const mergeExpenseColumnOrder = (saved: string[], definitions: ExpenseColumnDefi
   const valid = saved.filter((key) => available.has(key));
   return [...valid, ...definitions.map((column) => column.key).filter((key) => !valid.includes(key))];
 };
+type LegacyExpenseCategoryType = "Inventory" | "COGS" | "Operating expense" | "Taxes & fees";
+const treatmentFromLegacyType = (value: unknown): ExpenseCategoryTreatment | undefined => {
+  const type = String(value) as LegacyExpenseCategoryType;
+  if (type === "Inventory") return { accountingClass: "Product cost", costTiming: "Track in inventory" };
+  if (type === "COGS") return { accountingClass: "Product cost", costTiming: "Recognize directly as COGS" };
+  if (type === "Operating expense") return { accountingClass: "Operating expense" };
+  if (type === "Taxes & fees") return { accountingClass: "Taxes & fees" };
+  return undefined;
+};
+const normalizeExpenseCategoryTreatment = (value: unknown, fallback: ExpenseCategoryTreatment = { accountingClass: "Operating expense" }): ExpenseCategoryTreatment => {
+  const record = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  const legacy = treatmentFromLegacyType(typeof value === "string" ? value : record.type);
+  const rawClass = String(record.accountingClass ?? "");
+  const accountingClass = expenseAccountingClasses.includes(rawClass as ExpenseAccountingClass)
+    ? rawClass as ExpenseAccountingClass
+    : legacy?.accountingClass ?? fallback.accountingClass;
+  if (accountingClass !== "Product cost") return { accountingClass };
+  const rawTiming = String(record.costTiming ?? "");
+  const costTiming = expenseCostTimings.includes(rawTiming as ExpenseCostTiming)
+    ? rawTiming as ExpenseCostTiming
+    : legacy?.costTiming ?? (fallback.accountingClass === "Product cost" ? fallback.costTiming : undefined) ?? "Track in inventory";
+  return { accountingClass, costTiming };
+};
+const sameExpenseCategoryTreatment = (left: ExpenseCategoryTreatment, right: ExpenseCategoryTreatment) =>
+  left.accountingClass === right.accountingClass && left.costTiming === right.costTiming;
 const normalizeCustomExpenseCategories = (value: unknown) => {
   if (!Array.isArray(value)) return [];
   const builtIns = new Set<string>(expenseCategories.map((category) => category.toLowerCase()));
@@ -98,40 +125,46 @@ const normalizeCustomExpenseCategories = (value: unknown) => {
       : category && typeof category === "object" && "name" in category
         ? String(category.name)
         : "";
-    const rawType = category && typeof category === "object" && "type" in category ? String(category.type) : "";
     const name = rawName.trim().replace(/\s+/g, " ");
     const key = name.toLowerCase();
     if (!name || key === "all" || builtIns.has(key) || seen.has(key)) return [];
     seen.add(key);
-    const type = expenseCategoryTypes.includes(rawType as ExpenseCategoryType) ? rawType as ExpenseCategoryType : "Operating expense";
-    return [{ name, type }];
+    return [{ name, ...normalizeExpenseCategoryTreatment(category) }];
   });
 };
-const normalizeExpenseCategoryTypeOverrides = (value: unknown) => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+const normalizeExpenseCategoryOverrides = (value: unknown, legacyValue: unknown) => {
+  const source = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  const legacySource = legacyValue && typeof legacyValue === "object" && !Array.isArray(legacyValue) ? legacyValue as Record<string, unknown> : {};
   const builtInNames = new Map(expenseCategories.map((category) => [category.toLowerCase(), category]));
-  return Object.fromEntries(Object.entries(value).flatMap(([rawName, rawType]) => {
+  return Object.fromEntries([...new Set([...Object.keys(legacySource), ...Object.keys(source)])].flatMap((rawName) => {
     const name = builtInNames.get(rawName.trim().toLowerCase());
-    const type = String(rawType) as ExpenseCategoryType;
-    if (!name || !expenseCategoryTypes.includes(type)) return [];
-    const defaultType = expenseCategoryDefinitions.find((definition) => definition.name === name)?.type;
-    return defaultType === type ? [] : [[name, type]];
-  })) as Record<string, ExpenseCategoryType>;
+    const defaultDefinition = expenseCategoryDefinitions.find((definition) => definition.name === name);
+    if (!name || !defaultDefinition) return [];
+    const defaultTreatment = normalizeExpenseCategoryTreatment(defaultDefinition);
+    const treatment = normalizeExpenseCategoryTreatment(source[rawName] ?? legacySource[rawName], defaultTreatment);
+    return sameExpenseCategoryTreatment(defaultTreatment, treatment) ? [] : [[name, treatment]];
+  })) as Record<string, ExpenseCategoryTreatment>;
 };
-type ExpenseCategorySettings = Pick<Settings, "customExpenseCategories" | "expenseCategoryTypeOverrides">;
+type ExpenseCategorySettings = Pick<Settings, "customExpenseCategories" | "expenseCategoryOverrides">;
 const expenseCategoryDefinitionsFor = (settings: ExpenseCategorySettings) => [
-  ...expenseCategoryDefinitions.map((definition) => ({ ...definition, type: settings.expenseCategoryTypeOverrides[definition.name] ?? definition.type })),
+  ...expenseCategoryDefinitions.map((definition) => ({ name: definition.name, ...normalizeExpenseCategoryTreatment(settings.expenseCategoryOverrides[definition.name] ?? definition, normalizeExpenseCategoryTreatment(definition)) })),
   ...settings.customExpenseCategories,
 ];
 const expenseCategoriesFor = (settings: ExpenseCategorySettings) => expenseCategoryDefinitionsFor(settings).map((category) => category.name);
-const expenseCategoryTypeFor = (category: ExpenseCategory, settings: ExpenseCategorySettings): ExpenseCategoryType =>
-  expenseCategoryDefinitionsFor(settings).find((definition) => definition.name === category)?.type ?? "Operating expense";
-const fallbackExpenseCategoryForType = (type: ExpenseCategoryType): ExpenseCategory => ({
-  Inventory: "Raw materials",
-  COGS: "Cost of goods",
-  "Operating expense": "Other",
-  "Taxes & fees": "Taxes & licenses",
-})[type];
+const expenseCategoryDefinitionFor = (category: ExpenseCategory, settings: ExpenseCategorySettings): ExpenseCategoryDefinition =>
+  expenseCategoryDefinitionsFor(settings).find((definition) => definition.name === category) ?? { name: category, accountingClass: "Operating expense" };
+const expenseAccountingClassFor = (category: ExpenseCategory, settings: ExpenseCategorySettings) =>
+  expenseCategoryDefinitionFor(category, settings).accountingClass;
+const expenseCostTimingFor = (category: ExpenseCategory, settings: ExpenseCategorySettings) =>
+  expenseCategoryDefinitionFor(category, settings).costTiming;
+const isTrackedInventoryCategory = (category: ExpenseCategory, settings: ExpenseCategorySettings) =>
+  expenseAccountingClassFor(category, settings) === "Product cost" && expenseCostTimingFor(category, settings) === "Track in inventory";
+const isDirectCogsCategory = (category: ExpenseCategory, settings: ExpenseCategorySettings) =>
+  expenseAccountingClassFor(category, settings) === "Product cost" && expenseCostTimingFor(category, settings) === "Recognize directly as COGS";
+const fallbackExpenseCategoryForTreatment = (definition: ExpenseCategoryDefinition): ExpenseCategory => {
+  if (definition.accountingClass === "Product cost") return definition.costTiming === "Track in inventory" ? "Raw materials" : "Cost of goods";
+  return definition.accountingClass === "Taxes & fees" ? "Taxes & licenses" : "Other";
+};
 async function parseExpenseImport(file: File, existingExpenses: Expense[], customCategories: readonly string[]): Promise<ExpenseImportPreview> {
   return parseExpenseImportText(await file.text(), file.name, existingExpenses.map((expense) => expense.externalKey), undefined, customCategories);
 }
@@ -162,8 +195,8 @@ const resolveAddressRate = (address: Address, settings: Settings, liveRate?: Tax
 };
 
 const seed: AppState = {
-  version: 14,
-  settings: { businessName: "Juniper & Co.", taxYear: nowYear, beginningInventory: 3180, ownAddress: blankAddress("CA"), stateTaxes: defaultStateTaxSettings("CA"), localTaxRules: [], addressTaxRates: [], taxUpdateHistory: [], customExpenseCategories: [], expenseCategoryTypeOverrides: {}, expenseColumnOrder: defaultExpenseColumnOrder, expenseVisibleColumns: defaultExpenseVisibleColumns },
+  version: 15,
+  settings: { businessName: "Juniper & Co.", taxYear: nowYear, beginningInventory: 3180, ownAddress: blankAddress("CA"), stateTaxes: defaultStateTaxSettings("CA"), localTaxRules: [], addressTaxRates: [], taxUpdateHistory: [], customExpenseCategories: [], expenseCategoryOverrides: {}, expenseColumnOrder: defaultExpenseColumnOrder, expenseVisibleColumns: defaultExpenseVisibleColumns },
   products: [
     { id: "p1", sku: "CER-101", name: "Speckled Ceramic Mug", vendor: "Clay & Kiln Supply", category: "Home", quantity: 24, unitCost: 8.5, salePrice: 24, reorderPoint: 8, salesTaxPaid: false, createdAt: `${nowYear}-01-05` },
     { id: "p2", sku: "CAN-204", name: "Cedar + Moss Candle", vendor: "North Coast Candle Co.", category: "Wellness", quantity: 7, unitCost: 7.25, salePrice: 22, reorderPoint: 10, salesTaxPaid: true, createdAt: `${nowYear}-01-09` },
@@ -228,7 +261,7 @@ export default function Home() {
     const sales = yearMovements.filter((m) => m.type === "sale");
     const revenue = sales.reduce((n, m) => n + m.quantity * m.unitPrice, 0);
     const inventoryCogs = sales.reduce((n, m) => n + m.quantity * m.unitCost, 0);
-    const additionalCogs = yearExpenses.filter((expense) => expenseCategoryTypeFor(expense.category, state.settings) === "COGS").reduce((n, expense) => n + expense.amount, 0);
+    const additionalCogs = yearExpenses.filter((expense) => isDirectCogsCategory(expense.category, state.settings)).reduce((n, expense) => n + expense.amount, 0);
     const cogs = inventoryCogs + additionalCogs;
     const salesTax = sales.reduce((n, m) => n + m.salesTax, 0);
     const stateSalesTax = sales.reduce((n, m) => n + (m.stateTax ?? m.salesTax), 0);
@@ -238,8 +271,8 @@ export default function Home() {
     const stateUseTax = personalUse.reduce((n, m) => n + (m.stateTax ?? m.salesTax), 0);
     const localUseTax = personalUse.reduce((n, m) => n + (m.localTax ?? 0), 0);
     const expenses = yearExpenses.filter((expense) => {
-      const type = expenseCategoryTypeFor(expense.category, state.settings);
-      return type === "Operating expense" || type === "Taxes & fees";
+      const accountingClass = expenseAccountingClassFor(expense.category, state.settings);
+      return accountingClass === "Operating expense" || accountingClass === "Taxes & fees";
     }).reduce((n, expense) => n + expense.amount, 0);
     const expenseRecordsTotal = yearExpenses.reduce((n, expense) => n + expense.amount, 0);
     const purchases = yearMovements.filter((m) => m.type === "purchase").reduce((n, m) => n + m.quantity * m.unitCost, 0);
@@ -506,7 +539,7 @@ function Customers({ state, setState }: { state: AppState; setState: React.Dispa
         });
         existingSourceKeys.add(normalizeInvoiceKey(line.sourceKey));
       }
-      return { ...current, version: 14, customers, products: [...productAdditions, ...current.products], movements: [...movementAdditions, ...current.movements] };
+      return { ...current, version: 15, customers, products: [...productAdditions, ...current.products], movements: [...movementAdditions, ...current.movements] };
     });
     setPreview(null);
   };
@@ -542,7 +575,7 @@ function CogsCenter({ state, onOpenProduct, onProductionUse, onViewExpenses }: {
   const soldCogs = soldEntries.reduce((total, movement) => total + movement.quantity * movement.unitCost, 0);
   const directCogsExpenses = state.expenses.filter((expense) =>
     !expense.personal
-    && expenseCategoryTypeFor(expense.category, state.settings) === "COGS"
+    && isDirectCogsCategory(expense.category, state.settings)
     && (year === "All" || expense.date.startsWith(`${year}-`)),
   ).reduce((total, expense) => total + expense.amount, 0);
   const recognizedCogs = soldCogs + directCogsExpenses;
@@ -571,8 +604,8 @@ function CogsCenter({ state, onOpenProduct, onProductionUse, onViewExpenses }: {
   ];
   const changeSort = (key: CogsSortKey) => setSort((current) => ({ key, direction: current.key === key && current.direction === "asc" ? "desc" : "asc" }));
   return <div className="cogsLayout">
-    <section className="cogsHero"><div><p className="eyebrow">Inventory and cost trail</p><h2>From purchase to recognized COGS.</h2><p>Purchased inventory stays on hand until it is sold or allocated. Customer sales and categories typed as COGS become recognized costs for the selected year.</p></div><button className="dark" onClick={onProductionUse}>+ Use item in final product</button></section>
-    <section className="metricGrid cogsMetrics"><Metric label="Sold-item COGS" value={money.format(soldCogs)} note={`${whole.format(soldEntries.reduce((total, movement) => total + movement.quantity, 0))} units sold`} accent="sand" /><Metric label="Direct COGS expenses" value={money.format(directCogsExpenses)} note="Business expenses typed as COGS" accent="coral" /><Metric label="Sales revenue" value={money.format(revenue)} note={`${soldEntries.length} sales entries`} accent="blue" /><Metric label="Gross profit" value={money.format(revenue - recognizedCogs)} note={revenue ? `${Math.round(((revenue - recognizedCogs) / revenue) * 100)}% margin after recognized COGS` : "No sales in this view"} accent="green" /><Metric label="Production-use cost" value={money.format(productionCost)} note="Allocated, not yet sale COGS" accent="coral" /></section>
+    <section className="cogsHero"><div><p className="eyebrow">Inventory and cost trail</p><h2>From purchase to recognized COGS.</h2><p>Product costs tracked in inventory stay on hand until they are sold or allocated. Product costs marked for direct recognition become COGS immediately.</p></div><button className="dark" onClick={onProductionUse}>+ Use item in final product</button></section>
+    <section className="metricGrid cogsMetrics"><Metric label="Sold-item COGS" value={money.format(soldCogs)} note={`${whole.format(soldEntries.reduce((total, movement) => total + movement.quantity, 0))} units sold`} accent="sand" /><Metric label="Direct COGS expenses" value={money.format(directCogsExpenses)} note="Product costs recognized directly" accent="coral" /><Metric label="Sales revenue" value={money.format(revenue)} note={`${soldEntries.length} sales entries`} accent="blue" /><Metric label="Gross profit" value={money.format(revenue - recognizedCogs)} note={revenue ? `${Math.round(((revenue - recognizedCogs) / revenue) * 100)}% margin after recognized COGS` : "No sales in this view"} accent="green" /><Metric label="Production-use cost" value={money.format(productionCost)} note="Allocated, not yet sale COGS" accent="coral" /></section>
     <section className="panel cogsPanel"><div className="panelTitle"><div><p className="eyebrow">Item-level detail</p><h3>COGS and production allocations</h3></div><span className="pill neutral">{entries.length} entries</span></div><div className="cogsToolbar"><label className="search"><span>{icons.search}</span><input aria-label="Search COGS records" placeholder="Search cost item, SKU, note, or final product" value={query} onChange={(event) => setQuery(event.target.value)} /></label><label>Year<select value={year} onChange={(event) => setYear(event.target.value)}><option value="All">All years</option>{years.map((value) => <option value={value} key={value}>{value}</option>)}</select></label><label>Entry type<select value={kind} onChange={(event) => setKind(event.target.value as typeof kind)}><option value="all">All cost entries</option><option value="sale">Customer sales</option><option value="production_use">Production use</option></select></label></div>
       <div className="cogsTable"><div className="ledgerHead cogsHead">{columns.map((column) => <button role="columnheader" aria-sort={sort.key === column.key ? (sort.direction === "asc" ? "ascending" : "descending") : "none"} type="button" key={column.key} className={`stockHeaderCell ${sort.key === column.key ? `sorted ${sort.direction}` : ""}`} onClick={() => changeSort(column.key)}><span>{column.label}</span><span className="sortPair" aria-hidden="true"><i /><b /></span></button>)}</div>{entries.map((movement) => { const totalCost = movement.quantity * movement.unitCost; const itemName = productNameFor(movement); const finalProduct = finalProductFor(movement); const linkedProduct = linkedFinalProductFor(movement); return <div className="cogsRow" key={movement.id}><span>{new Date(`${movement.date}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span><div className="cogsName"><strong title={itemName}>{itemName}</strong><small>{productSkuFor(movement)}{movement.note ? ` · ${movement.note}` : ""}</small></div><span className={`activityTag ${movement.type}`}>{movement.type === "sale" ? "Sold" : "Production use"}</span><strong>{whole.format(movement.quantity)}</strong><strong>{money.format(movement.unitCost)}</strong><strong>{money.format(totalCost)}</strong><strong>{movement.type === "sale" ? money.format(movement.quantity * movement.unitPrice) : "—"}</strong><div className="cogsFinal">{linkedProduct ? <a className="cogsProductLink" href={`#product-${linkedProduct.id}`} title={`Open ${linkedProduct.name}`} onClick={(event) => { event.preventDefault(); onOpenProduct(linkedProduct); }}>{finalProduct}</a> : <strong title={finalProduct}>{finalProduct}</strong>}{linkedProduct && <small>Open product</small>}</div></div>; })}{!entries.length && <Empty text="No COGS entries match this view." />}</div>
       <p className="footnote">Production-use cost reduces component inventory but is shown separately from recognized sale COGS to prevent double counting on tax reports.</p>
@@ -610,8 +643,8 @@ function PurchasedInventorySection({ state, onViewExpenses }: { state: AppState;
   const [category, setCategory] = useState<ExpenseCategory | "All">("All");
   const [purchaseSource, setPurchaseSource] = useState("All");
   const [sort, setSort] = useState<{ key: PurchasedInventorySortKey; direction: SortDirection }>({ key: "date", direction: "desc" });
-  const inventoryCategories = expenseCategoryDefinitionsFor(state.settings).filter((definition) => definition.type === "Inventory").map((definition) => definition.name);
-  const items = state.expenses.filter((expense) => !expense.personal && expenseCategoryTypeFor(expense.category, state.settings) === "Inventory").map((expense) => ({
+  const inventoryCategories = expenseCategoryDefinitionsFor(state.settings).filter((definition) => definition.accountingClass === "Product cost" && definition.costTiming === "Track in inventory").map((definition) => definition.name);
+  const items = state.expenses.filter((expense) => !expense.personal && isTrackedInventoryCategory(expense.category, state.settings)).map((expense) => ({
     expense,
     ...parseExpenseInventoryDescription(expense.note, expense.amount),
   }));
@@ -660,9 +693,9 @@ function PurchasedInventorySection({ state, onViewExpenses }: { state: AppState;
     <div className="metricGrid"><Metric label="Purchased inventory value" value={money.format(totalValue)} note={`${whole.format(items.length)} inventory expense records`} accent="green" /><Metric label="Individual items" value={whole.format(totalUnits)} note="Pack descriptions expanded" accent="blue" /><Metric label="Inventory categories" value={whole.format(inventoryCategories.length)} note="Built-in and custom categories" accent="sand" /></div>
     <section className="panel purchaseInventoryPanel">
       <div className="panelTitle"><div><p className="eyebrow">Purchased inventory</p><h3>Inventory waiting to become COGS</h3></div><button className="secondary" onClick={onViewExpenses}>Review expense categories</button></div>
-      <p className="settingsCopy">Business expenses whose category type is Inventory appear here. Changing the category to a non-inventory type removes the item from this list without deleting its expense record.</p>
+      <p className="settingsCopy">Product costs set to Track in inventory appear here. Changing their accounting class or cost timing removes them from this list without deleting the expense record.</p>
       <div className="purchaseInventoryToolbar"><label className="search"><span>{icons.search}</span><input aria-label="Search purchased inventory" placeholder="Search item, vendor, source, category, or expense key" value={query} onChange={(event) => setQuery(event.target.value)} /></label><label>Category<select aria-label="Purchased inventory category" value={category} onChange={(event) => setCategory(event.target.value as ExpenseCategory | "All")}><option>All</option>{inventoryCategories.map((inventoryCategory) => <option key={inventoryCategory}>{inventoryCategory}</option>)}</select></label><label>Purchase source<select aria-label="Purchased inventory source" value={purchaseSource} onChange={(event) => setPurchaseSource(event.target.value)}><option value="All">All sources</option>{purchaseSources.map((source) => <option value={source} key={source}>{source}</option>)}{hasUnassignedSource && <option value="__unassigned">Unassigned</option>}</select></label></div>
-      <div className="purchaseInventoryTable"><div className="purchaseInventoryHead">{columns.map((column) => <button role="columnheader" aria-sort={sort.key === column.key ? (sort.direction === "asc" ? "ascending" : "descending") : "none"} type="button" key={column.key} className={`stockHeaderCell ${sort.key === column.key ? `sorted ${sort.direction}` : ""}`} onClick={() => changeSort(column.key)}><span>{column.label}</span><span className="sortPair" aria-hidden="true"><i /><b /></span></button>)}</div>{sortedItems.map((item) => <div className="purchaseInventoryRow" key={item.expense.id}><div className="purchaseInventoryName"><strong title={item.name}>{item.name}</strong><small title={item.expense.note}>{item.expense.note || "Untitled inventory item"}</small></div><span><span className="inventoryType">{item.expense.category}</span></span><strong>{whole.format(item.quantity)}</strong><strong>{money.format(item.unitCost)}</strong><strong>{money.format(item.expense.amount)}</strong><span>{item.expense.vendor || "—"}</span><span>{item.expense.purchaseSource || "Unassigned"}</span><span>{new Date(`${item.expense.date}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span><span><code title={item.expense.externalKey}>{item.expense.externalKey}</code></span></div>)}{!sortedItems.length && <Empty text={items.length ? "No purchased inventory matches this view." : "Assign an expense to a category typed as Inventory to track it here."} />}</div>
+      <div className="purchaseInventoryTable"><div className="purchaseInventoryHead">{columns.map((column) => <button role="columnheader" aria-sort={sort.key === column.key ? (sort.direction === "asc" ? "ascending" : "descending") : "none"} type="button" key={column.key} className={`stockHeaderCell ${sort.key === column.key ? `sorted ${sort.direction}` : ""}`} onClick={() => changeSort(column.key)}><span>{column.label}</span><span className="sortPair" aria-hidden="true"><i /><b /></span></button>)}</div>{sortedItems.map((item) => <div className="purchaseInventoryRow" key={item.expense.id}><div className="purchaseInventoryName"><strong title={item.name}>{item.name}</strong><small title={item.expense.note}>{item.expense.note || "Untitled inventory item"}</small></div><span><span className="inventoryType">{item.expense.category}</span></span><strong>{whole.format(item.quantity)}</strong><strong>{money.format(item.unitCost)}</strong><strong>{money.format(item.expense.amount)}</strong><span>{item.expense.vendor || "—"}</span><span>{item.expense.purchaseSource || "Unassigned"}</span><span>{new Date(`${item.expense.date}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span><span><code title={item.expense.externalKey}>{item.expense.externalKey}</code></span></div>)}{!sortedItems.length && <Empty text={items.length ? "No purchased inventory matches this view." : "Assign a Product cost category to Track in inventory to see it here."} />}</div>
     </section>
   </div>;
 }
@@ -670,11 +703,13 @@ function PurchasedInventorySection({ state, onViewExpenses }: { state: AppState;
 function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppState; setState: React.Dispatch<React.SetStateAction<AppState>>; onExpense: () => void; onDeleteExpense: (id: string) => void }) {
   const [expenseQuery, setExpenseQuery] = useState("");
   const [expenseCategory, setExpenseCategory] = useState<ExpenseCategory | "All">("All");
-  const [expenseCategoryType, setExpenseCategoryType] = useState<ExpenseCategoryType | "All">("All");
+  const [expenseAccountingClass, setExpenseAccountingClass] = useState<ExpenseAccountingClass | "All">("All");
+  const [expenseCostTiming, setExpenseCostTiming] = useState<ExpenseCostTiming | "All">("All");
   const [expensePurchaseSource, setExpensePurchaseSource] = useState("All");
   const [expenseUse, setExpenseUse] = useState<"All" | "Business" | "Personal">("All");
   const [newExpenseCategory, setNewExpenseCategory] = useState("");
-  const [newExpenseCategoryType, setNewExpenseCategoryType] = useState<ExpenseCategoryType>("Operating expense");
+  const [newExpenseAccountingClass, setNewExpenseAccountingClass] = useState<ExpenseAccountingClass>("Operating expense");
+  const [newExpenseCostTiming, setNewExpenseCostTiming] = useState<ExpenseCostTiming>("Track in inventory");
   const [categoryEditorOpen, setCategoryEditorOpen] = useState(false);
   const [categoryNameDrafts, setCategoryNameDrafts] = useState<Record<string, string>>({});
   const [expenseYear, setExpenseYear] = useState<string>("All");
@@ -706,18 +741,20 @@ function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppS
   const selectedExpenses = state.expenses.filter((expense) => expenseYear === "All" || expense.date.startsWith(`${expenseYear}-`));
   const filteredExpenses = selectedExpenses.filter((expense) => {
     const matchesCategory = expenseCategory === "All" || expense.category === expenseCategory;
-    const matchesCategoryType = expenseCategoryType === "All" || expenseCategoryTypeFor(expense.category, state.settings) === expenseCategoryType;
+    const matchesAccountingClass = expenseAccountingClass === "All" || expenseAccountingClassFor(expense.category, state.settings) === expenseAccountingClass;
+    const matchesCostTiming = expenseCostTiming === "All" || expenseCostTimingFor(expense.category, state.settings) === expenseCostTiming;
     const matchesSource = expensePurchaseSource === "All" || (expensePurchaseSource === "__unassigned" ? !expense.purchaseSource : expense.purchaseSource === expensePurchaseSource);
     const matchesUse = expenseUse === "All" || (expenseUse === "Personal" ? expense.personal : !expense.personal);
-    const haystack = `${expense.vendor} ${expense.purchaseSource} ${expense.externalKey} ${expense.category} ${expenseCategoryTypeFor(expense.category, state.settings)} ${expense.note} ${Object.values(expense.fields ?? {}).join(" ")}`.toLowerCase();
-    return matchesCategory && matchesCategoryType && matchesSource && matchesUse && haystack.includes(expenseQuery.toLowerCase());
+    const haystack = `${expense.vendor} ${expense.purchaseSource} ${expense.externalKey} ${expense.category} ${expenseAccountingClassFor(expense.category, state.settings)} ${expenseCostTimingFor(expense.category, state.settings) ?? ""} ${expense.note} ${Object.values(expense.fields ?? {}).join(" ")}`.toLowerCase();
+    return matchesCategory && matchesAccountingClass && matchesCostTiming && matchesSource && matchesUse && haystack.includes(expenseQuery.toLowerCase());
   });
   const expenseSortValue = (expense: Expense): SortValue => {
     if (expenseSort.key === "vendor") return expense.vendor;
     if (expenseSort.key === "purchaseSource") return expense.purchaseSource;
     if (expenseSort.key === "note") return expense.note;
     if (expenseSort.key === "category") return expense.category;
-    if (expenseSort.key === "categoryType") return expenseCategoryTypeFor(expense.category, state.settings);
+    if (expenseSort.key === "accountingClass") return expenseAccountingClassFor(expense.category, state.settings);
+    if (expenseSort.key === "costTiming") return expenseCostTimingFor(expense.category, state.settings) ?? "";
     if (expenseSort.key === "personal") return expense.personal;
     if (expenseSort.key === "externalKey") return expense.externalKey;
     if (expenseSort.key === "amount") return expense.amount;
@@ -743,13 +780,13 @@ function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppS
   const visibleExpenseIds = visibleExpenses.map((expense) => expense.id);
   const businessExpenses = selectedExpenses.filter((expense) => !expense.personal);
   const personalExpenses = selectedExpenses.filter((expense) => expense.personal);
-  const categoryTotals = availableExpenseCategoryDefinitions.map(({ name: category, type }) => ({ category, type, total: businessExpenses.filter((expense) => expense.category === category).reduce((sum, expense) => sum + expense.amount, 0) })).filter((item) => item.total > 0).sort((a, b) => b.total - a.total);
+  const categoryTotals = availableExpenseCategoryDefinitions.map(({ name: category, accountingClass, costTiming }) => ({ category, accountingClass, costTiming, total: businessExpenses.filter((expense) => expense.category === category).reduce((sum, expense) => sum + expense.amount, 0) })).filter((item) => item.total > 0).sort((a, b) => b.total - a.total);
   const expenseTotal = businessExpenses.reduce((sum, expense) => sum + expense.amount, 0);
   const personalExpenseTotal = personalExpenses.reduce((sum, expense) => sum + expense.amount, 0);
-  const totalForType = (type: ExpenseCategoryType) => businessExpenses.filter((expense) => expenseCategoryTypeFor(expense.category, state.settings) === type).reduce((sum, expense) => sum + expense.amount, 0);
-  const cogsTotal = totalForType("COGS");
-  const inventoryPurchaseTotal = totalForType("Inventory");
-  const operatingTotal = totalForType("Operating expense") + totalForType("Taxes & fees");
+  const totalForClass = (accountingClass: ExpenseAccountingClass) => businessExpenses.filter((expense) => expenseAccountingClassFor(expense.category, state.settings) === accountingClass).reduce((sum, expense) => sum + expense.amount, 0);
+  const cogsTotal = businessExpenses.filter((expense) => isDirectCogsCategory(expense.category, state.settings)).reduce((sum, expense) => sum + expense.amount, 0);
+  const inventoryPurchaseTotal = businessExpenses.filter((expense) => isTrackedInventoryCategory(expense.category, state.settings)).reduce((sum, expense) => sum + expense.amount, 0);
+  const operatingTotal = totalForClass("Operating expense") + totalForClass("Taxes & fees");
   const importPreviewExpenses = expenseImport ? [...expenseImport.ready, ...expenseImport.updates] : [];
   const openExpenseImport = async (event: ChangeEvent<HTMLInputElement>) => {
     const input = event.currentTarget;
@@ -793,7 +830,8 @@ function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppS
     });
     setExpenseYear(importedYears.length === 1 ? String(importedYears[0]) : "All");
     setExpenseCategory("All");
-    setExpenseCategoryType("All");
+    setExpenseAccountingClass("All");
+    setExpenseCostTiming("All");
     setExpensePurchaseSource(sourceKey);
     setExpenseUse("All");
     setExpenseQuery("");
@@ -829,24 +867,40 @@ function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppS
       alert(`The category “${category}” already exists or is reserved.`);
       return;
     }
-    setState((current) => ({ ...current, settings: { ...current.settings, customExpenseCategories: [...current.settings.customExpenseCategories, { name: category, type: newExpenseCategoryType }] } }));
+    const treatment = normalizeExpenseCategoryTreatment({ accountingClass: newExpenseAccountingClass, costTiming: newExpenseCostTiming });
+    setState((current) => ({ ...current, settings: { ...current.settings, customExpenseCategories: [...current.settings.customExpenseCategories, { name: category, ...treatment }] } }));
     setExpenseCategory(category);
-    setExpenseCategoryType(newExpenseCategoryType);
+    setExpenseAccountingClass(treatment.accountingClass);
+    setExpenseCostTiming(treatment.costTiming ?? "All");
     setNewExpenseCategory("");
   };
-  const updateExpenseCategoryType = (name: ExpenseCategory, type: ExpenseCategoryType) => {
+  const updateExpenseCategoryTreatment = (name: ExpenseCategory, treatment: ExpenseCategoryTreatment) => {
     setState((current) => {
+      const normalizedTreatment = normalizeExpenseCategoryTreatment(treatment);
       const isCustom = current.settings.customExpenseCategories.some((category) => category.name === name);
       if (isCustom) {
-        const customExpenseCategories = current.settings.customExpenseCategories.map((category) => category.name === name ? { ...category, type } : category);
+        const customExpenseCategories = current.settings.customExpenseCategories.map((category) => category.name === name ? { name, ...normalizedTreatment } : category);
         return { ...current, settings: { ...current.settings, customExpenseCategories } };
       }
-      const defaultType = expenseCategoryDefinitions.find((definition) => definition.name === name)?.type;
-      const expenseCategoryTypeOverrides = { ...current.settings.expenseCategoryTypeOverrides };
-      if (!defaultType || defaultType === type) delete expenseCategoryTypeOverrides[name];
-      else expenseCategoryTypeOverrides[name] = type;
-      return { ...current, settings: { ...current.settings, expenseCategoryTypeOverrides } };
+      const defaultDefinition = expenseCategoryDefinitions.find((definition) => definition.name === name);
+      if (!defaultDefinition) return current;
+      const defaultTreatment = normalizeExpenseCategoryTreatment(defaultDefinition);
+      const expenseCategoryOverrides = { ...current.settings.expenseCategoryOverrides };
+      if (sameExpenseCategoryTreatment(defaultTreatment, normalizedTreatment)) delete expenseCategoryOverrides[name];
+      else expenseCategoryOverrides[name] = normalizedTreatment;
+      return { ...current, settings: { ...current.settings, expenseCategoryOverrides } };
     });
+  };
+  const updateExpenseAccountingClass = (name: ExpenseCategory, accountingClass: ExpenseAccountingClass) => {
+    const current = expenseCategoryDefinitionFor(name, state.settings);
+    const defaultDefinition = expenseCategoryDefinitions.find((definition) => definition.name === name);
+    updateExpenseCategoryTreatment(name, {
+      accountingClass,
+      costTiming: accountingClass === "Product cost" ? current.costTiming ?? defaultDefinition?.costTiming ?? "Track in inventory" : undefined,
+    });
+  };
+  const updateExpenseCostTiming = (name: ExpenseCategory, costTiming: ExpenseCostTiming) => {
+    updateExpenseCategoryTreatment(name, { accountingClass: "Product cost", costTiming });
   };
   const renameExpenseCategory = (name: ExpenseCategory) => {
     const category = (categoryNameDrafts[name] ?? name).trim().replace(/\s+/g, " ");
@@ -869,7 +923,7 @@ function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppS
   const deleteExpenseCategory = (name: ExpenseCategory) => {
     const definition = availableExpenseCategoryDefinitions.find((category) => category.name === name);
     if (!definition || !state.settings.customExpenseCategories.some((category) => category.name === name)) return;
-    const fallback = fallbackExpenseCategoryForType(definition.type);
+    const fallback = fallbackExpenseCategoryForTreatment(definition);
     const usageCount = state.expenses.filter((expense) => expense.category === name).length;
     if (!confirm(`Delete “${name}”? ${usageCount ? `${usageCount} expense record${usageCount === 1 ? "" : "s"} will be reassigned to “${fallback}”.` : "It is not used by any expense records."}`)) return;
     setState((current) => ({
@@ -934,9 +988,13 @@ function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppS
       const targetIds = selectedExpenseSet.has(expense.id) ? selectedExpenseSet : new Set([expense.id]);
       setState((current) => ({ ...current, expenses: current.expenses.map((item) => targetIds.has(item.id) ? { ...item, category } : item) }));
     }}>{availableExpenseCategories.map((category) => <option key={category}>{category}</option>)}</select></span>;
-    if (column.key === "categoryType") {
-      const type = expenseCategoryTypeFor(expense.category, state.settings);
-      return <span className="expenseCell"><span className={`categoryTypeBadge ${type.toLowerCase().replaceAll(" ", "-").replace("&", "and")}`}>{type}</span></span>;
+    if (column.key === "accountingClass") {
+      const accountingClass = expenseAccountingClassFor(expense.category, state.settings);
+      return <span className="expenseCell"><span className={`accountingClassBadge ${accountingClass.toLowerCase().replaceAll(" ", "-").replace("&", "and")}`}>{accountingClass}</span></span>;
+    }
+    if (column.key === "costTiming") {
+      const costTiming = expenseCostTimingFor(expense.category, state.settings);
+      return <span className="expenseCell"><span className={`costTimingBadge ${costTiming === "Track in inventory" ? "inventory" : costTiming ? "direct" : "not-applicable"}`}>{costTiming ?? "Not applicable"}</span></span>;
     }
     if (column.key === "personal") return <span className="expenseCell personal"><label className="expensePersonalToggle" onClick={(event) => event.stopPropagation()}><input type="checkbox" aria-label={`Personal expense ${expense.externalKey}`} checked={expense.personal} onChange={(event) => {
       const personal = event.target.checked;
@@ -950,14 +1008,14 @@ function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppS
   };
   return <div className="expenseLayout">
     <section className="expenseHero"><div><p className="eyebrow">Business spending</p><h2>Every expense, easy to find.</h2><p>Import purchase history or add a record by hand. Mark personal purchases so they stay visible without affecting business totals or taxes.</p></div><div className="expenseHeroTotal"><span>{expenseYear === "All" ? "Business total · all years" : `Business total · ${expenseYear}`}</span><strong>{money.format(expenseTotal)}</strong><small>{businessExpenses.length} business records · {personalExpenses.length} personal excluded</small></div></section>
-    <div className="taxCards expenseCards"><Metric label="Business purchase records" value={money.format(expenseTotal)} note={expenseYear === "All" ? "Across every recorded year" : `Dated in ${expenseYear}`} accent="green" /><Metric label="Operating expenses" value={money.format(operatingTotal)} note="Operating expenses plus taxes & fees" accent="blue" /><Metric label="Direct COGS" value={money.format(cogsTotal)} note="Categories typed as COGS" accent="sand" /><Metric label="Purchased inventory" value={money.format(inventoryPurchaseTotal)} note="Not deducted until it becomes COGS" accent="green" /><Metric label="Personal excluded" value={money.format(personalExpenseTotal)} note={`${personalExpenses.length} record${personalExpenses.length === 1 ? "" : "s"} kept out of business totals`} accent="coral" /></div>
-    <div className="taxColumns expenseColumns"><section className="panel expenseCategories"><div className="panelTitle"><div><p className="eyebrow">Expense summary</p><h3>Business spending by category</h3></div><div className="categorySummaryActions"><span className="pill neutral">{businessExpenses.length} records</span><button className="secondary" type="button" onClick={() => setCategoryEditorOpen(true)}>Edit categories</button></div></div><p className="categorySummaryCopy">Manage category names and accounting types here. Inventory waits in the COGS workspace until it is used or sold.</p><div className="categoryTotals">{categoryTotals.map((item) => <button className={expenseCategory === item.category ? "active" : ""} key={item.category} onClick={() => { setExpenseCategory(item.category); setExpenseCategoryType("All"); }}><span><strong>{item.category}</strong><small>{item.type} · {businessExpenses.filter((expense) => expense.category === item.category).length} records</small></span><b>{money.format(item.total)}</b></button>)}{!categoryTotals.length && <Empty text="No business expenses recorded for this period." />}</div><div className="expenseGrandTotal"><span>Total business purchase records</span><strong>{money.format(expenseTotal)}</strong></div></section>
+    <div className="taxCards expenseCards"><Metric label="Business purchase records" value={money.format(expenseTotal)} note={expenseYear === "All" ? "Across every recorded year" : `Dated in ${expenseYear}`} accent="green" /><Metric label="Operating expenses" value={money.format(operatingTotal)} note="Operating expenses plus taxes & fees" accent="blue" /><Metric label="Direct COGS" value={money.format(cogsTotal)} note="Product costs recognized immediately" accent="sand" /><Metric label="Purchased inventory" value={money.format(inventoryPurchaseTotal)} note="Product costs waiting to become COGS" accent="green" /><Metric label="Personal excluded" value={money.format(personalExpenseTotal)} note={`${personalExpenses.length} record${personalExpenses.length === 1 ? "" : "s"} kept out of business totals`} accent="coral" /></div>
+    <div className="taxColumns expenseColumns"><section className="panel expenseCategories"><div className="panelTitle"><div><p className="eyebrow">Expense summary</p><h3>Business spending by category</h3></div><div className="categorySummaryActions"><span className="pill neutral">{businessExpenses.length} records</span><button className="secondary" type="button" onClick={() => setCategoryEditorOpen(true)}>Edit categories</button></div></div><p className="categorySummaryCopy">Accounting class describes what a cost is. Product-cost timing determines whether it waits in inventory or is recognized directly as COGS.</p><div className="categoryTotals">{categoryTotals.map((item) => <button className={expenseCategory === item.category ? "active" : ""} key={item.category} onClick={() => { setExpenseCategory(item.category); setExpenseAccountingClass("All"); setExpenseCostTiming("All"); }}><span><strong>{item.category}</strong><small>{item.accountingClass}{item.costTiming ? ` · ${item.costTiming}` : ""} · {businessExpenses.filter((expense) => expense.category === item.category).length} records</small></span><b>{money.format(item.total)}</b></button>)}{!categoryTotals.length && <Empty text="No business expenses recorded for this period." />}</div><div className="expenseGrandTotal"><span>Total business purchase records</span><strong>{money.format(expenseTotal)}</strong></div></section>
     <section className="panel expenseGuide"><div className="panelTitle"><div><p className="eyebrow">Import guide</p><h3>Amazon Business exports</h3></div></div><p>StockBot groups multi-item rows into one expense per Amazon Order ID and uses Order Net Total, so the same order is not counted twice.</p><div className="importFacts"><span><strong>Unique key</strong><small>Amazon Order ID</small></span><span><strong>Expense amount</strong><small>Order Net Total</small></span><span><strong>Purchase source</strong><small>Account key assigned on review</small></span><span><strong>Imported years</strong><small>Shown automatically after import</small></span></div></section></div>
     <section className="panel expenseLedger">
       <div className="panelTitle"><div><p className="eyebrow">Deduplicated records</p><h3>Expense ledger</h3></div><div className="expenseActions"><button className={columnConfigOpen ? "secondary active" : "secondary"} onClick={() => setColumnConfigOpen((open) => !open)}>☷ Columns ({visibleColumns.length}/{orderedColumns.length})</button><button className="secondary" onClick={downloadExpenseTemplate}>↓ CSV template</button><button className="secondary" disabled={importing} onClick={() => expenseFileRef.current?.click()}>{importing ? "Reading file…" : "↑ Import CSV or JSON"}</button><button className="primary" onClick={onExpense}>+ Add expense</button><input ref={expenseFileRef} hidden type="file" accept="text/csv,.csv,application/json,.json" onChange={openExpenseImport} /></div></div>
       <p className="settingsCopy">Every record requires a unique external key—such as an Amazon order ID, invoice number, or bank transaction ID. Re-importing enriches existing records with every source column without creating duplicates.</p>
       {columnConfigOpen && <div className="expenseColumnConfig"><div className="expenseColumnConfigHeading"><div><strong>Display columns</strong><small>Check columns to show. Drag visible table headers to reorder them.</small></div><div><button type="button" onClick={selectAllExpenseColumns}>Select all</button><button type="button" onClick={resetExpenseColumns}>Reset</button></div></div><label className="search columnSearch"><span>{icons.search}</span><input aria-label="Search expense columns" placeholder="Find a column" value={columnQuery} onChange={(event) => setColumnQuery(event.target.value)} /></label><div className="expenseColumnChecklist">{columnOptions.map((column) => { const checked = visibleColumnKeys.includes(column.key); return <label className="expenseColumnOption" key={column.key}><input type="checkbox" checked={checked} disabled={checked && visibleColumnKeys.length === 1} onChange={() => toggleExpenseColumn(column.key)} /><span><strong>{column.label}</strong><small>{column.field ? "Imported CSV field" : "StockBot field"}</small></span></label>; })}</div></div>}
-      <div className="expenseToolbar"><label className="search"><span>{icons.search}</span><input aria-label="Search expenses" placeholder="Search any displayed or imported field" value={expenseQuery} onChange={(event) => setExpenseQuery(event.target.value)} /></label><label>Year<select aria-label="Expense year" value={expenseYear} onChange={(event) => setExpenseYear(event.target.value)}><option value="All">All years</option>{years.map((year) => <option value={year} key={year}>{year}</option>)}</select></label><label>Category type<select aria-label="Expense category type" value={expenseCategoryType} onChange={(event) => setExpenseCategoryType(event.target.value as ExpenseCategoryType | "All")}><option>All</option>{expenseCategoryTypes.map((type) => <option key={type}>{type}</option>)}</select></label><label>Category<select value={expenseCategory} onChange={(event) => setExpenseCategory(event.target.value as ExpenseCategory | "All")}><option>All</option>{availableExpenseCategories.map((category) => <option key={category}>{category}</option>)}</select></label><label>Use<select aria-label="Expense business or personal use" value={expenseUse} onChange={(event) => setExpenseUse(event.target.value as "All" | "Business" | "Personal")}><option>All</option><option>Business</option><option>Personal</option></select></label><label>Purchase source<select aria-label="Expense purchase source" value={expensePurchaseSource} onChange={(event) => setExpensePurchaseSource(event.target.value)}><option value="All">All sources</option>{purchaseSources.map((source) => <option value={source} key={source}>{source}</option>)}{hasUnassignedSource && <option value="__unassigned">Unassigned</option>}</select></label></div>
+      <div className="expenseToolbar"><label className="search"><span>{icons.search}</span><input aria-label="Search expenses" placeholder="Search any displayed or imported field" value={expenseQuery} onChange={(event) => setExpenseQuery(event.target.value)} /></label><label>Year<select aria-label="Expense year" value={expenseYear} onChange={(event) => setExpenseYear(event.target.value)}><option value="All">All years</option>{years.map((year) => <option value={year} key={year}>{year}</option>)}</select></label><label>Accounting class<select aria-label="Expense accounting class" value={expenseAccountingClass} onChange={(event) => setExpenseAccountingClass(event.target.value as ExpenseAccountingClass | "All")}><option>All</option>{expenseAccountingClasses.map((accountingClass) => <option key={accountingClass}>{accountingClass}</option>)}</select></label><label>Cost timing<select aria-label="Expense cost timing" value={expenseCostTiming} onChange={(event) => setExpenseCostTiming(event.target.value as ExpenseCostTiming | "All")}><option>All</option>{expenseCostTimings.map((costTiming) => <option key={costTiming}>{costTiming}</option>)}</select></label><label>Category<select value={expenseCategory} onChange={(event) => setExpenseCategory(event.target.value as ExpenseCategory | "All")}><option>All</option>{availableExpenseCategories.map((category) => <option key={category}>{category}</option>)}</select></label><label>Use<select aria-label="Expense business or personal use" value={expenseUse} onChange={(event) => setExpenseUse(event.target.value as "All" | "Business" | "Personal")}><option>All</option><option>Business</option><option>Personal</option></select></label><label>Purchase source<select aria-label="Expense purchase source" value={expensePurchaseSource} onChange={(event) => setExpensePurchaseSource(event.target.value)}><option value="All">All sources</option>{purchaseSources.map((source) => <option value={source} key={source}>{source}</option>)}{hasUnassignedSource && <option value="__unassigned">Unassigned</option>}</select></label></div>
       <div className={`expenseSelectionBar ${selectedExpenseIds.length ? "active" : ""}`}><span><strong>{selectedExpenseIds.length} selected</strong><small>Click rows to toggle selection. Shift-click selects a range. Category and Personal changes apply to the entire selection.</small></span><button className="danger" disabled={!selectedExpenseIds.length} onClick={deleteSelectedExpenses}>Delete selected</button><button className="textButton" disabled={!selectedExpenseIds.length} onClick={clearExpenseSelection}>Clear selection</button></div>
       <div className="expenseTable"><div className="expenseDataGrid" style={{ "--expense-columns": expenseGridColumns } as CSSProperties}><div className="expenseHead">{visibleColumns.map((column) => <button role="columnheader" aria-sort={expenseSort.key === column.key ? (expenseSort.direction === "asc" ? "ascending" : "descending") : "none"} type="button" key={column.key} className={`stockHeaderCell draggable ${expenseSort.key === column.key ? `sorted ${expenseSort.direction}` : ""} ${draggedExpenseColumn === column.key ? "dragging" : ""}`} onPointerDown={() => { expenseColumnWasDragged.current = false; setDraggedExpenseColumn(column.key); }} onPointerEnter={(event) => { if (draggedExpenseColumn && event.buttons === 1) moveExpenseColumn(draggedExpenseColumn, column.key); }} onPointerUp={() => setDraggedExpenseColumn(null)} onPointerCancel={() => setDraggedExpenseColumn(null)} onClick={() => { if (expenseColumnWasDragged.current) { expenseColumnWasDragged.current = false; return; } changeExpenseSort(column.key); }} title="Click to sort; drag to reorder"><span>{column.label}</span><span className="sortPair" aria-hidden="true"><i /><b /></span></button>)}<span className="stockHeaderSpacer" /></div>{visibleExpenses.map((expense) => <div role="row" tabIndex={0} aria-selected={selectedExpenseSet.has(expense.id)} aria-label={`Expense ${expense.externalKey}`} className={`expenseRow ${expense.personal ? "personal" : ""} ${selectedExpenseSet.has(expense.id) ? "selected" : ""}`} key={expense.id} onClick={(event) => selectExpenseRow(expense.id, event.shiftKey)} onKeyDown={(event) => { if (event.target !== event.currentTarget || (event.key !== "Enter" && event.key !== " ")) return; event.preventDefault(); selectExpenseRow(expense.id, event.shiftKey); }}>{visibleColumns.map((column) => <span key={column.key}>{expenseCell(expense, column)}</span>)}<button aria-label={`Delete expense ${expense.externalKey}`} onClick={(event) => { event.stopPropagation(); if (!confirm(`Delete expense ${expense.externalKey}?`)) return; setSelectedExpenseIds((current) => current.filter((id) => id !== expense.id)); onDeleteExpense(expense.id); }}>×</button></div>)}{!visibleExpenses.length && <Empty text="No expense records match this view." />}</div></div>
     </section>
@@ -972,17 +1030,18 @@ function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppS
       <div className="modalActions"><button type="button" className="secondary" onClick={() => { setExpenseImport(null); setImportPurchaseSource(""); }}>Cancel</button><button type="button" className="primary" disabled={!importPreviewExpenses.length || !importPurchaseSource.trim()} onClick={applyExpenseImport}>Save {importPreviewExpenses.length} records</button></div>
     </Modal>}
     {categoryEditorOpen && <Modal className="categoryEditorModal" title="Edit expense categories" eyebrow="Accounting setup" onClose={() => { setCategoryEditorOpen(false); setCategoryNameDrafts({}); }}>
-      <p className="categoryEditorIntro">Choose how each category flows through the COGS and tax worksheets. Built-in category names stay fixed for reliable imports; their accounting types can be customized.</p>
-      <form className="expenseCategoryCreator categoryEditorCreate" onSubmit={createExpenseCategory}><label><span>New category</span><input aria-label="New expense category" maxLength={60} value={newExpenseCategory} onChange={(event) => setNewExpenseCategory(event.target.value)} placeholder="Subscriptions, samples, storage…" /></label><label className="categoryTypeField"><span>Accounting type</span><select aria-label="New expense category type" value={newExpenseCategoryType} onChange={(event) => setNewExpenseCategoryType(event.target.value as ExpenseCategoryType)}>{expenseCategoryTypes.map((type) => <option key={type}>{type}</option>)}</select></label><button className="secondary" type="submit" disabled={!newExpenseCategory.trim()}>+ Add</button></form>
-      <div className="categoryEditorLegend"><span>Category</span><span>Accounting type</span><span>Actions</span></div>
+      <p className="categoryEditorIntro">Accounting class describes what a purchase is. Product costs also choose when the cost becomes COGS: after inventory is sold or used, or immediately. Built-in names stay fixed for reliable imports.</p>
+      <form className="expenseCategoryCreator categoryEditorCreate" onSubmit={createExpenseCategory}><label><span>New category</span><input aria-label="New expense category" maxLength={60} value={newExpenseCategory} onChange={(event) => setNewExpenseCategory(event.target.value)} placeholder="Subscriptions, samples, storage…" /></label><label className="categoryClassField"><span>Accounting class</span><select aria-label="New expense accounting class" value={newExpenseAccountingClass} onChange={(event) => setNewExpenseAccountingClass(event.target.value as ExpenseAccountingClass)}>{expenseAccountingClasses.map((accountingClass) => <option key={accountingClass}>{accountingClass}</option>)}</select></label>{newExpenseAccountingClass === "Product cost" && <label className="categoryTimingField"><span>Cost timing</span><select aria-label="New expense cost timing" value={newExpenseCostTiming} onChange={(event) => setNewExpenseCostTiming(event.target.value as ExpenseCostTiming)}>{expenseCostTimings.map((costTiming) => <option key={costTiming}>{costTiming}</option>)}</select></label>}<button className="secondary" type="submit" disabled={!newExpenseCategory.trim()}>+ Add</button></form>
+      <div className="categoryEditorLegend"><span>Category</span><span>Accounting class</span><span>Cost timing</span><span>Actions</span></div>
       <div className="categoryEditorList">{availableExpenseCategoryDefinitions.map((definition) => {
         const isCustom = state.settings.customExpenseCategories.some((category) => category.name === definition.name);
         const usageCount = state.expenses.filter((expense) => expense.category === definition.name).length;
         const draftName = categoryNameDrafts[definition.name] ?? definition.name;
-        const defaultType = expenseCategoryDefinitions.find((category) => category.name === definition.name)?.type;
+        const defaultDefinition = expenseCategoryDefinitions.find((category) => category.name === definition.name);
         return <div className="categoryEditorRow" key={definition.name}>
-          <div className="categoryEditorName">{isCustom ? <input aria-label={`Category name ${definition.name}`} maxLength={60} value={draftName} onChange={(event) => setCategoryNameDrafts((current) => ({ ...current, [definition.name]: event.target.value }))} /> : <strong>{definition.name}</strong>}<small>{isCustom ? "Custom" : "Built-in"} · {usageCount} record{usageCount === 1 ? "" : "s"}{!isCustom && state.settings.expenseCategoryTypeOverrides[definition.name] ? " · customized" : ""}</small></div>
-          <label className="categoryEditorType"><span>Accounting type for {definition.name}</span><select aria-label={`Accounting type for ${definition.name}`} value={definition.type} onChange={(event) => updateExpenseCategoryType(definition.name, event.target.value as ExpenseCategoryType)}>{expenseCategoryTypes.map((type) => <option key={type}>{type}{!isCustom && type === defaultType ? " (default)" : ""}</option>)}</select></label>
+          <div className="categoryEditorName">{isCustom ? <input aria-label={`Category name ${definition.name}`} maxLength={60} value={draftName} onChange={(event) => setCategoryNameDrafts((current) => ({ ...current, [definition.name]: event.target.value }))} /> : <strong>{definition.name}</strong>}<small>{isCustom ? "Custom" : "Built-in"} · {usageCount} record{usageCount === 1 ? "" : "s"}{!isCustom && state.settings.expenseCategoryOverrides[definition.name] ? " · customized" : ""}</small></div>
+          <label className="categoryEditorClass"><span>Accounting class for {definition.name}</span><select aria-label={`Accounting class for ${definition.name}`} value={definition.accountingClass} onChange={(event) => updateExpenseAccountingClass(definition.name, event.target.value as ExpenseAccountingClass)}>{expenseAccountingClasses.map((accountingClass) => <option key={accountingClass}>{accountingClass}{!isCustom && accountingClass === defaultDefinition?.accountingClass ? " (default)" : ""}</option>)}</select></label>
+          <label className="categoryEditorTiming"><span>Cost timing for {definition.name}</span>{definition.accountingClass === "Product cost" ? <select aria-label={`Cost timing for ${definition.name}`} value={definition.costTiming ?? "Track in inventory"} onChange={(event) => updateExpenseCostTiming(definition.name, event.target.value as ExpenseCostTiming)}>{expenseCostTimings.map((costTiming) => <option key={costTiming}>{costTiming}{!isCustom && costTiming === defaultDefinition?.costTiming ? " (default)" : ""}</option>)}</select> : <small>Not applicable</small>}</label>
           <div className="categoryEditorActions">{isCustom ? <><button className="secondary" type="button" disabled={!draftName.trim() || draftName.trim().replace(/\s+/g, " ") === definition.name} onClick={() => renameExpenseCategory(definition.name)}>Save name</button><button className="textButton dangerText" type="button" onClick={() => deleteExpenseCategory(definition.name)}>Delete</button></> : <span>Protected</span>}</div>
         </div>;
       })}</div>
@@ -1134,7 +1193,7 @@ function DataSettings({ state, setState, fileRef, onImport }: { state: AppState;
   const clearAllRecords = async () => {
     const clearedState: AppState = {
       ...state,
-      version: 14,
+      version: 15,
       products: [],
       movements: [],
       expenses: [],
@@ -1252,8 +1311,9 @@ function MovementModal({ products, initialProduct, initialType, settings, onSave
 
 function ExpenseModal({ categories, onSave, onClose }: { categories: readonly ExpenseCategoryDefinition[]; onSave: (expense: ExpenseDraft) => void; onClose: () => void }) {
   const [draft, setDraft] = useState<ExpenseDraft>({ externalKey: "", purchaseSource: "", vendor: "", category: "Office supplies", amount: 0, date: dateOnly(), note: "", personal: false, source: "manual" });
-  const selectedCategoryType = categories.find((category) => category.name === draft.category)?.type ?? "Operating expense";
-  return <Modal title="Add an expense record" eyebrow="Expense ledger" onClose={onClose}><form onSubmit={(event) => { event.preventDefault(); onSave({ ...draft, externalKey: draft.externalKey.trim(), purchaseSource: draft.purchaseSource.trim(), vendor: draft.vendor.trim(), note: draft.note.trim() }); }}><div className="formGrid"><label className="wide">Unique record key<input autoFocus required value={draft.externalKey} onChange={(event) => setDraft({ ...draft, externalKey: event.target.value })} placeholder="Amazon order ID, invoice ID, or transaction ID" /><small>StockBot blocks any future record with this same key.</small></label><label>Vendor or merchant<input required value={draft.vendor} onChange={(event) => setDraft({ ...draft, vendor: event.target.value })} placeholder="Amazon, electric company, landlord…" /></label><label>Purchase source<input value={draft.purchaseSource} onChange={(event) => setDraft({ ...draft, purchaseSource: event.target.value })} placeholder="Account or purchase channel" /><small>Optional for manually entered expenses.</small></label><label>Category<select value={draft.category} onChange={(event) => setDraft({ ...draft, category: event.target.value as ExpenseCategory })}>{expenseCategoryTypes.map((type) => <optgroup label={type} key={type}>{categories.filter((category) => category.type === type).map((category) => <option key={category.name}>{category.name}</option>)}</optgroup>)}</select><small>Accounting type: {selectedCategoryType}</small></label><label>Amount<input required min="0.01" step="0.01" type="number" value={draft.amount} onChange={(event) => setDraft({ ...draft, amount: Number(event.target.value) })} /></label><label>Date<input required type="date" value={draft.date} onChange={(event) => setDraft({ ...draft, date: event.target.value })} /></label><label className="wide">Description or memo<input value={draft.note} onChange={(event) => setDraft({ ...draft, note: event.target.value })} placeholder="What the purchase was for" /></label><label className="wide checkLabel"><input type="checkbox" checked={draft.personal} onChange={(event) => setDraft({ ...draft, personal: event.target.checked })} /><span><strong>Personal purchase</strong><small>Keep this record for reference without including it in business expenses, COGS, inventory, or tax calculations.</small></span></label>{selectedCategoryType === "COGS" && !draft.personal && <div className="formNotice wide"><strong>Avoid counting the same cost twice.</strong><span>Use a COGS category only when the amount is not already included in a product&apos;s unit cost.</span></div>}</div><ModalActions onClose={onClose} label="Add expense" /></form></Modal>;
+  const selectedCategory: ExpenseCategoryDefinition = categories.find((category) => category.name === draft.category) ?? { name: draft.category, accountingClass: "Operating expense" };
+  const treatmentLabel = `${selectedCategory.accountingClass}${selectedCategory.costTiming ? ` · ${selectedCategory.costTiming}` : ""}`;
+  return <Modal title="Add an expense record" eyebrow="Expense ledger" onClose={onClose}><form onSubmit={(event) => { event.preventDefault(); onSave({ ...draft, externalKey: draft.externalKey.trim(), purchaseSource: draft.purchaseSource.trim(), vendor: draft.vendor.trim(), note: draft.note.trim() }); }}><div className="formGrid"><label className="wide">Unique record key<input autoFocus required value={draft.externalKey} onChange={(event) => setDraft({ ...draft, externalKey: event.target.value })} placeholder="Amazon order ID, invoice ID, or transaction ID" /><small>StockBot blocks any future record with this same key.</small></label><label>Vendor or merchant<input required value={draft.vendor} onChange={(event) => setDraft({ ...draft, vendor: event.target.value })} placeholder="Amazon, electric company, landlord…" /></label><label>Purchase source<input value={draft.purchaseSource} onChange={(event) => setDraft({ ...draft, purchaseSource: event.target.value })} placeholder="Account or purchase channel" /><small>Optional for manually entered expenses.</small></label><label>Category<select value={draft.category} onChange={(event) => setDraft({ ...draft, category: event.target.value as ExpenseCategory })}>{expenseAccountingClasses.map((accountingClass) => <optgroup label={accountingClass} key={accountingClass}>{categories.filter((category) => category.accountingClass === accountingClass).map((category) => <option key={category.name} value={category.name}>{category.name}{category.costTiming ? ` · ${category.costTiming}` : ""}</option>)}</optgroup>)}</select><small>{treatmentLabel}</small></label><label>Amount<input required min="0.01" step="0.01" type="number" value={draft.amount} onChange={(event) => setDraft({ ...draft, amount: Number(event.target.value) })} /></label><label>Date<input required type="date" value={draft.date} onChange={(event) => setDraft({ ...draft, date: event.target.value })} /></label><label className="wide">Description or memo<input value={draft.note} onChange={(event) => setDraft({ ...draft, note: event.target.value })} placeholder="What the purchase was for" /></label><label className="wide checkLabel"><input type="checkbox" checked={draft.personal} onChange={(event) => setDraft({ ...draft, personal: event.target.checked })} /><span><strong>Personal purchase</strong><small>Keep this record for reference without including it in business expenses, COGS, inventory, or tax calculations.</small></span></label>{selectedCategory.accountingClass === "Product cost" && selectedCategory.costTiming === "Recognize directly as COGS" && !draft.personal && <div className="formNotice wide"><strong>Avoid counting the same cost twice.</strong><span>Recognize a product cost directly only when the amount is not already included in a product&apos;s unit cost.</span></div>}</div><ModalActions onClose={onClose} label="Add expense" /></form></Modal>;
 }
 
 function Modal({ title, eyebrow, onClose, children, className = "" }: { title: string; eyebrow: string; onClose: () => void; children: React.ReactNode; className?: string }) { return <div className="modalBackdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}><section className={`modal ${className}`.trim()} role="dialog" aria-modal="true" aria-label={title}><button className="modalClose" onClick={onClose} aria-label="Close">×</button><p className="eyebrow">{eyebrow}</p><h2>{title}</h2>{children}</section></div>; }
@@ -1267,10 +1327,10 @@ function importState(event: ChangeEvent<HTMLInputElement>, setState: React.Dispa
 
 function normalizeState(raw: unknown): AppState {
   if (!raw || typeof raw !== "object") return seed;
-  const incoming = raw as Partial<AppState> & { settings?: Partial<Settings> & { defaultTaxRate?: number } };
+  const incoming = raw as Partial<AppState> & { settings?: Partial<Settings> & { defaultTaxRate?: number; expenseCategoryTypeOverrides?: unknown } };
   const savedVersion = Number(incoming.version) || 0;
   const customExpenseCategories = normalizeCustomExpenseCategories(incoming.settings?.customExpenseCategories);
-  const expenseCategoryTypeOverrides = normalizeExpenseCategoryTypeOverrides(incoming.settings?.expenseCategoryTypeOverrides);
+  const expenseCategoryOverrides = normalizeExpenseCategoryOverrides(incoming.settings?.expenseCategoryOverrides, incoming.settings?.expenseCategoryTypeOverrides);
   const ownAddress = { ...blankAddress("CA"), ...(incoming.settings?.ownAddress ?? {}) };
   const savedTaxes = incoming.settings?.stateTaxes ?? {};
   const legacyRate = incoming.settings?.defaultTaxRate;
@@ -1307,10 +1367,10 @@ function normalizeState(raw: unknown): AppState {
   const personalMigratedColumnOrder = savedVersion < 11
     ? [...legacyOrderWithoutPersonal.slice(0, categoryColumnIndex + 1), "personal", ...legacyOrderWithoutPersonal.slice(categoryColumnIndex + 1)]
     : sourceMigratedColumnOrder;
-  const legacyOrderWithoutCategoryType = personalMigratedColumnOrder.filter((key) => key !== "categoryType");
-  const migratedCategoryColumnIndex = legacyOrderWithoutCategoryType.indexOf("category");
-  const expenseColumnOrder = savedVersion < 13
-    ? [...legacyOrderWithoutCategoryType.slice(0, migratedCategoryColumnIndex + 1), "categoryType", ...legacyOrderWithoutCategoryType.slice(migratedCategoryColumnIndex + 1)]
+  const orderWithoutTreatment = personalMigratedColumnOrder.filter((key) => key !== "categoryType" && key !== "accountingClass" && key !== "costTiming");
+  const migratedCategoryColumnIndex = orderWithoutTreatment.indexOf("category");
+  const expenseColumnOrder = savedVersion < 15
+    ? [...orderWithoutTreatment.slice(0, migratedCategoryColumnIndex + 1), "accountingClass", "costTiming", ...orderWithoutTreatment.slice(migratedCategoryColumnIndex + 1)]
     : personalMigratedColumnOrder;
   const expenseColumnKeys = new Set(expenseColumns.map((column) => column.key));
   const savedVisibleColumns = Array.isArray(incoming.settings?.expenseVisibleColumns) ? incoming.settings.expenseVisibleColumns.filter((key): key is string => typeof key === "string" && expenseColumnKeys.has(key)) : [];
@@ -1320,8 +1380,9 @@ function normalizeState(raw: unknown): AppState {
   const personalMigratedVisibleColumns = savedVersion < 11 && sourceMigratedVisibleColumns.length && !sourceMigratedVisibleColumns.includes("personal")
     ? [...sourceMigratedVisibleColumns.slice(0, Math.max(0, sourceMigratedVisibleColumns.indexOf("category") + 1)), "personal", ...sourceMigratedVisibleColumns.slice(Math.max(0, sourceMigratedVisibleColumns.indexOf("category") + 1))]
     : sourceMigratedVisibleColumns;
-  const migratedVisibleColumns = savedVersion < 13 && personalMigratedVisibleColumns.length && !personalMigratedVisibleColumns.includes("categoryType")
-    ? [...personalMigratedVisibleColumns.slice(0, Math.max(0, personalMigratedVisibleColumns.indexOf("category") + 1)), "categoryType", ...personalMigratedVisibleColumns.slice(Math.max(0, personalMigratedVisibleColumns.indexOf("category") + 1))]
+  const visibleWithoutTreatment = personalMigratedVisibleColumns.filter((key) => key !== "categoryType" && key !== "accountingClass" && key !== "costTiming");
+  const migratedVisibleColumns = savedVersion < 15 && visibleWithoutTreatment.length
+    ? [...visibleWithoutTreatment.slice(0, Math.max(0, visibleWithoutTreatment.indexOf("category") + 1)), "accountingClass", "costTiming", ...visibleWithoutTreatment.slice(Math.max(0, visibleWithoutTreatment.indexOf("category") + 1))]
     : personalMigratedVisibleColumns;
   const products = (Array.isArray(incoming.products) ? incoming.products : seed.products).map((product) => ({ ...product, vendor: typeof product.vendor === "string" ? product.vendor.trim() : "" }));
   const seenCustomerKeys = new Set<string>();
@@ -1359,7 +1420,7 @@ function normalizeState(raw: unknown): AppState {
     seenMovementSourceKeys.add(key); return true;
   });
   return {
-    version: 14,
+    version: 15,
     products,
     movements,
     expenses,
@@ -1374,7 +1435,7 @@ function normalizeState(raw: unknown): AppState {
       addressTaxRates: Array.isArray(incoming.settings?.addressTaxRates) ? incoming.settings.addressTaxRates : [],
       taxUpdateHistory: Array.isArray(incoming.settings?.taxUpdateHistory) ? incoming.settings.taxUpdateHistory : [],
       customExpenseCategories,
-      expenseCategoryTypeOverrides,
+      expenseCategoryOverrides,
       expenseColumnOrder,
       expenseVisibleColumns: migratedVisibleColumns.length ? migratedVisibleColumns : defaultExpenseVisibleColumns,
     },

@@ -4,6 +4,19 @@ All notable changes to StockBot are documented here.
 
 ## Unreleased
 
+## 0.28.0 - 2026-07-28
+
+### Changed
+
+- Replaced the competing **Inventory** and **COGS** accounting types with one **Product cost** accounting class.
+- Added separate product-cost timing: **Track in inventory** or **Recognize directly as COGS**.
+- Updated the COGS workspace, expense totals, filters, sortable columns, manual entry, and category summaries to use the two-part treatment.
+
+### Added
+
+- Added independent **Accounting class** and **Cost timing** controls to the category editor.
+- Added automatic migration from saved Inventory and COGS categories and built-in overrides without changing their accounting result.
+
 ## 0.27.0 - 2026-07-28
 
 ### Added
