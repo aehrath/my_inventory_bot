@@ -42,6 +42,7 @@ type Metrics = { inventoryValue: number; units: number; revenue: number; invento
 type ExpenseColumnDefinition = { key: string; label: string; width: string; field?: string };
 type SortDirection = "asc" | "desc";
 type SortValue = string | number | boolean;
+type AsinPreviewState = { status: "loading" | "ready" | "error"; imageUrl?: string; title?: string };
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 const whole = new Intl.NumberFormat("en-US");
@@ -724,9 +725,12 @@ function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppS
   const [draggedExpenseColumn, setDraggedExpenseColumn] = useState<string | null>(null);
   const [expenseSort, setExpenseSort] = useState<{ key: string; direction: SortDirection }>({ key: "date", direction: "desc" });
   const [selectedExpenseIds, setSelectedExpenseIds] = useState<string[]>([]);
+  const [activeAsinPreview, setActiveAsinPreview] = useState<string | null>(null);
+  const [asinPreviews, setAsinPreviews] = useState<Record<string, AsinPreviewState>>({});
   const expenseColumnWasDragged = useRef(false);
   const expenseSelectionAnchor = useRef<string | null>(null);
   const expenseFileRef = useRef<HTMLInputElement>(null);
+  const asinPreviewRequests = useRef(new Set<string>());
   const availableExpenseCategoryDefinitions = expenseCategoryDefinitionsFor(state.settings);
   const availableExpenseCategories = expenseCategoriesFor(state.settings);
   const columnDefinitions = expenseColumnDefinitionsFor(state.expenses);
@@ -990,6 +994,28 @@ function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppS
     window.addEventListener("keydown", handleDeleteKey);
     return () => window.removeEventListener("keydown", handleDeleteKey);
   }, [deleteSelectedExpenses, selectedExpenseIds.length]);
+  useEffect(() => {
+    const asin = activeAsinPreview;
+    if (!asin || asinPreviewRequests.current.has(asin)) return;
+    asinPreviewRequests.current.add(asin);
+    setAsinPreviews((current) => ({ ...current, [asin]: { status: "loading" } }));
+    void fetch(`/api/asin-preview?asin=${encodeURIComponent(asin)}`, { headers: { accept: "application/json" } })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Preview unavailable");
+        return response.json() as Promise<{ imageUrl?: unknown; title?: unknown }>;
+      })
+      .then((preview) => {
+        const imageUrl = typeof preview.imageUrl === "string" ? preview.imageUrl : "";
+        if (!imageUrl) throw new Error("Preview unavailable");
+        setAsinPreviews((current) => ({
+          ...current,
+          [asin]: { status: "ready", imageUrl, title: typeof preview.title === "string" ? preview.title : "" },
+        }));
+      })
+      .catch(() => {
+        setAsinPreviews((current) => ({ ...current, [asin]: { status: "error" } }));
+      });
+  }, [activeAsinPreview]);
   const expenseCell = (expense: Expense, column: ExpenseColumnDefinition) => {
     if (column.field) {
       const value = expense.fields?.[column.field] || "—";
@@ -999,9 +1025,15 @@ function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppS
     if (column.key === "purchaseSource") return <span className="expenseCell"><strong>{expense.purchaseSource || "Unassigned"}</strong></span>;
     if (column.key === "asin") {
       const value = expense.asins.join(", ");
-      return <span className="expenseCell asinLinks" aria-label={value ? `ASINs ${value}` : "No ASIN"}>
-        <span className="asinInline">{expense.asins.length ? expense.asins.map((asin, index) => <span key={asin}>{index ? ", " : ""}<a href={`https://www.amazon.com/dp/${asin}`} target="_blank" rel="noreferrer" aria-label={`Open Amazon product ${asin}`} onClick={(event) => event.stopPropagation()}>{asin}</a></span>) : "—"}</span>
-        {expense.asins.length > 0 && <span className="asinTooltip" role="group" aria-label="ASIN links for this order" onClick={(event) => event.stopPropagation()}><strong>ASINs in this order</strong><span className="asinTooltipList">{expense.asins.map((asin) => <a href={`https://www.amazon.com/dp/${asin}`} target="_blank" rel="noreferrer" aria-label={`Open Amazon product ${asin} from tooltip`} key={asin}>{asin}</a>)}</span></span>}
+      const previewAsin = activeAsinPreview && expense.asins.includes(activeAsinPreview) ? activeAsinPreview : expense.asins[0];
+      const preview = previewAsin ? asinPreviews[previewAsin] : undefined;
+      return <span className="expenseCell asinLinks" aria-label={value ? `ASINs ${value}` : "No ASIN"} onMouseEnter={() => setActiveAsinPreview(expense.asins[0] ?? null)} onMouseLeave={(event) => { if (!event.currentTarget.contains(document.activeElement)) setActiveAsinPreview(null); }}>
+        <span className="asinInline">{expense.asins.length ? expense.asins.map((asin, index) => <span key={asin}>{index ? ", " : ""}<a href={`https://www.amazon.com/dp/${asin}`} target="_blank" rel="noreferrer" aria-label={`Open Amazon product ${asin}`} onMouseEnter={() => setActiveAsinPreview(asin)} onFocus={() => setActiveAsinPreview(asin)} onClick={(event) => event.stopPropagation()}>{asin}</a></span>) : "—"}</span>
+        {expense.asins.length > 0 && <span className="asinTooltip" role="group" aria-label="ASIN links and product preview for this order" onClick={(event) => event.stopPropagation()}><strong>Amazon product preview</strong><span className={`asinImagePreview ${preview?.status ?? "loading"}`}>
+          {(!preview || preview.status === "loading") && <span>Loading product image…</span>}
+          {preview?.status === "ready" && preview.imageUrl && <a href={`https://www.amazon.com/dp/${previewAsin}`} target="_blank" rel="noreferrer" aria-label={`Open Amazon product ${previewAsin} from preview`}><img src={preview.imageUrl} alt={preview.title ? `${preview.title} product preview` : `Amazon product ${previewAsin} preview`} onError={() => setAsinPreviews((current) => ({ ...current, [previewAsin]: { status: "error" } }))} /></a>}
+          {preview?.status === "error" && <span>Product image unavailable</span>}
+        </span><span className="asinTooltipList">{expense.asins.map((asin) => <a href={`https://www.amazon.com/dp/${asin}`} target="_blank" rel="noreferrer" aria-label={`Open Amazon product ${asin} from tooltip`} className={asin === previewAsin ? "active" : ""} onMouseEnter={() => setActiveAsinPreview(asin)} onFocus={() => setActiveAsinPreview(asin)} key={asin}>{asin}</a>)}</span></span>}
       </span>;
     }
     if (column.key === "note") return <span className="expenseCell note" title={expense.note}>{expense.note || (expense.source === "import" ? "Imported record" : "Manual record")}</span>;

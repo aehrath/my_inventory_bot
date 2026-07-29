@@ -4,6 +4,14 @@ All notable changes to StockBot are documented here.
 
 ## Unreleased
 
+## 0.33.0 - 2026-07-28
+
+### Added
+
+- Added a lazy-loaded Amazon product-image preview to the sticky ASIN hover card.
+- Switched the preview when hovering or focusing a different ASIN in a multi-item order.
+- Cached preview lookups and added a graceful unavailable state for blocked or removed listings.
+
 ## 0.32.0 - 2026-07-28
 
 ### Changed

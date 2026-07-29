@@ -195,10 +195,11 @@ test("tracks sortable and filterable purchase sources", async () => {
 });
 
 test("tracks imported ASINs as a visible sortable expense field", async () => {
-  const [page, expenseImport, styles] = await Promise.all([
+  const [page, expenseImport, styles, previewRoute] = await Promise.all([
     read("app/page.tsx"),
     read("app/expense-import.ts"),
     read("app/globals.css"),
+    read("app/api/asin-preview/route.ts"),
   ]);
   assert.match(page, /key: "asin", label: "ASIN\(s\)"/);
   assert.match(page, /expenseSort\.key === "asin"/);
@@ -209,11 +210,18 @@ test("tracks imported ASINs as a visible sortable expense field", async () => {
   assert.match(page, /target="_blank"/);
   assert.match(page, /Open Amazon product \$\{asin\}/);
   assert.match(styles, /\.asinLinks a/);
-  assert.match(page, /className="asinTooltip" role="group" aria-label="ASIN links for this order"/);
-  assert.match(page, /ASINs in this order/);
+  assert.match(page, /className="asinTooltip" role="group" aria-label="ASIN links and product preview for this order"/);
+  assert.match(page, /Amazon product preview/);
+  assert.match(page, /\/api\/asin-preview\?asin=/);
+  assert.match(page, /Loading product image…/);
+  assert.match(page, /Product image unavailable/);
+  assert.match(page, /onMouseEnter=\{\(\) => setActiveAsinPreview\(asin\)\}/);
   assert.match(page, /Open Amazon product \$\{asin\} from tooltip/);
   assert.match(styles, /\.asinLinks:hover>\.asinTooltip,.asinLinks:focus-within>\.asinTooltip\{display:block\}/);
+  assert.match(styles, /\.asinImagePreview/);
   assert.match(styles, /\.asinTooltipList a/);
+  assert.match(previewRoute, /https:\/\/www\.amazon\.com\/gp\/aw\/d\/\$\{asin\}/);
+  assert.match(previewRoute, /s-maxage=604800/);
   assert.match(page, /savedVersion < 16/);
   assert.match(expenseImport, /asins: string\[\]/);
   assert.match(expenseImport, /normalizeExpenseAsins/);

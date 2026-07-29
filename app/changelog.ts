@@ -13,6 +13,22 @@ export type ChangelogRelease = {
 
 export const changelogReleases: readonly ChangelogRelease[] = [
   {
+    version: "0.33.0",
+    date: "July 28, 2026",
+    title: "ASIN product previews",
+    summary: "Hovering an ASIN now shows a lazy-loaded Amazon product image in the sticky card.",
+    sections: [
+      {
+        title: "Added",
+        items: [
+          "Added product-image previews to the sticky ASIN card.",
+          "Switched the preview when hovering or focusing a different ASIN in a multi-item order.",
+          "Cached Amazon preview lookups and added a clear unavailable state for blocked or removed listings.",
+        ],
+      },
+    ],
+  },
+  {
     version: "0.32.0",
     date: "July 28, 2026",
     title: "Sticky ASIN links",
