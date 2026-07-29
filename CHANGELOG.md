@@ -4,6 +4,21 @@ All notable changes to StockBot are documented here.
 
 ## Unreleased
 
+## 0.26.0 - 2026-07-28
+
+### Added
+
+- Added **Inventory**, **COGS**, **Operating expense**, and **Taxes & fees** accounting types with sensible defaults for every built-in expense category.
+- Added a required accounting type when creating a custom category.
+- Added a configurable, sortable **Category type** expense column and a category-type ledger filter.
+
+### Changed
+
+- Moved purchased inventory into the **COGS** workspace and removed the redundant Purchase Inventory navigation item.
+- Kept inventory waiting to become COGS visibly separate from costs recognized through sales or direct COGS expenses.
+- Business, COGS, inventory, and tax totals now follow category types instead of hard-coded category names.
+- Existing custom categories migrate to **Operating expense**, and saved expense-column layouts gain the new type column automatically.
+
 ## 0.25.0 - 2026-07-28
 
 ### Added

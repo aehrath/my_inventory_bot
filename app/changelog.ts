@@ -13,6 +13,30 @@ export type ChangelogRelease = {
 
 export const changelogReleases: readonly ChangelogRelease[] = [
   {
+    version: "0.26.0",
+    date: "July 28, 2026",
+    title: "One COGS workspace",
+    summary: "Purchased inventory and recognized costs now share one accounting-aware COGS workspace.",
+    sections: [
+      {
+        title: "Changed",
+        items: [
+          "Moved purchased inventory into the COGS page and removed the redundant Purchase Inventory navigation item.",
+          "Separated inventory waiting to become COGS from costs already recognized through sales or direct COGS expenses.",
+          "Business and tax totals now follow each category's accounting type instead of hard-coded category names.",
+        ],
+      },
+      {
+        title: "Added",
+        items: [
+          "Added Inventory, COGS, Operating expense, and Taxes & fees category types with sensible defaults for every built-in category.",
+          "Added an accounting-type choice for custom categories plus sortable, configurable type display and filtering in Expenses.",
+          "Added automatic migration for existing custom categories and saved expense-column layouts.",
+        ],
+      },
+    ],
+  },
+  {
     version: "0.25.0",
     date: "July 28, 2026",
     title: "Custom expense categories",

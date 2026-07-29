@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isExpenseInventoryCategory, parseExpenseInventoryDescription } from "../app/expense-inventory.ts";
+import { parseExpenseInventoryDescription } from "../app/expense-inventory.ts";
 
 test("extracts explicit piece and pack counts and divides total cost", () => {
   assert.deepEqual(parseExpenseInventoryDescription("Blue widgets (200 PCS)", 80), {
@@ -44,10 +44,4 @@ test("keeps ambiguous or year-like descriptions as one item", () => {
     quantity: 1,
     unitCost: 18,
   });
-});
-
-test("only inventory categories qualify for expense-backed inventory", () => {
-  assert.equal(isExpenseInventoryCategory("Raw materials"), true);
-  assert.equal(isExpenseInventoryCategory("Resale item"), true);
-  assert.equal(isExpenseInventoryCategory("Office supplies"), false);
 });

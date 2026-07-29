@@ -21,6 +21,7 @@ test("includes a visible release changelog", async () => {
   assert.match(page, /label: "Changelog"/);
   assert.match(page, /What&apos;s new in StockBot/);
   assert.match(page, /changelogReleases\.map/);
+  assert.match(changelog, /version: "0\.26\.0"/);
   assert.match(changelog, /version: "0\.25\.0"/);
   assert.match(changelog, /version: "0\.24\.0"/);
   assert.match(changelog, /version: "0\.23\.0"/);
@@ -42,6 +43,7 @@ test("includes a visible release changelog", async () => {
   assert.match(changelog, /version: "0\.7\.0"/);
   assert.match(changelog, /version: "0\.6\.0"/);
   assert.match(changelog, /version: "0\.1\.0"/);
+  assert.match(markdown, /## 0\.26\.0 - 2026-07-28/);
   assert.match(markdown, /## 0\.25\.0 - 2026-07-28/);
   assert.match(markdown, /## 0\.24\.0 - 2026-07-28/);
   assert.match(markdown, /## 0\.23\.0 - 2026-07-28/);
@@ -105,7 +107,7 @@ test("includes item-level COGS and final-product tracking", async () => {
   assert.match(page, /href=\{`#product-\$\{linkedProduct\.id\}`\}/);
   assert.match(page, /onOpenProduct\(linkedProduct\)/);
   assert.match(page, /linkedFinalProductFor/);
-  assert.match(page, /version: 12/);
+  assert.match(page, /version: 13/);
   assert.match(styles, /\.cogsHead,.cogsRow/);
   assert.match(styles, /\.cogsProductLink/);
   assert.match(styles, /activityTag\.production_use/);
@@ -178,7 +180,7 @@ test("tracks sortable and filterable purchase sources", async () => {
   assert.match(page, /key: "purchaseSource", label: "Purchase source"/);
   assert.match(page, /Purchase source key/);
   assert.match(page, /Expense purchase source/);
-  assert.match(page, /Purchase inventory source/);
+  assert.match(page, /Purchased inventory source/);
   assert.match(page, /expenseSort\.key === "purchaseSource"/);
   assert.match(page, /sort\.key === "purchaseSource"/);
   assert.match(page, /setExpensePurchaseSource\(sourceKey\)/);
@@ -199,25 +201,26 @@ test("keeps expense imports isolated from products and inventory", async () => {
   assert.match(expensesSection, /expenses: \[\.\.\.additions, \.\.\.enriched\]/);
 });
 
-test("builds synchronized purchase inventory from expense categories", async () => {
+test("combines purchased inventory and recognized costs in the COGS workspace", async () => {
   const [page, expenseImport, inventory, styles] = await Promise.all([
     read("app/page.tsx"),
     read("app/expense-import.ts"),
     read("app/expense-inventory.ts"),
     read("app/globals.css"),
   ]);
-  assert.match(page, /label: "Purchase inventory"/);
-  assert.match(page, /function PurchaseInventory/);
-  assert.match(page, /isExpenseInventoryCategory\(expense\.category\)/);
+  assert.doesNotMatch(page, /\{ id: "purchaseInventory"/);
+  assert.match(page, /function PurchasedInventorySection/);
+  assert.match(page, /<PurchasedInventorySection state=\{state\}/);
+  assert.match(page, /expenseCategoryTypeFor\(expense\.category, state\.settings\) === "Inventory"/);
+  assert.match(page, /expenseCategoryTypeFor\(expense\.category, state\.settings\) === "COGS"/);
   assert.match(page, /parseExpenseInventoryDescription\(expense\.note, expense\.amount\)/);
-  assert.match(page, /expense\.category !== "Cost of goods" && !isExpenseInventoryCategory\(expense\.category\)/);
-  assert.match(page, /Excludes COGS, inventory, and personal/);
+  assert.match(page, /Inventory waiting to become COGS/);
+  assert.match(page, /Not deducted until it becomes COGS/);
   assert.match(page, /className="expenseCategorySelect"/);
   assert.match(page, /Category for \$\{expense\.externalKey\}/);
   assert.match(page, /targetIds\.has\(item\.id\) \? \{ \.\.\.item, category \} : item/);
-  assert.match(expenseImport, /"Raw materials"/);
-  assert.match(expenseImport, /"Resale item"/);
-  assert.match(inventory, /expenseInventoryCategories/);
+  assert.match(expenseImport, /\{ name: "Raw materials", type: "Inventory" \}/);
+  assert.match(expenseImport, /\{ name: "Resale item", type: "Inventory" \}/);
   assert.match(inventory, /totalCost \/ quantity/);
   assert.match(styles, /\.purchaseInventoryHead/);
   assert.match(styles, /\.expenseCategorySelect/);
@@ -271,7 +274,7 @@ test("keeps personal expenses visible but out of business calculations", async (
   assert.match(page, /Expense business or personal use/);
   assert.match(page, /expenseSort\.key === "personal"/);
   assert.match(page, /!e\.personal && new Date/);
-  assert.match(page, /!expense\.personal && isExpenseInventoryCategory/);
+  assert.match(page, /!expense\.personal && expenseCategoryTypeFor/);
   assert.match(page, /const businessExpenses = selectedExpenses\.filter\(\(expense\) => !expense\.personal\)/);
   assert.match(page, /Personal expense \$\{expense\.externalKey\}/);
   assert.match(page, /targetIds\.has\(item\.id\) \? \{ \.\.\.item, personal \} : item/);
@@ -281,24 +284,32 @@ test("keeps personal expenses visible but out of business calculations", async (
   assert.match(styles, /\.expensePersonalToggle/);
 });
 
-test("creates persistent custom expense categories for every category dropdown", async () => {
+test("creates persistent typed expense categories for every category dropdown", async () => {
   const [page, expenseImport, styles] = await Promise.all([
     read("app/page.tsx"),
     read("app/expense-import.ts"),
     read("app/globals.css"),
   ]);
-  assert.match(page, /customExpenseCategories: string\[\]/);
+  assert.match(page, /customExpenseCategories: CustomExpenseCategory\[\]/);
   assert.match(page, /const normalizeCustomExpenseCategories/);
+  assert.match(page, /const expenseCategoryDefinitionsFor/);
   assert.match(page, /const expenseCategoriesFor/);
+  assert.match(page, /const expenseCategoryTypeFor/);
   assert.match(page, /const createExpenseCategory = \(event: FormEvent\)/);
   assert.match(page, /aria-label="New expense category"/);
-  assert.match(page, /customExpenseCategories: \[\.\.\.current\.settings\.customExpenseCategories, category\]/);
+  assert.match(page, /aria-label="New expense category type"/);
+  assert.match(page, /customExpenseCategories: \[\.\.\.current\.settings\.customExpenseCategories, \{ name: category, type: newExpenseCategoryType \}\]/);
   assert.match(page, /availableExpenseCategories\.map\(\(category\) => <option/);
-  assert.match(page, /<ExpenseModal categories=\{expenseCategoriesFor\(state\.settings\)\}/);
-  assert.match(page, /normalizeExpenseCategory\(expense\.category, customExpenseCategories\)/);
+  assert.match(page, /<ExpenseModal categories=\{expenseCategoryDefinitionsFor\(state\.settings\)\}/);
+  assert.match(page, /normalizeExpenseCategory\(expense\.category, customExpenseCategories\.map/);
+  assert.match(page, /key: "categoryType", label: "Category type"/);
+  assert.match(page, /expenseSort\.key === "categoryType"/);
+  assert.match(page, /aria-label="Expense category type"/);
   assert.match(expenseImport, /customCategories: readonly string\[\] = \[\]/);
+  assert.match(expenseImport, /expenseCategoryTypes = \["Inventory", "COGS", "Operating expense", "Taxes & fees"\]/);
   assert.match(expenseImport, /normalizeExpenseCategory\(valueFor\(record, aliases\.category\), customCategories\)/);
   assert.match(styles, /\.expenseCategoryCreator/);
+  assert.match(styles, /\.categoryTypeBadge/);
 });
 
 test("imports historical invoices into duplicate-safe sales and customers", async () => {

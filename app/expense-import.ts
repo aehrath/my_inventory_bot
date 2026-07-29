@@ -1,22 +1,28 @@
-export const expenseCategories = [
-  "Cost of goods",
-  "Raw materials",
-  "Resale item",
-  "Utilities",
-  "Rent",
-  "Office equipment",
-  "Office supplies",
-  "Advertising & marketing",
-  "Shipping & postage",
-  "Insurance",
-  "Professional services",
-  "Repairs & maintenance",
-  "Travel",
-  "Meals",
-  "Taxes & licenses",
-  "Bank & processing fees",
-  "Other",
+export const expenseCategoryTypes = ["Inventory", "COGS", "Operating expense", "Taxes & fees"] as const;
+export type ExpenseCategoryType = typeof expenseCategoryTypes[number];
+export type ExpenseCategoryDefinition = { name: string; type: ExpenseCategoryType };
+
+export const expenseCategoryDefinitions: readonly ExpenseCategoryDefinition[] = [
+  { name: "Cost of goods", type: "COGS" },
+  { name: "Raw materials", type: "Inventory" },
+  { name: "Resale item", type: "Inventory" },
+  { name: "Utilities", type: "Operating expense" },
+  { name: "Rent", type: "Operating expense" },
+  { name: "Office equipment", type: "Operating expense" },
+  { name: "Office supplies", type: "Operating expense" },
+  { name: "Advertising & marketing", type: "Operating expense" },
+  { name: "Shipping & postage", type: "Operating expense" },
+  { name: "Insurance", type: "Operating expense" },
+  { name: "Professional services", type: "Operating expense" },
+  { name: "Repairs & maintenance", type: "Operating expense" },
+  { name: "Travel", type: "Operating expense" },
+  { name: "Meals", type: "Operating expense" },
+  { name: "Taxes & licenses", type: "Taxes & fees" },
+  { name: "Bank & processing fees", type: "Taxes & fees" },
+  { name: "Other", type: "Operating expense" },
 ] as const;
+
+export const expenseCategories = expenseCategoryDefinitions.map((category) => category.name);
 
 export const amazonBusinessCsvColumns = [
   "Order Date", "Order ID", "Account Group", "PO Number", "Order Quantity", "Currency", "Order Subtotal",

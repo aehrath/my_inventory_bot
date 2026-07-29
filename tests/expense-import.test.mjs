@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { amazonBusinessCsvColumns, expenseCategories, normalizeExpenseCategory, parseExpenseImportText } from "../app/expense-import.ts";
+import { amazonBusinessCsvColumns, expenseCategories, expenseCategoryDefinitions, expenseCategoryTypes, normalizeExpenseCategory, parseExpenseImportText } from "../app/expense-import.ts";
 
 const fixture = new URL("./fixtures/amazon-business-orders.csv", import.meta.url);
 
@@ -76,6 +76,15 @@ test("includes inventory categories and normalizes their common labels", () => {
   assert.ok(expenseCategories.includes("Resale item"));
   assert.equal(normalizeExpenseCategory("raw material"), "Raw materials");
   assert.equal(normalizeExpenseCategory("resale inventory"), "Resale item");
+});
+
+test("assigns practical accounting types to every built-in expense category", () => {
+  assert.deepEqual(expenseCategoryTypes, ["Inventory", "COGS", "Operating expense", "Taxes & fees"]);
+  assert.equal(expenseCategoryDefinitions.length, expenseCategories.length);
+  assert.deepEqual(expenseCategoryDefinitions.find((category) => category.name === "Raw materials"), { name: "Raw materials", type: "Inventory" });
+  assert.deepEqual(expenseCategoryDefinitions.find((category) => category.name === "Cost of goods"), { name: "Cost of goods", type: "COGS" });
+  assert.deepEqual(expenseCategoryDefinitions.find((category) => category.name === "Utilities"), { name: "Utilities", type: "Operating expense" });
+  assert.deepEqual(expenseCategoryDefinitions.find((category) => category.name === "Taxes & licenses"), { name: "Taxes & licenses", type: "Taxes & fees" });
 });
 
 test("preserves configured custom categories during expense import", () => {

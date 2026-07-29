@@ -1,7 +1,3 @@
-export const expenseInventoryCategories = ["Raw materials", "Resale item"] as const;
-
-export type ExpenseInventoryCategory = typeof expenseInventoryCategories[number];
-
 export type ParsedExpenseInventoryItem = {
   name: string;
   quantity: number;
@@ -85,6 +81,3 @@ export function parseExpenseInventoryDescription(description: string, totalCost:
 
   return { name: cleanInventoryName(original, original), quantity: 1, unitCost: totalCost };
 }
-
-export const isExpenseInventoryCategory = (category: string): category is ExpenseInventoryCategory =>
-  expenseInventoryCategories.includes(category as ExpenseInventoryCategory);
