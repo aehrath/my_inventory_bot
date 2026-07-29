@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { amazonBusinessCsvColumns, expenseAccountingClasses, expenseCategories, expenseCategoryDefinitions, expenseCostTimings, normalizeExpenseCategory, parseExpenseImportText } from "../app/expense-import.ts";
+import { amazonBusinessCsvColumns, amazonOrderHistoryCsvColumns, expenseAccountingClasses, expenseCategories, expenseCategoryDefinitions, expenseCostTimings, normalizeExpenseCategory, parseExpenseImportText } from "../app/expense-import.ts";
 
 const fixture = new URL("./fixtures/amazon-business-orders.csv", import.meta.url);
+const amazonOrderHistoryFixture = new URL("./fixtures/amazon-order-history.csv", import.meta.url);
 
 test("groups Amazon Business rows into unique order expenses", async () => {
   const text = await readFile(fixture, "utf8");
@@ -33,6 +34,40 @@ test("enriches an existing Amazon order without creating a duplicate", async () 
   assert.equal(preview.updates.length, 1);
   assert.equal(preview.updates[0].externalKey, "111-1111111-1111111");
   assert.deepEqual(preview.duplicates, []);
+});
+
+test("groups Amazon consumer Order History items and sums every line total", async () => {
+  const text = await readFile(amazonOrderHistoryFixture, "utf8");
+  const preview = parseExpenseImportText(text, "Order History.csv", [], "2026-07-28T00:00:00.000Z");
+
+  assert.equal(preview.ready.length, 2);
+  assert.equal(preview.duplicates.length, 0);
+  assert.equal(preview.skipped.length, 1);
+  assert.equal(preview.invalid.length, 0);
+  assert.match(preview.skipped[0], /cancelled Amazon order/);
+  assert.equal(preview.readyTotal, 27.8);
+  assert.equal(preview.ready[0].externalKey, "111-1111111-1111111");
+  assert.equal(preview.ready[0].amount, 22.55);
+  assert.equal(preview.ready[0].vendor, "Amazon.com");
+  assert.equal(preview.ready[0].purchaseSource, "Amazon · Amazon.com");
+  assert.equal(preview.ready[0].date, "2026-01-15");
+  assert.match(preview.ready[0].note, /Shipping labels, 200 pieces/);
+  assert.match(preview.ready[0].note, /Laminating pouches/);
+  assert.equal(preview.ready[0].fields["Order ID"], "111-1111111-1111111");
+  assert.equal(Object.keys(preview.ready[0].fields).length, 28);
+  assert.match(preview.ready[0].fields["Product Name"], /Shipping labels, 200 pieces/);
+  assert.match(preview.ready[0].fields["Product Name"], /Laminating pouches/);
+});
+
+test("uses an Amazon Order History order ID to correct an existing expense", async () => {
+  const text = await readFile(amazonOrderHistoryFixture, "utf8");
+  const preview = parseExpenseImportText(text, "Order History.csv", ["111-1111111-1111111"], "2026-07-28T00:00:00.000Z");
+
+  assert.equal(preview.ready.length, 1);
+  assert.equal(preview.updates.length, 1);
+  assert.equal(preview.updates[0].amount, 22.55);
+  assert.equal(preview.updates[0].vendor, "Amazon.com");
+  assert.match(preview.updates[0].note, /Laminating pouches/);
 });
 
 test("suggests and imports purchase source keys", () => {
@@ -69,6 +104,14 @@ test("defines every column in the provided Amazon Business export", () => {
   assert.equal(amazonBusinessCsvColumns.length, 73);
   assert.equal(amazonBusinessCsvColumns[0], "Order Date");
   assert.equal(amazonBusinessCsvColumns.at(-1), "Seller ZipCode");
+});
+
+test("defines every column in the Amazon consumer Order History export", () => {
+  assert.equal(amazonOrderHistoryCsvColumns.length, 28);
+  assert.equal(amazonOrderHistoryCsvColumns[0], "ASIN");
+  assert.equal(amazonOrderHistoryCsvColumns.at(-1), "Website");
+  assert.ok(amazonOrderHistoryCsvColumns.includes("Product Name"));
+  assert.ok(amazonOrderHistoryCsvColumns.includes("Total Amount"));
 });
 
 test("includes inventory categories and normalizes their common labels", () => {

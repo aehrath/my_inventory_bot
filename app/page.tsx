@@ -3,7 +3,7 @@
 
 import { ChangeEvent, CSSProperties, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { changelogReleases } from "./changelog";
-import { amazonBusinessCsvColumns, expenseAccountingClasses, expenseCategories, expenseCategoryDefinitions, expenseCostTimings, normalizeExpenseCategory, normalizeExpenseDate, normalizeExpenseKey, parseExpenseImportText } from "./expense-import";
+import { amazonBusinessCsvColumns, amazonOrderHistoryCsvColumns, expenseAccountingClasses, expenseCategories, expenseCategoryDefinitions, expenseCostTimings, normalizeExpenseCategory, normalizeExpenseDate, normalizeExpenseKey, parseExpenseImportText } from "./expense-import";
 import type { ExpenseAccountingClass, ExpenseCategory, ExpenseCategoryDefinition, ExpenseCostTiming, ExpenseImportPreview } from "./expense-import";
 import { parseExpenseInventoryDescription } from "./expense-inventory";
 import { normalizeCustomerKey, normalizeInvoiceKey, normalizeProductIdentifier, parseInvoiceImportText } from "./invoice-import";
@@ -75,14 +75,15 @@ const expenseCsvColumnDefinition = (label: string): ExpenseColumnDefinition => (
   key: expenseCsvColumnKey(label),
   label,
   field: label,
-  width: label === "Title" ? "360px" : /Email|Account Group|Credentials/.test(label) ? "230px" : /Date|Amount|Total|Tax|Promotion|PPU|Quantity/.test(label) ? "145px" : /Order ID|Reference ID|Identifier|ASIN|UNSPSC|Code|Number/.test(label) ? "190px" : "175px",
+  width: label === "Title" || label === "Product Name" ? "360px" : /Email|Account Group|Credentials/.test(label) ? "230px" : /Date|Amount|Total|Tax|Promotion|PPU|Quantity/.test(label) ? "145px" : /Order ID|Reference ID|Identifier|ASIN|UNSPSC|Code|Number/.test(label) ? "190px" : "175px",
 });
-const defaultExpenseColumnDefinitions = [...expenseBaseColumns, ...amazonBusinessCsvColumns.map(expenseCsvColumnDefinition)];
+const expenseImportCsvColumns = Array.from(new Set([...amazonBusinessCsvColumns, ...amazonOrderHistoryCsvColumns]));
+const defaultExpenseColumnDefinitions = [...expenseBaseColumns, ...expenseImportCsvColumns.map(expenseCsvColumnDefinition)];
 const defaultExpenseColumnOrder = defaultExpenseColumnDefinitions.map((column) => column.key);
 const defaultExpenseVisibleColumns = ["date", "vendor", "purchaseSource", "note", "category", "accountingClass", "costTiming", "personal", "externalKey", "amount"];
 const expenseColumnDefinitionsFor = (expenses: Expense[]) => {
-  const knownFields = new Set(amazonBusinessCsvColumns);
-  const dynamicFields = Array.from(new Set(expenses.flatMap((expense) => Object.keys(expense.fields ?? {})))).filter((field) => !knownFields.has(field as typeof amazonBusinessCsvColumns[number]));
+  const knownFields = new Set<string>(expenseImportCsvColumns);
+  const dynamicFields = Array.from(new Set(expenses.flatMap((expense) => Object.keys(expense.fields ?? {})))).filter((field) => !knownFields.has(field));
   return [...defaultExpenseColumnDefinitions, ...dynamicFields.map(expenseCsvColumnDefinition)];
 };
 const mergeExpenseColumnOrder = (saved: string[], definitions: ExpenseColumnDefinition[]) => {
@@ -804,7 +805,7 @@ function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppS
     catch (caught) {
       const message = caught instanceof Error ? caught.message : "The file could not be read.";
       setImportPurchaseSource("");
-      setExpenseImport({ fileName: file.name, ready: [], updates: [], duplicates: [], invalid: [`${message} Use a CSV or JSON expense export.`], years: [], readyTotal: 0, columns: [] });
+      setExpenseImport({ fileName: file.name, ready: [], updates: [], duplicates: [], skipped: [], invalid: [`${message} Use a CSV or JSON expense export.`], years: [], readyTotal: 0, columns: [] });
     } finally { setImporting(false); }
   };
   const applyExpenseImport = () => {
@@ -822,7 +823,17 @@ function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppS
       }
       const enriched = current.expenses.map((expense) => {
         const update = updates.get(normalizeExpenseKey(expense.externalKey));
-        return update ? { ...expense, personal: update.personal ?? expense.personal, purchaseSource: sourceKey, fields: update.fields, importedAt: expense.importedAt ?? update.importedAt } : expense;
+        return update ? {
+          ...expense,
+          vendor: update.vendor,
+          amount: update.amount,
+          date: update.date,
+          note: update.note || expense.note,
+          personal: update.personal ?? expense.personal,
+          purchaseSource: sourceKey,
+          fields: update.fields,
+          importedAt: expense.importedAt ?? update.importedAt,
+        } : expense;
       });
       const importedColumnKeys = expenseImport.columns.map(expenseCsvColumnKey);
       const expenseColumnOrder = [...current.settings.expenseColumnOrder, ...importedColumnKeys.filter((key) => !current.settings.expenseColumnOrder.includes(key))];
@@ -1021,11 +1032,12 @@ function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppS
     </section>
     <div className="disclaimer"><strong>Good records, calmer filing.</strong><span>The Tax center uses the selected tax year for its filing worksheet. This ledger shows all years unless you filter it.</span></div>
     {expenseImport && <Modal title="Review expense import" eyebrow="Duplicate-safe import" onClose={() => { setExpenseImport(null); setImportPurchaseSource(""); }}>
-      <div className="importSummary"><article><span>New records</span><strong>{expenseImport.ready.length}</strong></article><article><span>Existing records enriched</span><strong>{expenseImport.updates.length}</strong></article><article><span>Invalid records</span><strong>{expenseImport.invalid.length}</strong></article></div>
-      <p className="settingsCopy"><strong>{expenseImport.fileName}</strong> contains {expenseImport.columns.length} source columns. {importPreviewExpenses.length > 0 && <>The importable total is <strong>{money.format(expenseImport.readyTotal)}</strong>{expenseImport.years.length ? ` across ${expenseImport.years.join(", ")}` : ""}. Existing expense keys receive the source fields but are never duplicated.</>}</p>
+      <div className="importSummary"><article><span>New records</span><strong>{expenseImport.ready.length}</strong></article><article><span>Existing records corrected</span><strong>{expenseImport.updates.length}</strong></article><article><span>Invalid records</span><strong>{expenseImport.invalid.length}</strong></article></div>
+      <p className="settingsCopy"><strong>{expenseImport.fileName}</strong> contains {expenseImport.columns.length} source columns. {importPreviewExpenses.length > 0 && <>The importable total is <strong>{money.format(expenseImport.readyTotal)}</strong>{expenseImport.years.length ? ` across ${expenseImport.years.join(", ")}` : ""}. Existing expense keys refresh their imported order details and source fields but are never duplicated.</>}</p>
       {importPreviewExpenses.length > 0 && <div className="formGrid importSourceForm"><label className="wide">Purchase source key<input autoFocus required value={importPurchaseSource} onChange={(event) => setImportPurchaseSource(event.target.value)} placeholder="Amazon Business, Amazon Personal, wholesale account…" /><small>This label is saved on every record in this file so you can sort and filter purchases by account or source.</small></label></div>}
       {importPreviewExpenses.length > 0 && <div className="importPreviewList">{importPreviewExpenses.slice(0, 6).map((expense) => <div key={expense.externalKey}><span><strong>{expense.vendor}</strong><small>{expense.externalKey} · {expense.category} · {expense.date}{expenseImport.updates.some((update) => update.externalKey === expense.externalKey) ? " · existing" : " · new"}</small></span><b>{money.format(expense.amount)}</b></div>)}{importPreviewExpenses.length > 6 && <small>+ {importPreviewExpenses.length - 6} more records</small>}</div>}
       {expenseImport.duplicates.length > 0 && <details className="importDetails"><summary>{expenseImport.duplicates.length} duplicate row{expenseImport.duplicates.length === 1 ? "" : "s"} inside this file skipped</summary><p>{expenseImport.duplicates.slice(0, 12).join(", ")}</p></details>}
+      {expenseImport.skipped.length > 0 && <details className="importDetails"><summary>{expenseImport.skipped.length} cancelled or zero-dollar order{expenseImport.skipped.length === 1 ? "" : "s"} ignored</summary>{expenseImport.skipped.slice(0, 12).map((message) => <p key={message}>{message}</p>)}</details>}
       {expenseImport.invalid.length > 0 && <details className="importDetails"><summary>{expenseImport.invalid.length} invalid record{expenseImport.invalid.length === 1 ? "" : "s"} skipped</summary>{expenseImport.invalid.slice(0, 12).map((message) => <p key={message}>{message}</p>)}</details>}
       <div className="modalActions"><button type="button" className="secondary" onClick={() => { setExpenseImport(null); setImportPurchaseSource(""); }}>Cancel</button><button type="button" className="primary" disabled={!importPreviewExpenses.length || !importPurchaseSource.trim()} onClick={applyExpenseImport}>Save {importPreviewExpenses.length} records</button></div>
     </Modal>}

@@ -13,6 +13,29 @@ export type ChangelogRelease = {
 
 export const changelogReleases: readonly ChangelogRelease[] = [
   {
+    version: "0.29.0",
+    date: "July 28, 2026",
+    title: "Amazon Order History imports",
+    summary: "Amazon consumer order exports now become complete, duplicate-safe expenses instead of incomplete item rows.",
+    sections: [
+      {
+        title: "Added",
+        items: [
+          "Added native support for Amazon Your Orders → Order History.csv exports and all 28 source columns.",
+          "Added a clear import-review notice for cancelled and zero-dollar Amazon orders that are intentionally ignored.",
+        ],
+      },
+      {
+        title: "Fixed",
+        items: [
+          "Grouped item-level rows by Amazon order ID and summed every item total instead of discarding later items as duplicates.",
+          "Mapped Amazon.com as the vendor, copied product names into the description, and exposed every original field as a configurable expense column.",
+          "Re-importing an existing order now corrects imported order details without creating another expense or replacing its category and Personal setting.",
+        ],
+      },
+    ],
+  },
+  {
     version: "0.28.0",
     date: "July 28, 2026",
     title: "Product-cost lifecycle",

@@ -4,6 +4,19 @@ All notable changes to StockBot are documented here.
 
 ## Unreleased
 
+## 0.29.0 - 2026-07-28
+
+### Added
+
+- Added native support for Amazon consumer **Your Orders → Order History.csv** exports and all 28 source columns.
+- Added a clear import-review notice for cancelled and zero-dollar Amazon orders that are intentionally ignored.
+
+### Fixed
+
+- Combined item-level rows under their Amazon order ID and summed every line total instead of dropping later items as duplicates.
+- Mapped Amazon.com as the vendor, copied product names into the expense description, and kept the complete original order data available as configurable columns.
+- Re-importing an existing order now corrects its imported amount, vendor, date, description, and source fields without creating another expense or replacing its category and Personal setting.
+
 ## 0.28.0 - 2026-07-28
 
 ### Changed

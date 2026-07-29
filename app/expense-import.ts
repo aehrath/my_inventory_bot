@@ -45,6 +45,14 @@ export const amazonBusinessCsvColumns = [
   "Seller Credentials", "Seller City", "Seller State", "Seller ZipCode",
 ] as const;
 
+export const amazonOrderHistoryCsvColumns = [
+  "ASIN", "Billing Address", "Carrier Name & Tracking Number", "Currency", "Gift Message", "Gift Recipient Contact",
+  "Gift Sender Name", "Item Serial Number", "Order Date", "Order ID", "Order Status", "Original Quantity",
+  "Payment Method Type", "Product Condition", "Product Name", "Purchase Order Number", "Ship Date",
+  "Shipment Item Subtotal", "Shipment Item Subtotal Tax", "Shipment Status", "Shipping Address", "Shipping Charge",
+  "Shipping Option", "Total Amount", "Total Discounts", "Unit Price", "Unit Price Tax", "Website",
+] as const;
+
 export type ExpenseCategory = string;
 
 export type ImportedExpense = {
@@ -66,6 +74,7 @@ export type ExpenseImportPreview = {
   ready: ImportedExpense[];
   updates: ImportedExpense[];
   duplicates: string[];
+  skipped: string[];
   invalid: string[];
   years: number[];
   readyTotal: number;
@@ -239,9 +248,53 @@ export function parseExpenseImportText(
     });
   }
 
+  const isAmazonOrderHistoryExport = !isAmazonBusinessExport && records.some((record) =>
+    valueFor(record, ["orderid"])
+    && valueFor(record, ["totalamount"]) !== undefined
+    && valueFor(record, ["productname"]) !== undefined
+    && valueFor(record, ["website"]) !== undefined,
+  );
+  if (isAmazonOrderHistoryExport) {
+    const orders = new Map<string, Array<Record<string, unknown>>>();
+    for (const record of records) {
+      const orderId = String(valueFor(record, ["orderid"]) ?? "").trim();
+      if (!orderId) continue;
+      orders.set(orderId, [...(orders.get(orderId) ?? []), record]);
+    }
+    records = Array.from(orders.entries()).map(([orderId, orderRows]) => {
+      const first = orderRows[0];
+      const uniqueValues = (fields: readonly string[]) => Array.from(new Set(orderRows.map((record) => String(valueFor(record, fields) ?? "").trim()).filter(Boolean)));
+      const websites = uniqueValues(["website"]);
+      const titles = uniqueValues(["productname"]);
+      const statuses = uniqueValues(["orderstatus"]).map((status) => status.toLowerCase());
+      const titleNote = titles.slice(0, 3).join("; ");
+      const moreItems = titles.length > 3 ? ` (+${titles.length - 3} more items)` : "";
+      const amount = Math.round(orderRows.reduce((sum, record) => {
+        const lineAmount = parseExpenseAmount(valueFor(record, ["totalamount"]));
+        return sum + (Number.isFinite(lineAmount) ? lineAmount : 0);
+      }, 0) * 100) / 100;
+      const fields = Object.fromEntries(sourceColumns.map((column) => {
+        const values = Array.from(new Set(orderRows.map((record) => String(record[column.key] ?? "").trim()).filter(Boolean)));
+        return [column.label, values.join(" · ")];
+      }));
+      return {
+        externalkey: orderId,
+        purchasesource: websites.length ? `Amazon · ${websites.join(" · ")}` : "Amazon",
+        vendor: websites[0] || "Amazon",
+        category: "Other",
+        amount,
+        date: valueFor(first, ["orderdate"]),
+        note: `${titleNote}${moreItems}`,
+        importskipreason: statuses.includes("cancelled") ? "cancelled Amazon order" : amount <= 0 ? "zero-dollar Amazon order" : "",
+        fields,
+      };
+    });
+  }
+
   const ready: ImportedExpense[] = [];
   const updates: ImportedExpense[] = [];
   const duplicates: string[] = [];
+  const skipped: string[] = [];
   const invalid: string[] = [];
   const existingKeys = new Set(existingExternalKeys.map(normalizeExpenseKey));
   const seen = new Set<string>();
@@ -259,6 +312,11 @@ export function parseExpenseImportText(
   records.forEach((record, index) => {
     const externalKey = String(valueFor(record, aliases.key) ?? "").trim();
     const normalizedKey = normalizeExpenseKey(externalKey);
+    const skipReason = String(record.importskipreason ?? "").trim();
+    if (skipReason) {
+      skipped.push(`${externalKey || `Row ${index + 2}`}: ${skipReason}`);
+      return;
+    }
     const amount = parseExpenseAmount(valueFor(record, aliases.amount));
     const date = normalizeExpenseDate(valueFor(record, aliases.date));
     if (!normalizedKey || !Number.isFinite(amount) || amount <= 0 || !date) {
@@ -295,5 +353,5 @@ export function parseExpenseImportText(
   const importable = [...ready, ...updates];
   const years = Array.from(new Set(importable.map((expense) => Number(expense.date.slice(0, 4))))).filter(Number.isFinite).sort((a, b) => b - a);
   const readyTotal = Math.round(importable.reduce((sum, expense) => sum + expense.amount, 0) * 100) / 100;
-  return { fileName, ready, updates, duplicates, invalid, years, readyTotal, columns: sourceColumns.map((column) => column.label) };
+  return { fileName, ready, updates, duplicates, skipped, invalid, years, readyTotal, columns: sourceColumns.map((column) => column.label) };
 }

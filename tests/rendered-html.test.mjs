@@ -156,11 +156,15 @@ test("deduplicates imported expense records by external key", async () => {
   assert.match(page, /expenseColumnOrder/);
   assert.match(expenseImport, /amazonorderid/);
   assert.match(expenseImport, /isAmazonBusinessExport/);
+  assert.match(expenseImport, /isAmazonOrderHistoryExport/);
   assert.match(expenseImport, /ordernettotal/);
+  assert.match(expenseImport, /productname/);
+  assert.match(expenseImport, /totalamount/);
   assert.match(expenseImport, /sellername/);
   assert.match(expenseImport, /amazoninternalproductcategory/);
   assert.match(expenseImport, /orders\.entries\(\)/);
   assert.match(expenseImport, /amazonBusinessCsvColumns/);
+  assert.match(expenseImport, /amazonOrderHistoryCsvColumns/);
   assert.match(expenseImport, /fields/);
   assert.match(page, /normalizeExpenseKey/);
   assert.match(expenseImport, /existingKeys\.has\(normalizedKey\).*updates\.push/);
