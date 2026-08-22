@@ -4,6 +4,18 @@ All notable changes to StockBot are documented here.
 
 ## Unreleased
 
+## 0.37.0 - 2026-08-22
+
+### Added
+
+- Added a searchable business-use review list to expense imports with a Business toggle for every imported order.
+- Added bulk actions to mark every imported record as business-related or unrelated.
+
+### Changed
+
+- Unrelated imported purchases remain in the ledger with their source-document history but are excluded from inventory, COGS, business-expense, and tax calculations.
+- Existing records show their saved business-use status when re-imported, while new records default to business use unless the source file says otherwise.
+
 ## 0.36.0 - 2026-08-22
 
 ### Added

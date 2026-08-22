@@ -13,6 +13,28 @@ export type ChangelogRelease = {
 
 export const changelogReleases: readonly ChangelogRelease[] = [
   {
+    version: "0.37.0",
+    date: "August 22, 2026",
+    title: "Business-use import review",
+    summary: "Imported purchases can now be marked business-related or unrelated before they enter the expense ledger.",
+    sections: [
+      {
+        title: "Added",
+        items: [
+          "Added a searchable review list with a Business toggle for every imported expense.",
+          "Added bulk actions to mark an entire import as business-related or unrelated.",
+        ],
+      },
+      {
+        title: "Changed",
+        items: [
+          "Unrelated purchases remain linked to their source documents but are excluded from inventory, COGS, business expenses, and tax calculations.",
+          "Re-imported records display their saved business-use status, while new records default to business use unless the file provides a personal-use value.",
+        ],
+      },
+    ],
+  },
+  {
     version: "0.36.0",
     date: "August 22, 2026",
     title: "Smarter Amazon purchase accounting",

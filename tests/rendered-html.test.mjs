@@ -360,6 +360,26 @@ test("keeps personal expenses visible but out of business calculations", async (
   assert.match(styles, /\.expensePersonalToggle/);
 });
 
+test("reviews business use for every imported expense before saving", async () => {
+  const [page, styles] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/globals.css"),
+  ]);
+  assert.match(page, /const \[expenseImportQuery, setExpenseImportQuery\] = useState\(""\)/);
+  assert.match(page, /const setImportBusinessUse =/);
+  assert.match(page, /personal: !business/);
+  assert.match(page, /existingUse\.get\(normalizeExpenseKey\(expense\.externalKey\)\)/);
+  assert.match(page, /aria-label="Search imported expenses"/);
+  assert.match(page, />Mark all business<\/button>/);
+  assert.match(page, />Mark all unrelated<\/button>/);
+  assert.match(page, /Business purchase \$\{expense\.externalKey\}/);
+  assert.match(page, /excludes them from inventory, COGS, expenses, and tax calculations/);
+  assert.doesNotMatch(page, /importPreviewExpenses\.slice\(0, 6\)/);
+  assert.match(styles, /\.expenseImportReviewList/);
+  assert.match(styles, /\.importBusinessToggle/);
+  assert.match(styles, /\.importExpenseReviewRow\.unrelated/);
+});
+
 test("separates persistent expense accounting class from product-cost timing", async () => {
   const [page, expenseImport, styles] = await Promise.all([
     read("app/page.tsx"),
