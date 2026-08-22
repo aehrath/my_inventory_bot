@@ -30,7 +30,7 @@ test("uses indexed relational D1 storage for business records", async () => {
   assert.match(schema, /movements_source_key_idx/);
   assert.match(schema, /customers_external_key_idx/);
   assert.match(repository, /existing\.get\(id\) === recordJson/);
-  assert.match(repository, /const schemaVersion = 3/);
+  assert.match(repository, /const schemaVersion = 4/);
   assert.match(repository, /ALTER TABLE expenses ADD COLUMN personal INTEGER NOT NULL DEFAULT 0/);
   assert.match(repository, /booleanValue\(record\.personal\)/);
   assert.match(personalMigration, /ALTER TABLE `expenses` ADD `personal` integer DEFAULT false NOT NULL/);
@@ -47,4 +47,7 @@ test("uses indexed relational D1 storage for business records", async () => {
   assert.match(historyMigration, /CREATE TABLE `data_commits`/);
   assert.match(historyRepository, /DATA_SNAPSHOTS/);
   assert.match(historyRepository, /stockbot-data\/v\$\{STOCKBOT_DATA_FORMAT_VERSION\}/);
+  assert.match(schema, /sqliteTable\("import_documents"/);
+  assert.match(schema, /sqliteTable\("import_document_links"/);
+  assert.match(schema, /import_documents_semantic_hash_idx/);
 });

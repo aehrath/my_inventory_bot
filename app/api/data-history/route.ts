@@ -3,6 +3,7 @@ import { loadInventoryState } from "../../../db/inventory-repository";
 import { STOCKBOT_DATA_FORMAT_ID, STOCKBOT_DATA_FORMAT_VERSION, STOCKBOT_DATA_SCHEMA } from "../../data-format";
 import { pushStockBotDataToGitHub } from "../../github-data-push";
 import type { CreateDataCommitRequest } from "../../data-history-types";
+import { listImportDocumentGitFiles, listImportDocuments } from "../../../db/import-document-repository";
 
 const safeCommitId = (value: string | null) => value && /^[a-f0-9]{64}$/.test(value) ? value : "";
 
@@ -24,10 +25,12 @@ export async function GET(request: Request) {
       }
       return Response.json({ commit: stored.commit, dataFile: stored.dataFile });
     }
+    const provenance = await listImportDocuments();
     return Response.json({
       commits: await listDataCommits(),
       format: { id: STOCKBOT_DATA_FORMAT_ID, version: STOCKBOT_DATA_FORMAT_VERSION, schema: STOCKBOT_DATA_SCHEMA },
       storage: "d1+r2",
+      documentCount: provenance.documents.length,
     });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Could not load data history." }, { status: 500 });
@@ -43,7 +46,8 @@ export async function POST(request: Request) {
     let commit = created.commit;
     if (body.remote) {
       try {
-        const pushed = await pushStockBotDataToGitHub(body.remote, created.json, commit.message);
+        const documentFiles = await listImportDocumentGitFiles();
+        const pushed = await pushStockBotDataToGitHub(body.remote, created.json, commit.message, documentFiles.map((file) => ({ path: file.path, content: file.content, contentType: file.document.contentType })));
         commit = await updateDataCommitRemote(commit.id, { status: "pushed", ...pushed }) ?? commit;
       } catch (error) {
         commit = await updateDataCommitRemote(commit.id, {

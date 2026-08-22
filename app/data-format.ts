@@ -1,6 +1,8 @@
+import type { ImportDocumentIndex } from "./import-documents";
+
 export const STOCKBOT_DATA_FORMAT_ID = "stockbot-data" as const;
-export const STOCKBOT_DATA_FORMAT_VERSION = 1 as const;
-export const STOCKBOT_DATA_SCHEMA = "https://stockbot-inventory.aehrath.chatgpt.site/data-format/v1" as const;
+export const STOCKBOT_DATA_FORMAT_VERSION = 2 as const;
+export const STOCKBOT_DATA_SCHEMA = "https://stockbot-inventory.aehrath.chatgpt.site/data-format/v2" as const;
 
 type JsonScalar = string | number | boolean | null;
 type JsonValue = JsonScalar | JsonValue[] | { [key: string]: JsonValue };
@@ -21,6 +23,8 @@ export const stockBotDatasetLabels = {
   expenseCategoryOverrides: "Expense category treatments",
   expenseColumnOrder: "Expense column order",
   expenseVisibleColumns: "Visible expense columns",
+  importDocuments: "Imported documents",
+  importDocumentLinks: "Document provenance links",
 } as const;
 
 export type StockBotDataset = keyof typeof stockBotDatasetLabels;
@@ -54,6 +58,8 @@ const localTaxRuleFields = ["id", "name", "state", "city", "postalCode", "rate",
 const addressTaxRateFields = ["id", "addressKey", "address", "stateRate", "localRate", "totalRate", "jurisdiction", "localJurisdiction", "sourceName", "sourceUrl", "effectiveDate", "confidence", "checkedAt"] as const;
 const taxHistoryFields = ["id", "checkedAt", "appliedAt", "checkedAddresses", "availableUpdates", "appliedUpdates", "status", "sources"] as const;
 const categoryFields = ["name", "accountingClass", "costTiming"] as const;
+const importDocumentFields = ["id", "originalName", "storedName", "sourceName", "importKind", "importedAt", "lastImportedAt", "importCount", "contentType", "byteSize", "contentHash", "semanticHash", "linkCount"] as const;
+const importDocumentLinkFields = ["documentId", "entityType", "entityId", "relation", "linkedAt"] as const;
 
 const sourceRecord = (value: unknown): SourceRecord => value && typeof value === "object" && !Array.isArray(value) ? value as SourceRecord : {};
 const sourceArray = (value: unknown): SourceRecord[] => Array.isArray(value) ? value.map(sourceRecord) : [];
@@ -71,7 +77,7 @@ const record = (source: SourceRecord, fields: readonly string[], defaults: Recor
   Object.fromEntries(fields.map((field) => [field, source[field] === undefined ? (defaults[field] ?? null) : jsonValue(source[field])]));
 const sorted = (records: JsonRecord[], key: string) => [...records].sort((left, right) => String(left[key] ?? "").localeCompare(String(right[key] ?? ""), undefined, { numeric: true, sensitivity: "base" }));
 
-export function createStockBotDataFile(rawState: unknown): StockBotDataFile {
+export function createStockBotDataFile(rawState: unknown, provenance?: ImportDocumentIndex): StockBotDataFile {
   const state = sourceRecord(rawState);
   const settings = sourceRecord(state.settings);
   const importedFieldNames = Array.from(new Set(sourceArray(state.expenses).flatMap((expense) => Object.keys(sourceRecord(expense.fields))))).sort((left, right) => left.localeCompare(right));
@@ -102,6 +108,8 @@ export function createStockBotDataFile(rawState: unknown): StockBotDataFile {
       expenseCategoryOverrides: sorted(expenseCategoryOverrides, "name"),
       expenseColumnOrder: positioned(settings.expenseColumnOrder),
       expenseVisibleColumns: positioned(settings.expenseVisibleColumns),
+      importDocuments: sorted((provenance?.documents ?? []).map((item) => record(item as unknown as SourceRecord, importDocumentFields, { linkCount: 0 })), "id"),
+      importDocumentLinks: sorted((provenance?.links ?? []).map((item) => record(item as unknown as SourceRecord, importDocumentLinkFields)), "documentId"),
     },
   };
 }
@@ -117,10 +125,12 @@ const recordKey = (dataset: StockBotDataset, item: JsonRecord, index: number) =>
   if (dataset === "stateTaxes") return String(item.state ?? index);
   if (dataset === "customExpenseCategories" || dataset === "expenseCategoryOverrides") return String(item.name ?? index);
   if (dataset === "expenseColumnOrder" || dataset === "expenseVisibleColumns") return String(item.position ?? index);
+  if (dataset === "importDocuments") return String(item.id ?? index);
+  if (dataset === "importDocumentLinks") return `${item.documentId ?? ""}:${item.entityType ?? ""}:${item.entityId ?? index}`;
   return String(item.id ?? index);
 };
 const recordLabel = (dataset: StockBotDataset, item: JsonRecord, key: string) => {
-  const candidate = dataset === "products" ? item.name : dataset === "expenses" ? item.externalKey : dataset === "customers" ? item.name : dataset === "movements" ? (item.sourceKey ?? item.productName) : dataset === "stateTaxes" ? item.state : dataset === "localTaxRules" ? item.name : dataset === "customExpenseCategories" || dataset === "expenseCategoryOverrides" ? item.name : dataset === "expenseColumnOrder" || dataset === "expenseVisibleColumns" ? item.key : item.id;
+  const candidate = dataset === "products" ? item.name : dataset === "expenses" ? item.externalKey : dataset === "customers" ? item.name : dataset === "movements" ? (item.sourceKey ?? item.productName) : dataset === "stateTaxes" ? item.state : dataset === "localTaxRules" ? item.name : dataset === "customExpenseCategories" || dataset === "expenseCategoryOverrides" ? item.name : dataset === "expenseColumnOrder" || dataset === "expenseVisibleColumns" ? item.key : dataset === "importDocuments" ? item.storedName : dataset === "importDocumentLinks" ? `${item.entityType}:${item.entityId}` : item.id;
   return String(candidate ?? key);
 };
 const flattened = (value: JsonValue, prefix = ""): Map<string, JsonValue> => {

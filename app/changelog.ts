@@ -13,6 +13,30 @@ export type ChangelogRelease = {
 
 export const changelogReleases: readonly ChangelogRelease[] = [
   {
+    version: "0.35.0",
+    date: "August 22, 2026",
+    title: "Imported-document provenance",
+    summary: "Every imported source file is preserved, linked to its related rows, included in Git, and deduplicated by functional content.",
+    sections: [
+      {
+        title: "Added",
+        items: [
+          "Added a durable imported-document archive with detected source names and UTC timestamps embedded in stored filenames.",
+          "Added many-to-many source-document links for expenses, products, customers, inventory activity, and COGS entries.",
+          "Added imported documents and provenance links to the complete Data History diff grid and GitHub pushes.",
+          "Introduced stockbot-data v2 with versioned document metadata and row-link datasets.",
+        ],
+      },
+      {
+        title: "Changed",
+        items: [
+          "Functionally identical documents with only formatting or whitespace differences now reuse the existing archive copy.",
+          "Repeated imports update the document's last-imported time and import count, merge row links, and tell the user that the copy already existed.",
+        ],
+      },
+    ],
+  },
+  {
     version: "0.34.0",
     date: "August 21, 2026",
     title: "Git data history",

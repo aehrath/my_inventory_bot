@@ -25,6 +25,7 @@ export type ImportedInvoiceLine = {
 export type InvoiceImportPreview = {
   fileName: string;
   ready: ImportedInvoiceLine[];
+  references: ImportedInvoiceLine[];
   duplicates: string[];
   invalid: string[];
   customers: ImportedInvoiceCustomer[];
@@ -188,6 +189,7 @@ export function parseInvoiceImportText(
   } as const;
 
   const ready: ImportedInvoiceLine[] = [];
+  const references: ImportedInvoiceLine[] = [];
   const duplicates: string[] = [];
   const invalid: string[] = [];
   const customers = new Map<string, ImportedInvoiceCustomer>();
@@ -247,14 +249,8 @@ export function parseInvoiceImportText(
       invalid.push(`Row ${index + 2}${invoiceNumber ? ` · ${invoiceNumber}` : ""}: ${problems.join(", ")}`);
       return;
     }
-    if (seen.has(normalizeInvoiceKey(sourceKey)) || existing.has(normalizeInvoiceKey(sourceKey))) {
-      duplicates.push(`${invoiceNumber} · ${lineId}`);
-      return;
-    }
-    seen.add(normalizeInvoiceKey(sourceKey));
     const externalKey = customerId || email || `${name}|${address.line1}|${address.postalCode}`;
-    customers.set(customerKey, { key: customerKey, externalKey, name, email, phone: String(valueFor(record, aliases.customerPhone) ?? "").trim(), address });
-    ready.push({
+    const importedLine: ImportedInvoiceLine = {
       sourceKey,
       invoiceNumber,
       lineId,
@@ -267,12 +263,25 @@ export function parseInvoiceImportText(
       unitPrice,
       unitCost: Number.isFinite(rawUnitCost) && rawUnitCost >= 0 ? rawUnitCost : undefined,
       salesTax: Number.isFinite(salesTaxValue) && salesTaxValue >= 0 ? salesTaxValue : undefined,
-    });
+    };
+    if (seen.has(normalizeInvoiceKey(sourceKey))) {
+      duplicates.push(`${invoiceNumber} · ${lineId}`);
+      return;
+    }
+    seen.add(normalizeInvoiceKey(sourceKey));
+    customers.set(customerKey, { key: customerKey, externalKey, name, email, phone: String(valueFor(record, aliases.customerPhone) ?? "").trim(), address });
+    if (existing.has(normalizeInvoiceKey(sourceKey))) {
+      duplicates.push(`${invoiceNumber} · ${lineId}`);
+      references.push(importedLine);
+      return;
+    }
+    ready.push(importedLine);
   });
 
   return {
     fileName,
     ready,
+    references,
     duplicates,
     invalid,
     customers: Array.from(customers.values()),

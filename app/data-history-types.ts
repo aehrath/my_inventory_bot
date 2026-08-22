@@ -23,6 +23,7 @@ export type DataHistoryResponse = {
   commits: DataCommitSummary[];
   format: { id: string; version: number; schema: string };
   storage: "d1+r2";
+  documentCount: number;
 };
 
 export type GitHubPushTarget = {

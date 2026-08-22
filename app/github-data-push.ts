@@ -1,6 +1,7 @@
 import type { GitHubPushTarget } from "./data-history-types";
 
 type GitHubObject = { sha?: string; object?: { sha?: string }; tree?: { sha?: string }; html_url?: string; message?: string };
+export type GitHubPushAsset = { path: string; content: ArrayBuffer; contentType?: string };
 
 const repositoryPattern = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 const branchPattern = /^[A-Za-z0-9._/-]+$/;
@@ -37,7 +38,21 @@ const githubRequest = async (repository: string, token: string, path: string, in
   return payload;
 };
 
-export async function pushStockBotDataToGitHub(rawTarget: GitHubPushTarget, content: string, message: string) {
+const base64 = (content: ArrayBuffer) => {
+  const bytes = new Uint8Array(content);
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(offset, Math.min(offset + 0x8000, bytes.length)));
+  }
+  return btoa(binary);
+};
+
+const assetGitPath = (dataPath: string, assetPath: string) => {
+  const parent = dataPath.includes("/") ? dataPath.slice(0, dataPath.lastIndexOf("/") + 1) : "";
+  return `${parent}${assetPath}`;
+};
+
+export async function pushStockBotDataToGitHub(rawTarget: GitHubPushTarget, content: string, message: string, assets: GitHubPushAsset[] = []) {
   const target = validateGitHubTarget(rawTarget);
   const refName = `heads/${target.branch}`.split("/").map(encodeURIComponent).join("/");
   const reference = await githubRequest(target.repository, target.token, `/git/ref/${refName}`);
@@ -48,9 +63,15 @@ export async function pushStockBotDataToGitHub(rawTarget: GitHubPushTarget, cont
   if (!baseTree) throw new Error("GitHub did not return the branch tree.");
   const blob = await githubRequest(target.repository, target.token, "/git/blobs", { method: "POST", body: JSON.stringify({ content, encoding: "utf-8" }) });
   if (!blob.sha) throw new Error("GitHub did not create the data blob.");
+  const assetEntries = [];
+  for (const asset of assets) {
+    const assetBlob = await githubRequest(target.repository, target.token, "/git/blobs", { method: "POST", body: JSON.stringify({ content: base64(asset.content), encoding: "base64" }) });
+    if (!assetBlob.sha) throw new Error(`GitHub did not create the blob for ${asset.path}.`);
+    assetEntries.push({ path: assetGitPath(target.path, asset.path), mode: "100644", type: "blob", sha: assetBlob.sha });
+  }
   const tree = await githubRequest(target.repository, target.token, "/git/trees", {
     method: "POST",
-    body: JSON.stringify({ base_tree: baseTree, tree: [{ path: target.path, mode: "100644", type: "blob", sha: blob.sha }] }),
+    body: JSON.stringify({ base_tree: baseTree, tree: [{ path: target.path, mode: "100644", type: "blob", sha: blob.sha }, ...assetEntries] }),
   });
   if (!tree.sha) throw new Error("GitHub did not create the data tree.");
   const commit = await githubRequest(target.repository, target.token, "/git/commits", {
@@ -65,5 +86,6 @@ export async function pushStockBotDataToGitHub(rawTarget: GitHubPushTarget, cont
     path: target.path,
     commitSha: commit.sha,
     url: `https://github.com/${target.repository}/commit/${commit.sha}`,
+    documentCount: assets.length,
   };
 }

@@ -4,7 +4,7 @@ import { createStockBotDataFile, dataDiffValue, diffStockBotDataFiles, stableSto
 import { validateGitHubTarget } from "../app/github-data-push.ts";
 
 const state = {
-  version: 16,
+  version: 17,
   products: [{ id: "p1", sku: "SKU-1", name: "Widget", quantity: 2, unitCost: 3, salesTaxPaid: false }],
   movements: [],
   expenses: [
@@ -32,7 +32,7 @@ test("creates a stable, explicitly versioned full-data format", () => {
   const file = createStockBotDataFile(state);
   assert.equal(file.format, STOCKBOT_DATA_FORMAT_ID);
   assert.equal(file.formatVersion, STOCKBOT_DATA_FORMAT_VERSION);
-  assert.equal(file.applicationStateVersion, 16);
+  assert.equal(file.applicationStateVersion, 17);
   assert.equal(file.data.products[0].vendor, null);
   assert.deepEqual(file.data.expenses.map((expense) => expense.id), ["e1", "e2"]);
   assert.deepEqual(file.data.expenses[0].fields, { ASIN: "B000000001", Color: "" });
@@ -67,12 +67,14 @@ test("validates safe GitHub repository targets without retaining credentials", (
   assert.throws(() => validateGitHubTarget({ provider: "github", repository: "owner/repo", branch: "main", path: "..\/secret.json", token: "secret" }), /safe relative/);
 });
 
-test("publishes a matching JSON schema route for data format version 1", async () => {
-  const { GET } = await import("../app/data-format/v1/route.ts");
+test("publishes a matching JSON schema route for data format version 2", async () => {
+  const { GET } = await import("../app/data-format/v2/route.ts");
   const response = await GET();
   const schema = await response.json();
-  assert.equal(schema.$id, "https://stockbot-inventory.aehrath.chatgpt.site/data-format/v1");
+  assert.equal(schema.$id, "https://stockbot-inventory.aehrath.chatgpt.site/data-format/v2");
   assert.equal(schema.properties.format.const, STOCKBOT_DATA_FORMAT_ID);
   assert.equal(schema.properties.formatVersion.const, STOCKBOT_DATA_FORMAT_VERSION);
   assert.ok(schema.properties.data.required.includes("expenses"));
+  assert.ok(schema.properties.data.required.includes("importDocuments"));
+  assert.ok(schema.properties.data.required.includes("importDocumentLinks"));
 });

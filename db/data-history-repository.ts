@@ -3,6 +3,7 @@ import { createStockBotDataFile, diffStockBotDataFiles, stableStockBotDataJson, 
 import type { StockBotDataFile } from "../app/data-format";
 import type { DataCommitSummary } from "../app/data-history-types";
 import { inventoryDatabase } from "./inventory-repository";
+import { listImportDocuments } from "./import-document-repository";
 
 type DataCommitRow = {
   id: string;
@@ -86,7 +87,7 @@ export async function getDataCommitFile(id: string): Promise<{ commit: DataCommi
 export async function createDataCommit(rawState: unknown, requestedMessage: string) {
   const db = await inventoryDatabase();
   const latestRow = await db.prepare("SELECT * FROM data_commits ORDER BY created_at DESC, id DESC LIMIT 1").first() as DataCommitRow | null;
-  const dataFile = createStockBotDataFile(rawState);
+  const dataFile = createStockBotDataFile(rawState, await listImportDocuments());
   const json = stableStockBotDataJson(dataFile);
   const contentHash = await sha256(json);
   const createdAt = new Date().toISOString();

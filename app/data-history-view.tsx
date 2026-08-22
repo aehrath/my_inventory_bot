@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { dataDiffValue, diffStockBotDataFiles, stockBotDatasetLabels, STOCKBOT_DATA_FORMAT_ID, STOCKBOT_DATA_FORMAT_VERSION } from "./data-format";
 import type { DataDiffChange, DataDiffRow, StockBotDataFile, StockBotDataset } from "./data-format";
 import type { DataCommitSummary, DataHistoryResponse } from "./data-history-types";
+import { emptyImportDocumentIndex } from "./import-documents";
+import type { ImportDocumentIndex } from "./import-documents";
 
 type SaveStatus = "saved" | "saving" | "error";
 type SortDirection = "asc" | "desc";
@@ -40,6 +42,7 @@ export function DataHistory({ saveStatus }: { saveStatus: SaveStatus }) {
   const [sort, setSort] = useState<{ key: SortKey; direction: SortDirection }>({ key: "dataset", direction: "asc" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(250);
+  const [documentIndex, setDocumentIndex] = useState<ImportDocumentIndex>(emptyImportDocumentIndex);
 
   const loadHistory = useCallback(async (selectLatest = false) => {
     const response = await fetch("/api/data-history", { headers: { accept: "application/json" } });
@@ -59,7 +62,13 @@ export function DataHistory({ saveStatus }: { saveStatus: SaveStatus }) {
       const saved = window.localStorage.getItem(gitPreferenceKey);
       if (saved) queueMicrotask(() => setGitTarget({ ...defaultGitTarget, ...JSON.parse(saved) as Partial<GitTargetPreference> }));
     } catch { /* Device preference is optional. */ }
-    queueMicrotask(() => { void loadHistory(true).catch((caught) => setError(caught instanceof Error ? caught.message : "Could not load data history.")).finally(() => setLoading(false)); });
+    queueMicrotask(() => { void Promise.all([
+      loadHistory(true),
+      fetch("/api/import-documents", { headers: { accept: "application/json" } }).then(async (response) => {
+        if (!response.ok) throw new Error("Could not load imported documents.");
+        setDocumentIndex(await response.json() as ImportDocumentIndex);
+      }),
+    ]).catch((caught) => setError(caught instanceof Error ? caught.message : "Could not load data history.")).finally(() => setLoading(false)); });
   }, [loadHistory]);
   useEffect(() => {
     const missing = Array.from(new Set([compareId, baseId].filter((id) => id && !files[id])));
@@ -104,7 +113,7 @@ export function DataHistory({ saveStatus }: { saveStatus: SaveStatus }) {
       setMessage("");
       await loadHistory(true);
       setPage(1);
-      setNotice(payload.git?.status === "failed" ? `Snapshot saved, but GitHub push failed: ${payload.git.error || "Unknown GitHub error."}` : payload.git?.status === "pushed" ? "Snapshot saved and checked into GitHub." : "Snapshot saved to Data History. Add a GitHub target any time you want a remote Git commit.");
+      setNotice(payload.git?.status === "failed" ? `Snapshot saved, but GitHub push failed: ${payload.git.error || "Unknown GitHub error."}` : payload.git?.status === "pushed" ? `Snapshot and ${documentIndex.documents.length} imported document${documentIndex.documents.length === 1 ? "" : "s"} checked into GitHub.` : "Snapshot saved to Data History. Add a GitHub target any time you want a remote Git commit.");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not commit the current data.");
     } finally { setGitToken(""); setCommitting(false); }
@@ -140,13 +149,19 @@ export function DataHistory({ saveStatus }: { saveStatus: SaveStatus }) {
 
   return <div className="dataHistoryLayout">
     <section className="dataHistoryHero">
-      <div><span className="pill good">{STOCKBOT_DATA_FORMAT_ID} v{STOCKBOT_DATA_FORMAT_VERSION}</span><h2>Every data change,<br />fully exposed.</h2><p>Create immutable snapshots, check the canonical JSON into Git, and compare every field—including empty and unchanged values.</p></div>
+      <div><span className="pill good">{STOCKBOT_DATA_FORMAT_ID} v{STOCKBOT_DATA_FORMAT_VERSION}</span><h2>Every data change,<br />fully exposed.</h2><p>Create immutable snapshots, check the canonical JSON and imported source files into Git, and compare every field—including provenance, empty, and unchanged values.</p></div>
       <div className="dataFormatCard"><span>Data format</span><strong>Version {STOCKBOT_DATA_FORMAT_VERSION}</strong><small>Application state {currentFile?.applicationStateVersion ?? "—"}</small><code>{STOCKBOT_DATA_FORMAT_ID}</code></div>
+    </section>
+
+    <section className="panel importedDocumentPanel">
+      <div className="panelTitle"><div><p className="eyebrow">Source archive</p><h3>{documentIndex.documents.length} imported document{documentIndex.documents.length === 1 ? "" : "s"}</h3></div><span className="pill neutral">D1 metadata · R2 files</span></div>
+      <p className="settingsCopy">Every file is preserved under its UTC import timestamp and detected source. Row links remain many-to-many, so another import of the same business entry adds provenance without duplicating the entry.</p>
+      <div className="importedDocumentGrid">{documentIndex.documents.map((document) => <a href={`/api/import-documents?document=${encodeURIComponent(document.id)}&download=1`} key={document.id}><span><strong>{document.storedName}</strong><small>{document.originalName}</small></span><span><b>{document.sourceName}</b><small>First {formatDate(document.importedAt)}{document.importCount > 1 ? ` · last ${formatDate(document.lastImportedAt)} · imported ${document.importCount}×` : ""} · {byteSize(document.byteSize)} · {document.linkCount} linked row{document.linkCount === 1 ? "" : "s"}</small></span></a>)}{!documentIndex.documents.length && <div className="empty">Imported CSV and JSON source files will appear here after they contribute to an expense or invoice entry.</div>}</div>
     </section>
 
     <section className="dataCommitPanel panel">
       <div className="panelTitle"><div><p className="eyebrow">Version control</p><h3>Commit the current data</h3></div><span className={`pill ${saveStatus === "saved" ? "good" : "warn"}`}>{saveStatus === "saved" ? "Ready" : saveStatus === "saving" ? "Waiting for save" : "Save unavailable"}</span></div>
-      <div className="dataCommitForm"><label className="dataCommitMessage"><span>Commit message</span><input value={message} maxLength={160} onChange={(event) => setMessage(event.target.value)} placeholder="Reconciled July inventory" /></label><label className="gitPushToggle"><input type="checkbox" checked={pushToGitHub} onChange={(event) => setPushToGitHub(event.target.checked)} /><span><strong>Also push a real Git commit to GitHub</strong><small>Use a private repository—the file contains your complete business data.</small></span></label></div>
+      <div className="dataCommitForm"><label className="dataCommitMessage"><span>Commit message</span><input value={message} maxLength={160} onChange={(event) => setMessage(event.target.value)} placeholder="Reconciled July inventory" /></label><label className="gitPushToggle"><input type="checkbox" checked={pushToGitHub} onChange={(event) => setPushToGitHub(event.target.checked)} /><span><strong>Also push a real Git commit to GitHub</strong><small>Use a private repository—the complete data JSON and {documentIndex.documents.length} imported source document{documentIndex.documents.length === 1 ? "" : "s"} will be pushed.</small></span></label></div>
       {pushToGitHub && <div className="gitTargetGrid"><label><span>Repository</span><input value={gitTarget.repository} onChange={(event) => saveGitPreference({ ...gitTarget, repository: event.target.value })} placeholder="owner/private-data-repo" /></label><label><span>Branch</span><input value={gitTarget.branch} onChange={(event) => saveGitPreference({ ...gitTarget, branch: event.target.value })} placeholder="main" /></label><label><span>JSON file path</span><input value={gitTarget.path} onChange={(event) => saveGitPreference({ ...gitTarget, path: event.target.value })} placeholder="accounting/stockbot-data.json" /></label><label><span>Fine-grained token</span><input type="password" autoComplete="off" value={gitToken} onChange={(event) => setGitToken(event.target.value)} placeholder="Used for this push only" /><small>Grant repository Contents read/write. The token is sent for this push, then cleared and never stored.</small></label></div>}
       {(error || notice) && <div className={`dataHistoryNotice ${error ? "error" : "success"}`}><strong>{error ? "Couldn’t complete that action" : "Data commit complete"}</strong><span>{error || notice}</span></div>}
       <div className="dataCommitActions"><span>Snapshots use server storage; GitHub is optional.</span><button className="primary" disabled={saveStatus !== "saved" || committing} onClick={commitSnapshot}>{committing ? "Committing…" : pushToGitHub ? "Commit snapshot + push" : "Commit snapshot"}</button></div>

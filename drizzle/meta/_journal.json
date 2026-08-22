@@ -22,6 +22,13 @@
       "when": 1787380556124,
       "tag": "0002_silent_wong",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1787382502270,
+      "tag": "0003_glorious_wolf_cub",
+      "breakpoints": true
     }
   ]
 }

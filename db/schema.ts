@@ -109,6 +109,40 @@ export const dataCommits = sqliteTable("data_commits", {
   index("data_commits_content_hash_idx").on(table.contentHash),
 ]);
 
+export const importDocuments = sqliteTable("import_documents", {
+  id: text("id").primaryKey(),
+  originalName: text("original_name").notNull(),
+  storedName: text("stored_name").notNull(),
+  sourceName: text("source_name").notNull(),
+  importKind: text("import_kind").notNull(),
+  importedAt: text("imported_at").notNull(),
+  contentType: text("content_type").notNull(),
+  byteSize: integer("byte_size").notNull(),
+  contentHash: text("content_hash").notNull(),
+  semanticHash: text("semantic_hash").notNull(),
+  lastImportedAt: text("last_imported_at").notNull(),
+  importCount: integer("import_count").notNull().default(1),
+  storageKey: text("storage_key").notNull(),
+}, (table) => [
+  uniqueIndex("import_documents_stored_name_idx").on(table.storedName),
+  index("import_documents_imported_at_idx").on(table.importedAt),
+  index("import_documents_source_name_idx").on(table.sourceName),
+  index("import_documents_content_hash_idx").on(table.contentHash),
+  uniqueIndex("import_documents_semantic_hash_idx").on(table.semanticHash),
+]);
+
+export const importDocumentLinks = sqliteTable("import_document_links", {
+  documentId: text("document_id").notNull(),
+  entityType: text("entity_type").notNull(),
+  entityId: text("entity_id").notNull(),
+  relation: text("relation").notNull(),
+  linkedAt: text("linked_at").notNull(),
+}, (table) => [
+  uniqueIndex("import_document_links_unique_idx").on(table.documentId, table.entityType, table.entityId),
+  index("import_document_links_entity_idx").on(table.entityType, table.entityId),
+  index("import_document_links_document_idx").on(table.documentId),
+]);
+
 export const inventorySchemaStatements = [
   `CREATE TABLE IF NOT EXISTS inventory_state (
     id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -211,4 +245,35 @@ export const inventorySchemaStatements = [
   "CREATE INDEX IF NOT EXISTS data_commits_created_at_idx ON data_commits (created_at)",
   "CREATE INDEX IF NOT EXISTS data_commits_parent_idx ON data_commits (parent_id)",
   "CREATE INDEX IF NOT EXISTS data_commits_content_hash_idx ON data_commits (content_hash)",
+  `CREATE TABLE IF NOT EXISTS import_documents (
+    id TEXT PRIMARY KEY,
+    original_name TEXT NOT NULL,
+    stored_name TEXT NOT NULL,
+    source_name TEXT NOT NULL,
+    import_kind TEXT NOT NULL,
+    imported_at TEXT NOT NULL,
+    content_type TEXT NOT NULL,
+    byte_size INTEGER NOT NULL,
+    content_hash TEXT NOT NULL,
+    semantic_hash TEXT NOT NULL,
+    last_imported_at TEXT NOT NULL,
+    import_count INTEGER NOT NULL DEFAULT 1,
+    storage_key TEXT NOT NULL
+  )`,
+  "CREATE UNIQUE INDEX IF NOT EXISTS import_documents_stored_name_idx ON import_documents (stored_name)",
+  "CREATE INDEX IF NOT EXISTS import_documents_imported_at_idx ON import_documents (imported_at)",
+  "CREATE INDEX IF NOT EXISTS import_documents_source_name_idx ON import_documents (source_name)",
+  "CREATE INDEX IF NOT EXISTS import_documents_content_hash_idx ON import_documents (content_hash)",
+  "CREATE UNIQUE INDEX IF NOT EXISTS import_documents_semantic_hash_idx ON import_documents (semantic_hash)",
+  `CREATE TABLE IF NOT EXISTS import_document_links (
+    document_id TEXT NOT NULL,
+    entity_type TEXT NOT NULL,
+    entity_id TEXT NOT NULL,
+    relation TEXT NOT NULL,
+    linked_at TEXT NOT NULL,
+    PRIMARY KEY (document_id, entity_type, entity_id),
+    FOREIGN KEY (document_id) REFERENCES import_documents(id) ON DELETE CASCADE
+  )`,
+  "CREATE INDEX IF NOT EXISTS import_document_links_entity_idx ON import_document_links (entity_type, entity_id)",
+  "CREATE INDEX IF NOT EXISTS import_document_links_document_idx ON import_document_links (document_id)",
 ] as const;

@@ -86,7 +86,7 @@ test("includes versioned Git data history with an all-field diff grid", async ()
   assert.match(history, /Previous value/);
   assert.match(history, /Current value/);
   assert.match(history, /stockHeaderCell/);
-  assert.match(format, /STOCKBOT_DATA_FORMAT_VERSION = 1/);
+  assert.match(format, /STOCKBOT_DATA_FORMAT_VERSION = 2/);
   assert.match(format, /diffStockBotDataFiles/);
   assert.match(route, /pushStockBotDataToGitHub/);
   assert.match(styles, /\.dataDiffGrid/);
@@ -133,7 +133,7 @@ test("includes item-level COGS and final-product tracking", async () => {
   assert.match(page, /href=\{`#product-\$\{linkedProduct\.id\}`\}/);
   assert.match(page, /onOpenProduct\(linkedProduct\)/);
   assert.match(page, /linkedFinalProductFor/);
-  assert.match(page, /version: 16/);
+  assert.match(page, /version: 17/);
   assert.match(styles, /\.cogsHead,.cogsRow/);
   assert.match(styles, /\.cogsProductLink/);
   assert.match(styles, /activityTag\.production_use/);

@@ -12,6 +12,7 @@ test("imports only unique historical invoice lines", async () => {
 
   assert.equal(preview.ready.length, 2);
   assert.equal(preview.duplicates.length, 2);
+  assert.equal(preview.references.length, 1);
   assert.equal(preview.invoiceCount, 2);
   assert.equal(preview.totalQuantity, 4);
   assert.equal(preview.totalRevenue, 79);

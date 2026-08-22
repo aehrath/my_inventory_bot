@@ -13,15 +13,29 @@ the rows that changed.
 ## Data history and Git
 
 The Data History workspace stores immutable commit metadata in D1 and complete
-JSON snapshots in R2. Every file identifies itself as `stockbot-data` and has an
-independent numeric format version, beginning with version 1. The comparison
-grid expands every known record field, including empty and unchanged values.
+JSON snapshots in R2. The current `stockbot-data` format is version 2 and adds
+imported-document metadata plus row-level provenance links. The comparison grid
+expands every known record field, including empty and unchanged values.
 
 Snapshots can optionally be checked into a GitHub repository as a real Git
 commit. The repository, branch, and JSON path are remembered as device-local
 preferences. A fine-grained GitHub token is used for one push only, is cleared
 from the interface immediately afterward, and is never stored in StockBot data,
-history, exports, or server settings.
+history, exports, or server settings. Git pushes include the canonical JSON and
+the full collection of archived import documents under `imported-documents/`.
+
+## Imported-document provenance
+
+Expense and historical-invoice imports preserve the source file in R2 and keep
+indexed metadata and many-to-many row links in D1. Stored filenames begin with
+the UTC import time in `yyyymmddhhmmss` form and a detected source such as
+`amazon` or `aliexpress`. Products, customers, activity, COGS, and expenses show
+their linked source documents as downloadable links.
+
+Before a copy is stored, StockBot computes a semantic hash. JSON formatting and
+CSV/text whitespace do not create duplicate files. A matching re-import reuses
+the existing archive object, merges any new row links, updates its last-imported
+time and import count, and explicitly tells the user that the document existed.
 
 ## Expense imports
 

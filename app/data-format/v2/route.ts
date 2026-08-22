@@ -1,12 +1,4 @@
-const STOCKBOT_DATA_FORMAT_ID = "stockbot-data";
-const STOCKBOT_DATA_FORMAT_VERSION = 1;
-const STOCKBOT_DATA_SCHEMA = "https://stockbot-inventory.aehrath.chatgpt.site/data-format/v1";
-const stockBotDatasetLabels = {
-  products: "Products", movements: "Activity", expenses: "Expenses", customers: "Customers", settings: "Workspace settings",
-  stateTaxes: "State tax settings", localTaxRules: "Local tax rules", addressTaxRates: "Saved address tax rates",
-  taxUpdateHistory: "Tax-rate history", customExpenseCategories: "Custom expense categories", expenseCategoryOverrides: "Expense category treatments",
-  expenseColumnOrder: "Expense column order", expenseVisibleColumns: "Visible expense columns",
-};
+import { stockBotDatasetLabels, STOCKBOT_DATA_FORMAT_ID, STOCKBOT_DATA_FORMAT_VERSION, STOCKBOT_DATA_SCHEMA } from "../../data-format.ts";
 
 export async function GET() {
   const datasetProperties = Object.fromEntries(Object.keys(stockBotDatasetLabels).map((dataset) => [dataset, {
@@ -16,8 +8,8 @@ export async function GET() {
   return Response.json({
     $schema: "https://json-schema.org/draft/2020-12/schema",
     $id: STOCKBOT_DATA_SCHEMA,
-    title: "StockBot complete data snapshot",
-    description: "Canonical, stable, full-field data used by StockBot Data History and Git integration.",
+    title: "StockBot complete data and provenance snapshot",
+    description: "Canonical, stable, full-field data with imported-document provenance used by StockBot Data History and Git integration.",
     type: "object",
     additionalProperties: false,
     required: ["$schema", "format", "formatVersion", "applicationStateVersion", "data"],

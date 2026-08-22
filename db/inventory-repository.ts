@@ -15,7 +15,7 @@ type MetadataRow = { state_version: number; updated_at: string; migrated_at: str
 type LegacyRow = { payload: string; updated_at: string };
 type SaveResult = { updatedAt: string; written: number; deleted: number };
 
-const schemaVersion = 3;
+const schemaVersion = 4;
 let schemaReady: Promise<typeof env.DB> | null = null;
 
 const stringValue = (value: unknown) => typeof value === "string" ? value : String(value ?? "");

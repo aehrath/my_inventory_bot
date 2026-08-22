@@ -9,6 +9,9 @@ import type { ExpenseAccountingClass, ExpenseCategory, ExpenseCategoryDefinition
 import { parseExpenseInventoryDescription } from "./expense-inventory";
 import { normalizeCustomerKey, normalizeInvoiceKey, normalizeProductIdentifier, parseInvoiceImportText } from "./invoice-import";
 import type { InvoiceImportPreview } from "./invoice-import";
+import { archiveImportDocument, emptyImportDocumentIndex } from "./import-documents";
+import type { ImportDocumentIndex, ImportDocumentLinkInput } from "./import-documents";
+import { SourceDocumentsCell } from "./source-documents";
 import { defaultStateTaxSettings, stateName, stateTaxDefaults } from "./tax-data";
 import type { TaxAddress, TaxRateLookup, TaxRateLookupResponse, TaxSourceStatus } from "./tax-rate-types";
 
@@ -38,7 +41,7 @@ type TaxUpdateAudit = { id: string; checkedAt: string; appliedAt: string | null;
 type CustomExpenseCategory = ExpenseCategoryDefinition;
 type ExpenseCategoryTreatment = Omit<ExpenseCategoryDefinition, "name">;
 type Settings = { businessName: string; taxYear: number; beginningInventory: number; ownAddress: Address; stateTaxes: Record<string, StateTaxSetting>; localTaxRules: LocalTaxRule[]; addressTaxRates: AddressTaxRate[]; taxUpdateHistory: TaxUpdateAudit[]; customExpenseCategories: CustomExpenseCategory[]; expenseCategoryOverrides: Record<string, ExpenseCategoryTreatment>; expenseColumnOrder: string[]; expenseVisibleColumns: string[] };
-type AppState = { version: 16; products: Product[]; movements: Movement[]; expenses: Expense[]; customers: Customer[]; settings: Settings };
+type AppState = { version: 17; products: Product[]; movements: Movement[]; expenses: Expense[]; customers: Customer[]; settings: Settings };
 type Metrics = { inventoryValue: number; units: number; revenue: number; inventoryCogs: number; additionalCogs: number; cogs: number; salesTax: number; stateSalesTax: number; localSalesTax: number; useTax: number; stateUseTax: number; localUseTax: number; expenses: number; expenseRecordsTotal: number; purchases: number; grossProfit: number; taxableIncome: number };
 type ExpenseColumnDefinition = { key: string; label: string; width: string; field?: string };
 type SortDirection = "asc" | "desc";
@@ -73,6 +76,7 @@ const expenseBaseColumns: ExpenseColumnDefinition[] = [
   { key: "externalKey", label: "Unique key", width: "195px" },
   { key: "amount", label: "Amount", width: "125px" },
   { key: "source", label: "Record origin", width: "110px" },
+  { key: "documents", label: "Source documents", width: "230px" },
 ];
 const expenseCsvColumnDefinition = (label: string): ExpenseColumnDefinition => ({
   key: expenseCsvColumnKey(label),
@@ -84,7 +88,7 @@ const trackedExpenseImportFields = Array.from(new Set([...amazonBusinessCsvColum
 const expenseImportCsvColumns = trackedExpenseImportFields.filter((label) => label !== "ASIN");
 const defaultExpenseColumnDefinitions = [...expenseBaseColumns, ...expenseImportCsvColumns.map(expenseCsvColumnDefinition)];
 const defaultExpenseColumnOrder = defaultExpenseColumnDefinitions.map((column) => column.key);
-const defaultExpenseVisibleColumns = ["date", "vendor", "purchaseSource", "asin", "note", "category", "accountingClass", "costTiming", "personal", "externalKey", "amount"];
+const defaultExpenseVisibleColumns = ["date", "vendor", "purchaseSource", "asin", "note", "category", "accountingClass", "costTiming", "personal", "externalKey", "amount", "documents"];
 const expenseColumnDefinitionsFor = (expenses: Expense[]) => {
   const knownFields = new Set<string>(trackedExpenseImportFields);
   const dynamicFields = Array.from(new Set(expenses.flatMap((expense) => Object.keys(expense.fields ?? {})))).filter((field) => !knownFields.has(field));
@@ -200,7 +204,7 @@ const resolveAddressRate = (address: Address, settings: Settings, liveRate?: Tax
 };
 
 const seed: AppState = {
-  version: 16,
+  version: 17,
   settings: { businessName: "Juniper & Co.", taxYear: nowYear, beginningInventory: 3180, ownAddress: blankAddress("CA"), stateTaxes: defaultStateTaxSettings("CA"), localTaxRules: [], addressTaxRates: [], taxUpdateHistory: [], customExpenseCategories: [], expenseCategoryOverrides: {}, expenseColumnOrder: defaultExpenseColumnOrder, expenseVisibleColumns: defaultExpenseVisibleColumns },
   products: [
     { id: "p1", sku: "CER-101", name: "Speckled Ceramic Mug", vendor: "Clay & Kiln Supply", category: "Home", quantity: 24, unitCost: 8.5, salePrice: 24, reorderPoint: 8, salesTaxPaid: false, createdAt: `${nowYear}-01-05` },
@@ -239,13 +243,22 @@ export default function Home() {
   const [movementType, setMovementType] = useState<MovementType | null>(null);
   const [expenseModal, setExpenseModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [importDocuments, setImportDocuments] = useState<ImportDocumentIndex>(emptyImportDocumentIndex);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const refreshImportDocuments = useCallback(async () => {
+    const response = await fetch("/api/import-documents", { headers: { accept: "application/json" } });
+    if (!response.ok) throw new Error("Could not load imported document provenance.");
+    setImportDocuments(await response.json() as ImportDocumentIndex);
+  }, []);
 
   useEffect(() => {
     fetch("/api/state").then((r) => r.json()).then((payload) => {
       if (payload.state) setState(normalizeState(payload.state));
     }).catch(() => setSaving("error")).finally(() => setLoaded(true));
   }, []);
+
+  useEffect(() => { queueMicrotask(() => { void refreshImportDocuments().catch(() => undefined); }); }, [refreshImportDocuments]);
 
   useEffect(() => {
     if (!loaded) return;
@@ -316,11 +329,11 @@ export default function Home() {
         <header className="topbar"><div><p className="eyebrow">{state.settings.businessName} · {state.settings.taxYear}</p><h1>{nav.find((n) => n.id === view)?.label}</h1></div><div className="topActions"><button className="secondary" onClick={() => { setMovementType(null); setMovementModal(true); }}>{icons.arrow} Record activity</button><button className="primary" onClick={() => { setSelectedProduct(null); setProductModal(true); }}>{icons.plus} Add product</button></div></header>
 
         {view === "dashboard" && <Dashboard state={state} metrics={metrics} onView={setView} onUse={openUse} />}
-        {view === "products" && <Products state={state} query={query} setQuery={setQuery} onEdit={(p) => { setSelectedProduct(p); setProductModal(true); }} onUse={openUse} onDelete={(p) => confirm(`Delete ${p.name}? Its activity history will remain.`) && setState((s) => ({ ...s, products: s.products.filter((x) => x.id !== p.id) }))} />}
-        {view === "customers" && <Customers state={state} setState={setState} />}
-        {view === "activity" && <Activity state={state} onNew={() => setMovementModal(true)} />}
-        {view === "cogs" && <CogsCenter state={state} onOpenProduct={openLinkedProduct} onProductionUse={() => { setSelectedProduct(null); setMovementType("production_use"); setMovementModal(true); }} onViewExpenses={() => setView("expenses")} />}
-        {view === "expenses" && <Expenses state={state} setState={setState} onExpense={() => setExpenseModal(true)} onDeleteExpense={(id) => setState((s) => ({ ...s, expenses: s.expenses.filter((e) => e.id !== id) }))} />}
+        {view === "products" && <Products state={state} documents={importDocuments} query={query} setQuery={setQuery} onEdit={(p) => { setSelectedProduct(p); setProductModal(true); }} onUse={openUse} onDelete={(p) => confirm(`Delete ${p.name}? Its activity history will remain.`) && setState((s) => ({ ...s, products: s.products.filter((x) => x.id !== p.id) }))} />}
+        {view === "customers" && <Customers state={state} setState={setState} documents={importDocuments} onDocumentsChanged={refreshImportDocuments} />}
+        {view === "activity" && <Activity state={state} documents={importDocuments} onNew={() => setMovementModal(true)} />}
+        {view === "cogs" && <CogsCenter state={state} documents={importDocuments} onOpenProduct={openLinkedProduct} onProductionUse={() => { setSelectedProduct(null); setMovementType("production_use"); setMovementModal(true); }} onViewExpenses={() => setView("expenses")} />}
+        {view === "expenses" && <Expenses state={state} setState={setState} documents={importDocuments} onDocumentsChanged={refreshImportDocuments} onExpense={() => setExpenseModal(true)} onDeleteExpense={(id) => setState((s) => ({ ...s, expenses: s.expenses.filter((e) => e.id !== id) }))} />}
         {view === "taxes" && <TaxCenter state={state} metrics={metrics} setState={setState} />}
         {view === "history" && <DataHistory saveStatus={saving} />}
         {view === "data" && <DataSettings state={state} setState={setState} fileRef={fileRef} onImport={(e) => importState(e, setState)} />}
@@ -390,8 +403,8 @@ function Dashboard({ state, metrics, onView, onUse }: { state: AppState; metrics
 
 function Metric({ label, value, note, accent }: { label: string; value: string; note: string; accent: string }) { return <article className={`metric ${accent}`}><span>{label}</span><strong>{value}</strong><small>{note}</small></article>; }
 
-function Products({ state, query, setQuery, onEdit, onUse, onDelete }: { state: AppState; query: string; setQuery: (v: string) => void; onEdit: (p: Product) => void; onUse: (p: Product) => void; onDelete: (p: Product) => void }) {
-  type ProductSortKey = "product" | "vendor" | "quantity" | "sold" | "unitCost" | "retailValue" | "taxStatus";
+function Products({ state, documents, query, setQuery, onEdit, onUse, onDelete }: { state: AppState; documents: ImportDocumentIndex; query: string; setQuery: (v: string) => void; onEdit: (p: Product) => void; onUse: (p: Product) => void; onDelete: (p: Product) => void }) {
+  type ProductSortKey = "product" | "vendor" | "quantity" | "sold" | "unitCost" | "retailValue" | "taxStatus" | "documents";
   const [sort, setSort] = useState<{ key: ProductSortKey; direction: SortDirection }>({ key: "product", direction: "asc" });
   const soldByProduct = state.movements.filter((movement) => movement.type === "sale").reduce((totals, movement) => {
     totals.set(movement.productId, (totals.get(movement.productId) ?? 0) + movement.quantity);
@@ -405,6 +418,7 @@ function Products({ state, query, setQuery, onEdit, onUse, onDelete }: { state: 
     { key: "unitCost", label: "Unit cost" },
     { key: "retailValue", label: "Retail value" },
     { key: "taxStatus", label: "Tax status" },
+    { key: "documents", label: "Source documents" },
   ];
   const productSortValue = (product: Product): SortValue => {
     if (sort.key === "vendor") return product.vendor;
@@ -413,6 +427,7 @@ function Products({ state, query, setQuery, onEdit, onUse, onDelete }: { state: 
     if (sort.key === "unitCost") return product.unitCost;
     if (sort.key === "retailValue") return product.quantity * product.salePrice;
     if (sort.key === "taxStatus") return product.salesTaxPaid ? "Tax paid" : "Untaxed resale";
+    if (sort.key === "documents") return documents.links.filter((link) => link.entityType === "product" && link.entityId === product.id).length;
     return `${product.name} ${product.sku} ${product.category}`;
   };
   const products = state.products
@@ -421,15 +436,16 @@ function Products({ state, query, setQuery, onEdit, onUse, onDelete }: { state: 
   const changeSort = (key: ProductSortKey) => setSort((current) => ({ key, direction: current.key === key && current.direction === "asc" ? "desc" : "asc" }));
   return <section className="panel tablePanel"><div className="toolbar"><label className="search"><span>{icons.search}</span><input aria-label="Search products" placeholder="Search products, vendors, SKU, or category" value={query} onChange={(e) => setQuery(e.target.value)} /></label><div className="legend"><span className="dot untaxed" /> Resale purchase — no tax paid</div></div>
     <div className="productTable"><div className="tableHead">{columns.map((column) => <button role="columnheader" aria-sort={sort.key === column.key ? (sort.direction === "asc" ? "ascending" : "descending") : "none"} type="button" key={column.key} className={`stockHeaderCell ${sort.key === column.key ? `sorted ${sort.direction}` : ""}`} onClick={() => changeSort(column.key)}><span>{column.label}</span><span className="sortPair" aria-hidden="true"><i /><b /></span></button>)}<span className="stockHeaderSpacer" /></div>
-    {products.map((p) => <div className="productRow" id={`product-${p.id}`} key={p.id}><div className="productCell"><div className="productGlyph">{p.name.slice(0, 1)}</div><div className="productDescription"><strong title={p.name}>{p.name}</strong><span>{p.sku} · {p.category}</span></div></div><div className="vendorCell" title={p.vendor || "Vendor not set"}><strong>{p.vendor || "—"}</strong></div><div><strong>{p.quantity}</strong><span className={p.quantity <= p.reorderPoint ? "lowText" : "mutedText"}>{p.quantity <= p.reorderPoint ? "Low stock" : `Min ${p.reorderPoint}`}</span></div><strong>{whole.format(soldByProduct.get(p.id) ?? 0)}</strong><strong>{money.format(p.unitCost)}</strong><strong>{money.format(p.quantity * p.salePrice)}</strong><div>{p.salesTaxPaid ? <span className="pill neutral">Tax paid</span> : <span className="pill taxFree">Untaxed resale</span>}</div><div className="rowActions"><button onClick={() => onUse(p)} disabled={p.quantity < 1}>Use one</button><button onClick={() => onEdit(p)}>Edit</button><button className="dangerText" onClick={() => onDelete(p)}>Delete</button></div></div>)}
+    {products.map((p) => <div className="productRow" id={`product-${p.id}`} key={p.id}><div className="productCell"><div className="productGlyph">{p.name.slice(0, 1)}</div><div className="productDescription"><strong title={p.name}>{p.name}</strong><span>{p.sku} · {p.category}</span></div></div><div className="vendorCell" title={p.vendor || "Vendor not set"}><strong>{p.vendor || "—"}</strong></div><div><strong>{p.quantity}</strong><span className={p.quantity <= p.reorderPoint ? "lowText" : "mutedText"}>{p.quantity <= p.reorderPoint ? "Low stock" : `Min ${p.reorderPoint}`}</span></div><strong>{whole.format(soldByProduct.get(p.id) ?? 0)}</strong><strong>{money.format(p.unitCost)}</strong><strong>{money.format(p.quantity * p.salePrice)}</strong><div>{p.salesTaxPaid ? <span className="pill neutral">Tax paid</span> : <span className="pill taxFree">Untaxed resale</span>}</div><SourceDocumentsCell index={documents} entityType="product" entityId={p.id} /><div className="rowActions"><button onClick={() => onUse(p)} disabled={p.quantity < 1}>Use one</button><button onClick={() => onEdit(p)}>Edit</button><button className="dangerText" onClick={() => onDelete(p)}>Delete</button></div></div>)}
     {!products.length && <Empty text="No products match your search." />}</div></section>;
 }
 
-function Customers({ state, setState }: { state: AppState; setState: React.Dispatch<React.SetStateAction<AppState>> }) {
-  type CustomerSortKey = "customer" | "contact" | "location" | "invoices" | "units" | "revenue" | "lastPurchase";
+function Customers({ state, setState, documents, onDocumentsChanged }: { state: AppState; setState: React.Dispatch<React.SetStateAction<AppState>>; documents: ImportDocumentIndex; onDocumentsChanged: () => Promise<void> }) {
+  type CustomerSortKey = "customer" | "contact" | "location" | "invoices" | "units" | "revenue" | "lastPurchase" | "documents";
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<{ key: CustomerSortKey; direction: SortDirection }>({ key: "lastPurchase", direction: "desc" });
   const [preview, setPreview] = useState<InvoiceImportPreview | null>(null);
+  const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
   const invoiceRef = useRef<HTMLInputElement>(null);
   const salesFor = (customer: Customer) => state.movements.filter((movement) => movement.type === "sale" && movement.customerId === customer.id);
@@ -450,6 +466,7 @@ function Customers({ state, setState }: { state: AppState; setState: React.Dispa
     if (sort.key === "units") return stats.units;
     if (sort.key === "revenue") return stats.revenue;
     if (sort.key === "lastPurchase") return stats.lastPurchase;
+    if (sort.key === "documents") return documents.links.filter((link) => link.entityType === "customer" && link.entityId === customer.id).length;
     return customer.name;
   };
   const customers = state.customers
@@ -460,12 +477,12 @@ function Customers({ state, setState }: { state: AppState; setState: React.Dispa
   const importedRevenue = invoiceSales.reduce((total, movement) => total + movement.quantity * movement.unitPrice, 0);
   const knownProductKeys = new Set(state.products.flatMap((product) => [normalizeProductIdentifier(product.sku), `name:${normalizeProductIdentifier(product.name)}`]));
   const previewNewProductKeys = new Set((preview?.ready ?? []).filter((line) => !knownProductKeys.has(normalizeProductIdentifier(line.sku)) && !knownProductKeys.has(`name:${normalizeProductIdentifier(line.productName)}`)).map((line) => normalizeProductIdentifier(line.sku)));
-  const previewNewCustomerKeys = new Set((preview?.customers ?? []).filter((imported) => !state.customers.some((customer) => normalizeCustomerKey(customer.externalKey) === normalizeCustomerKey(imported.externalKey) || (imported.email && customer.email.toLowerCase() === imported.email.toLowerCase()))).map((customer) => customer.key));
   const invoiceSummaryPreview = preview?.columns.some((column) => column.trim().toLowerCase() === "invoice token") ?? false;
   const customersWithoutAddresses = preview?.customers.filter((customer) => !customer.address.state).length ?? 0;
   const columns: Array<{ key: CustomerSortKey; label: string }> = [
     { key: "customer", label: "Customer" }, { key: "contact", label: "Contact" }, { key: "location", label: "Location" },
     { key: "invoices", label: "Invoices" }, { key: "units", label: "Units sold" }, { key: "revenue", label: "Revenue" }, { key: "lastPurchase", label: "Last purchase" },
+    { key: "documents", label: "Source documents" },
   ];
   const changeSort = (key: CustomerSortKey) => setSort((current) => ({ key, direction: current.key === key && current.direction === "asc" ? "desc" : "asc" }));
   const openInvoiceImport = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -473,19 +490,23 @@ function Customers({ state, setState }: { state: AppState; setState: React.Dispa
     const file = input.files?.[0];
     input.value = "";
     if (!file) return;
+    setInvoiceFile(file);
     setImporting(true);
     try {
       setPreview(parseInvoiceImportText(await file.text(), file.name, state.movements.map((movement) => movement.sourceKey).filter((key): key is string => Boolean(key))));
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "The invoice file could not be read.";
-      setPreview({ fileName: file.name, ready: [], duplicates: [], invalid: [`${message} Use the downloadable CSV template or a JSON invoice export.`], customers: [], columns: [], invoiceCount: 0, totalQuantity: 0, totalRevenue: 0 });
+      setPreview({ fileName: file.name, ready: [], references: [], duplicates: [], invalid: [`${message} Use the downloadable CSV template or a JSON invoice export.`], customers: [], columns: [], invoiceCount: 0, totalQuantity: 0, totalRevenue: 0 });
     } finally { setImporting(false); }
   };
-  const applyInvoiceImport = () => {
-    if (!preview?.ready.length) return;
-    setState((current) => {
-      const existingSourceKeys = new Set(current.movements.map((movement) => movement.sourceKey).filter((key): key is string => Boolean(key)).map(normalizeInvoiceKey));
-      const lines = preview.ready.filter((line) => !existingSourceKeys.has(normalizeInvoiceKey(line.sourceKey)));
+  const applyInvoiceImport = async () => {
+    if (!preview || !invoiceFile || (!preview.ready.length && !preview.references.length)) return;
+    setImporting(true);
+    try {
+      const current = state;
+      const links: ImportDocumentLinkInput[] = [];
+      const existingMovements = new Map(current.movements.flatMap((movement) => movement.sourceKey ? [[normalizeInvoiceKey(movement.sourceKey), movement] as const] : []));
+      const lines = preview.ready.filter((line) => !existingMovements.has(normalizeInvoiceKey(line.sourceKey)));
       const usedCustomerKeys = new Set(lines.map((line) => line.customerKey));
       const customerIds = new Map<string, string>();
       const customers = current.customers.map((customer) => ({ ...customer, address: { ...customer.address } }));
@@ -494,6 +515,7 @@ function Customers({ state, setState }: { state: AppState; setState: React.Dispa
         const customerDates = lines.filter((line) => line.customerKey === imported.key).map((line) => line.date).sort();
         const updatedAt = customerDates.at(-1) ?? dateOnly();
         if (existing) {
+          const before = JSON.stringify(existing);
           existing.name = existing.name || imported.name;
           existing.email = existing.email || imported.email;
           existing.phone = existing.phone || imported.phone;
@@ -505,10 +527,12 @@ function Customers({ state, setState }: { state: AppState; setState: React.Dispa
           };
           existing.updatedAt = existing.updatedAt > updatedAt ? existing.updatedAt : updatedAt;
           customerIds.set(imported.key, existing.id);
+          links.push({ entityType: "customer", entityId: existing.id, relation: JSON.stringify(existing) === before ? "referenced" : "updated" });
         } else {
           const customer: Customer = { id: uid(), externalKey: imported.externalKey, name: imported.name, email: imported.email, phone: imported.phone, address: { ...blankAddress(imported.address.state), ...imported.address }, createdAt: customerDates[0] ?? dateOnly(), updatedAt };
           customers.unshift(customer);
           customerIds.set(imported.key, customer.id);
+          links.push({ entityType: "customer", entityId: customer.id, relation: "created" });
         }
       }
 
@@ -523,7 +547,8 @@ function Customers({ state, setState }: { state: AppState; setState: React.Dispa
           productAdditions.push(product);
           productsBySku.set(normalizeProductIdentifier(product.sku), product);
           productsByName.set(normalizeProductIdentifier(product.name), product);
-        }
+          links.push({ entityType: "product", entityId: product.id, relation: "created" });
+        } else links.push({ entityType: "product", entityId: product.id, relation: "referenced" });
         const importedCustomer = preview.customers.find((customer) => customer.key === line.customerKey);
         const customerId = customerIds.get(line.customerKey);
         const address = importedCustomer ? { ...blankAddress(importedCustomer.address.state), ...importedCustomer.address } : blankAddress("");
@@ -536,31 +561,46 @@ function Customers({ state, setState }: { state: AppState; setState: React.Dispa
         const stateShare = resolvedRate.totalRate > 0 ? resolvedRate.stateRate / resolvedRate.totalRate : 1;
         const stateTax = Math.round(salesTax * stateShare * 100) / 100;
         const localTax = Math.round((salesTax - stateTax) * 100) / 100;
-        movementAdditions.push({
+        const movement: Movement = {
           id: uid(), productId: product.id, productName: product.name, productSku: product.sku, finalProductId: product.id, finalProductName: product.name,
           type: "sale", quantity: line.quantity, unitCost: line.unitCost ?? product.unitCost, unitPrice: line.unitPrice, salesTax, stateTax, localTax,
           taxRate: effectiveRate, stateTaxRate: resolvedRate.stateRate, localTaxRate: resolvedRate.localRate, taxJurisdiction: address.state || undefined,
           localJurisdiction: resolvedRate.jurisdiction, taxCollected: salesTax > 0, customerAddress: address, customerId, customerName: importedCustomer?.name,
           sourceKey: line.sourceKey, invoiceNumber: line.invoiceNumber, date: line.date, note: `Imported invoice ${line.invoiceNumber}`,
-        });
-        existingSourceKeys.add(normalizeInvoiceKey(line.sourceKey));
+        };
+        movementAdditions.push(movement);
+        links.push({ entityType: "movement", entityId: movement.id, relation: "created" });
       }
-      return { ...current, version: 16, customers, products: [...productAdditions, ...current.products], movements: [...movementAdditions, ...current.movements] };
-    });
-    setPreview(null);
+      for (const line of preview.references) {
+        const movement = existingMovements.get(normalizeInvoiceKey(line.sourceKey));
+        if (!movement) continue;
+        links.push({ entityType: "movement", entityId: movement.id, relation: "referenced" });
+        if (movement.productId) links.push({ entityType: "product", entityId: movement.productId, relation: "referenced" });
+        if (movement.customerId) links.push({ entityType: "customer", entityId: movement.customerId, relation: "referenced" });
+      }
+      if (!links.length) throw new Error("No existing or new data entries could be linked to this document.");
+      const archived = await archiveImportDocument(invoiceFile, "invoice", "", links);
+      setState({ ...current, version: 17, customers, products: [...productAdditions, ...current.products], movements: [...movementAdditions, ...current.movements] });
+      await onDocumentsChanged();
+      setPreview(null);
+      setInvoiceFile(null);
+      if (archived.deduplicated) alert(`“${invoiceFile.name}” already existed with the same functional content. StockBot discarded the duplicate copy and refreshed its row links and last-imported time.`);
+    } catch (caught) {
+      alert(caught instanceof Error ? caught.message : "The invoice document could not be archived.");
+    } finally { setImporting(false); }
   };
   return <div className="customerLayout">
-    <section className="customerHero"><div><p className="eyebrow">Sales history</p><h2>Customers and old invoices, connected.</h2><p>Bring in historical invoice lines without changing today&apos;s on-hand counts. Each unique line increases the product&apos;s sold total and becomes part of the customer&apos;s history.</p></div><div className="customerHeroActions"><button className="dark" onClick={() => invoiceRef.current?.click()} disabled={importing}>{importing ? "Reading invoices…" : "↑ Import old invoices"}</button><button className="secondary" onClick={downloadInvoiceTemplate}>Download template</button><input ref={invoiceRef} hidden type="file" accept=".csv,text/csv,.json,application/json" onChange={openInvoiceImport} /></div></section>
+    <section className="customerHero"><div><p className="eyebrow">Sales history</p><h2>Customers and old invoices, connected.</h2><p>Bring in historical invoice lines while on-hand quantities stay unchanged. Each unique line increases the product&apos;s sold total and becomes part of the customer&apos;s history.</p></div><div className="customerHeroActions"><button className="dark" onClick={() => invoiceRef.current?.click()} disabled={importing}>{importing ? "Reading invoices…" : "↑ Import old invoices"}</button><button className="secondary" onClick={downloadInvoiceTemplate}>Download template</button><input ref={invoiceRef} hidden type="file" accept=".csv,text/csv,.json,application/json" onChange={openInvoiceImport} /></div></section>
     <section className="metricGrid"><Metric label="Customers" value={whole.format(state.customers.length)} note="Saved customer records" accent="green" /><Metric label="Imported invoices" value={whole.format(invoiceCount)} note={`${whole.format(invoiceSales.length)} unique invoice lines`} accent="blue" /><Metric label="Historical units sold" value={whole.format(invoiceSales.reduce((total, movement) => total + movement.quantity, 0))} note="Does not reduce on-hand inventory" accent="sand" /><Metric label="Imported revenue" value={money.format(importedRevenue)} note="From historical invoices" accent="coral" /></section>
-    <section className="panel customerPanel"><div className="toolbar"><label className="search"><span>{icons.search}</span><input aria-label="Search customers" placeholder="Search customer, email, phone, or location" value={query} onChange={(event) => setQuery(event.target.value)} /></label><div className="legend">Invoice imports are duplicate-safe by invoice and line ID</div></div><div className="customerTable"><div className="customerHead">{columns.map((column) => <button role="columnheader" aria-sort={sort.key === column.key ? (sort.direction === "asc" ? "ascending" : "descending") : "none"} type="button" key={column.key} className={`stockHeaderCell ${sort.key === column.key ? `sorted ${sort.direction}` : ""}`} onClick={() => changeSort(column.key)}><span>{column.label}</span><span className="sortPair" aria-hidden="true"><i /><b /></span></button>)}</div>{customers.map((customer) => { const stats = customerStats(customer); return <div className="customerRow" key={customer.id}><div className="customerName"><div className="productGlyph">{customer.name.slice(0, 1)}</div><span><strong title={customer.name}>{customer.name}</strong><small>{customer.externalKey}</small></span></div><div><strong>{customer.email || "—"}</strong><small>{customer.phone || "No phone"}</small></div><div><strong>{customer.address.city && customer.address.state ? `${customer.address.city}, ${customer.address.state}` : customer.address.state || "—"}</strong><small>{customer.address.postalCode || "No ZIP"}</small></div><strong>{whole.format(stats.invoices)}</strong><strong>{whole.format(stats.units)}</strong><strong>{money.format(stats.revenue)}</strong><strong>{stats.lastPurchase || "—"}</strong></div>; })}{!customers.length && <Empty text="No customers yet. Import an old invoice file to build your customer directory." />}</div></section>
-    {preview && <Modal title="Review old invoice import" eyebrow="Historical sales import" onClose={() => setPreview(null)}><div className="importSummary"><article><span>Unique invoice lines</span><strong>{preview.ready.length}</strong></article><article><span>New products</span><strong>{previewNewProductKeys.size}</strong></article><article><span>New customers</span><strong>{previewNewCustomerKeys.size}</strong></article></div><p className="settingsCopy"><strong>{preview.fileName}</strong> contains {preview.invoiceCount} invoice{preview.invoiceCount === 1 ? "" : "s"}, {whole.format(preview.totalQuantity)} units, and {money.format(preview.totalRevenue)} in historical revenue. Existing products gain sold history only; on-hand quantities stay unchanged.</p>{invoiceSummaryPreview && <div className="formNotice"><strong>Summary-only export</strong><span>Quantities are inferred only from clear invoice-title patterns. Missing SKUs receive stable historical IDs and missing unit costs start at $0. {customersWithoutAddresses ? `${customersWithoutAddresses} customer address${customersWithoutAddresses === 1 ? " is" : "es are"} absent, so no destination tax is calculated for those invoices.` : ""}</span></div>}{preview.ready.length > 0 && <div className="importPreviewList">{preview.ready.slice(0, 7).map((line) => <div key={line.sourceKey}><span><strong>{line.productName}</strong><small>{line.invoiceNumber} · {line.sku} · {line.quantity} sold · {preview.customers.find((customer) => customer.key === line.customerKey)?.name}</small></span><b>{money.format(line.quantity * line.unitPrice)}</b></div>)}{preview.ready.length > 7 && <small>+ {preview.ready.length - 7} more lines</small>}</div>}{preview.duplicates.length > 0 && <details className="importDetails"><summary>{preview.duplicates.length} duplicate invoice line{preview.duplicates.length === 1 ? "" : "s"} skipped</summary><p>{preview.duplicates.slice(0, 12).join(", ")}</p></details>}{preview.invalid.length > 0 && <details className="importDetails"><summary>{preview.invalid.length} invalid row{preview.invalid.length === 1 ? "" : "s"} skipped</summary>{preview.invalid.slice(0, 12).map((message) => <p key={message}>{message}</p>)}</details>}<div className="modalActions"><button type="button" className="secondary" onClick={() => setPreview(null)}>Cancel</button><button className="primary" type="button" disabled={!preview.ready.length} onClick={applyInvoiceImport}>Import unique invoice lines</button></div></Modal>}
+    <section className="panel customerPanel"><div className="toolbar"><label className="search"><span>{icons.search}</span><input aria-label="Search customers" placeholder="Search customer, email, phone, or location" value={query} onChange={(event) => setQuery(event.target.value)} /></label><div className="legend">Invoice imports are duplicate-safe by invoice and line ID</div></div><div className="customerTable"><div className="customerHead">{columns.map((column) => <button role="columnheader" aria-sort={sort.key === column.key ? (sort.direction === "asc" ? "ascending" : "descending") : "none"} type="button" key={column.key} className={`stockHeaderCell ${sort.key === column.key ? `sorted ${sort.direction}` : ""}`} onClick={() => changeSort(column.key)}><span>{column.label}</span><span className="sortPair" aria-hidden="true"><i /><b /></span></button>)}</div>{customers.map((customer) => { const stats = customerStats(customer); return <div className="customerRow" key={customer.id}><div className="customerName"><div className="productGlyph">{customer.name.slice(0, 1)}</div><span><strong title={customer.name}>{customer.name}</strong><small>{customer.externalKey}</small></span></div><div><strong>{customer.email || "—"}</strong><small>{customer.phone || "No phone"}</small></div><div><strong>{customer.address.city && customer.address.state ? `${customer.address.city}, ${customer.address.state}` : customer.address.state || "—"}</strong><small>{customer.address.postalCode || "No ZIP"}</small></div><strong>{whole.format(stats.invoices)}</strong><strong>{whole.format(stats.units)}</strong><strong>{money.format(stats.revenue)}</strong><strong>{stats.lastPurchase || "—"}</strong><SourceDocumentsCell index={documents} entityType="customer" entityId={customer.id} /></div>; })}{!customers.length && <Empty text="No customers yet. Import an old invoice file to build your customer directory." />}</div></section>
+    {preview && <Modal title="Review old invoice import" eyebrow="Historical sales import" onClose={() => { setPreview(null); setInvoiceFile(null); }}><div className="importSummary"><article><span>New invoice lines</span><strong>{preview.ready.length}</strong></article><article><span>Existing lines linked</span><strong>{preview.references.length}</strong></article><article><span>New products</span><strong>{previewNewProductKeys.size}</strong></article></div><p className="settingsCopy"><strong>{preview.fileName}</strong> contains {preview.invoiceCount} new invoice{preview.invoiceCount === 1 ? "" : "s"}, {whole.format(preview.totalQuantity)} new units, and {money.format(preview.totalRevenue)} in new historical revenue. Existing lines are not duplicated, but this document is added to their source history.</p>{invoiceSummaryPreview && <div className="formNotice"><strong>Summary-only export</strong><span>Quantities are inferred only from clear invoice-title patterns. Missing SKUs receive stable historical IDs and missing unit costs start at $0. {customersWithoutAddresses ? `${customersWithoutAddresses} customer address${customersWithoutAddresses === 1 ? " is" : "es are"} absent, so no destination tax is calculated for those invoices.` : ""}</span></div>}{preview.ready.length > 0 && <div className="importPreviewList">{preview.ready.slice(0, 7).map((line) => <div key={line.sourceKey}><span><strong>{line.productName}</strong><small>{line.invoiceNumber} · {line.sku} · {line.quantity} sold · {preview.customers.find((customer) => customer.key === line.customerKey)?.name}</small></span><b>{money.format(line.quantity * line.unitPrice)}</b></div>)}{preview.ready.length > 7 && <small>+ {preview.ready.length - 7} more lines</small>}</div>}{preview.duplicates.length > 0 && <details className="importDetails"><summary>{preview.duplicates.length} duplicate invoice line{preview.duplicates.length === 1 ? "" : "s"} found</summary><p>Existing saved lines will receive this document as another source; duplicates repeated inside this same file are ignored. {preview.duplicates.slice(0, 12).join(", ")}</p></details>}{preview.invalid.length > 0 && <details className="importDetails"><summary>{preview.invalid.length} invalid row{preview.invalid.length === 1 ? "" : "s"} skipped</summary>{preview.invalid.slice(0, 12).map((message) => <p key={message}>{message}</p>)}</details>}<div className="modalActions"><button type="button" className="secondary" onClick={() => { setPreview(null); setInvoiceFile(null); }}>Cancel</button><button className="primary" type="button" disabled={importing || (!preview.ready.length && !preview.references.length)} onClick={() => void applyInvoiceImport()}>{importing ? "Archiving document…" : preview.ready.length ? "Import and archive document" : "Link and archive document"}</button></div></Modal>}
   </div>;
 }
 
-function Activity({ state, onNew }: { state: AppState; onNew: () => void }) { return <section className="panel tablePanel"><div className="panelTitle"><div><p className="eyebrow">Permanent stock trail</p><h3>Inventory ledger</h3></div><button className="primary" onClick={onNew}>+ Record activity</button></div><MovementTable movements={state.movements} products={state.products} /><p className="footnote">Activity entries remain in the ledger even if a product is later removed.</p></section>; }
+function Activity({ state, documents, onNew }: { state: AppState; documents: ImportDocumentIndex; onNew: () => void }) { return <section className="panel tablePanel"><div className="panelTitle"><div><p className="eyebrow">Permanent stock trail</p><h3>Inventory ledger</h3></div><button className="primary" onClick={onNew}>+ Record activity</button></div><MovementTable movements={state.movements} products={state.products} documents={documents} /><p className="footnote">Activity entries remain in the ledger even if a product is later removed.</p></section>; }
 
-function CogsCenter({ state, onOpenProduct, onProductionUse, onViewExpenses }: { state: AppState; onOpenProduct: (product: Product) => void; onProductionUse: () => void; onViewExpenses: () => void }) {
-  type CogsSortKey = "date" | "product" | "type" | "quantity" | "unitCost" | "totalCost" | "revenue" | "finalProduct";
+function CogsCenter({ state, documents, onOpenProduct, onProductionUse, onViewExpenses }: { state: AppState; documents: ImportDocumentIndex; onOpenProduct: (product: Product) => void; onProductionUse: () => void; onViewExpenses: () => void }) {
+  type CogsSortKey = "date" | "product" | "type" | "quantity" | "unitCost" | "totalCost" | "revenue" | "finalProduct" | "documents";
   const [query, setQuery] = useState("");
   const [year, setYear] = useState(String(state.settings.taxYear));
   const [kind, setKind] = useState<"all" | "sale" | "production_use">("all");
@@ -600,6 +640,7 @@ function CogsCenter({ state, onOpenProduct, onProductionUse, onViewExpenses }: {
     if (sort.key === "totalCost") return movement.quantity * movement.unitCost;
     if (sort.key === "revenue") return movement.type === "sale" ? movement.quantity * movement.unitPrice : -1;
     if (sort.key === "finalProduct") return finalProductFor(movement);
+    if (sort.key === "documents") return documents.links.filter((link) => link.entityType === "movement" && link.entityId === movement.id).length;
     return movement.date;
   };
   const entries = [...filteredEntries].sort((left, right) => compareSortValues(sortValue(left), sortValue(right), sort.direction));
@@ -607,25 +648,27 @@ function CogsCenter({ state, onOpenProduct, onProductionUse, onViewExpenses }: {
     { key: "date", label: "Date" }, { key: "product", label: "Cost item" }, { key: "type", label: "Source" },
     { key: "quantity", label: "Qty" }, { key: "unitCost", label: "Unit cost" }, { key: "totalCost", label: "Total cost" },
     { key: "revenue", label: "Revenue" }, { key: "finalProduct", label: "Used in final product" },
+    { key: "documents", label: "Source documents" },
   ];
   const changeSort = (key: CogsSortKey) => setSort((current) => ({ key, direction: current.key === key && current.direction === "asc" ? "desc" : "asc" }));
   return <div className="cogsLayout">
     <section className="cogsHero"><div><p className="eyebrow">Inventory and cost trail</p><h2>From purchase to recognized COGS.</h2><p>Product costs tracked in inventory stay on hand until they are sold or allocated. Product costs marked for direct recognition become COGS immediately.</p></div><button className="dark" onClick={onProductionUse}>+ Use item in final product</button></section>
     <section className="metricGrid cogsMetrics"><Metric label="Sold-item COGS" value={money.format(soldCogs)} note={`${whole.format(soldEntries.reduce((total, movement) => total + movement.quantity, 0))} units sold`} accent="sand" /><Metric label="Direct COGS expenses" value={money.format(directCogsExpenses)} note="Product costs recognized directly" accent="coral" /><Metric label="Sales revenue" value={money.format(revenue)} note={`${soldEntries.length} sales entries`} accent="blue" /><Metric label="Gross profit" value={money.format(revenue - recognizedCogs)} note={revenue ? `${Math.round(((revenue - recognizedCogs) / revenue) * 100)}% margin after recognized COGS` : "No sales in this view"} accent="green" /><Metric label="Production-use cost" value={money.format(productionCost)} note="Allocated, not yet sale COGS" accent="coral" /></section>
     <section className="panel cogsPanel"><div className="panelTitle"><div><p className="eyebrow">Item-level detail</p><h3>COGS and production allocations</h3></div><span className="pill neutral">{entries.length} entries</span></div><div className="cogsToolbar"><label className="search"><span>{icons.search}</span><input aria-label="Search COGS records" placeholder="Search cost item, SKU, note, or final product" value={query} onChange={(event) => setQuery(event.target.value)} /></label><label>Year<select value={year} onChange={(event) => setYear(event.target.value)}><option value="All">All years</option>{years.map((value) => <option value={value} key={value}>{value}</option>)}</select></label><label>Entry type<select value={kind} onChange={(event) => setKind(event.target.value as typeof kind)}><option value="all">All cost entries</option><option value="sale">Customer sales</option><option value="production_use">Production use</option></select></label></div>
-      <div className="cogsTable"><div className="ledgerHead cogsHead">{columns.map((column) => <button role="columnheader" aria-sort={sort.key === column.key ? (sort.direction === "asc" ? "ascending" : "descending") : "none"} type="button" key={column.key} className={`stockHeaderCell ${sort.key === column.key ? `sorted ${sort.direction}` : ""}`} onClick={() => changeSort(column.key)}><span>{column.label}</span><span className="sortPair" aria-hidden="true"><i /><b /></span></button>)}</div>{entries.map((movement) => { const totalCost = movement.quantity * movement.unitCost; const itemName = productNameFor(movement); const finalProduct = finalProductFor(movement); const linkedProduct = linkedFinalProductFor(movement); return <div className="cogsRow" key={movement.id}><span>{new Date(`${movement.date}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span><div className="cogsName"><strong title={itemName}>{itemName}</strong><small>{productSkuFor(movement)}{movement.note ? ` · ${movement.note}` : ""}</small></div><span className={`activityTag ${movement.type}`}>{movement.type === "sale" ? "Sold" : "Production use"}</span><strong>{whole.format(movement.quantity)}</strong><strong>{money.format(movement.unitCost)}</strong><strong>{money.format(totalCost)}</strong><strong>{movement.type === "sale" ? money.format(movement.quantity * movement.unitPrice) : "—"}</strong><div className="cogsFinal">{linkedProduct ? <a className="cogsProductLink" href={`#product-${linkedProduct.id}`} title={`Open ${linkedProduct.name}`} onClick={(event) => { event.preventDefault(); onOpenProduct(linkedProduct); }}>{finalProduct}</a> : <strong title={finalProduct}>{finalProduct}</strong>}{linkedProduct && <small>Open product</small>}</div></div>; })}{!entries.length && <Empty text="No COGS entries match this view." />}</div>
+      <div className="cogsTable"><div className="ledgerHead cogsHead">{columns.map((column) => <button role="columnheader" aria-sort={sort.key === column.key ? (sort.direction === "asc" ? "ascending" : "descending") : "none"} type="button" key={column.key} className={`stockHeaderCell ${sort.key === column.key ? `sorted ${sort.direction}` : ""}`} onClick={() => changeSort(column.key)}><span>{column.label}</span><span className="sortPair" aria-hidden="true"><i /><b /></span></button>)}</div>{entries.map((movement) => { const totalCost = movement.quantity * movement.unitCost; const itemName = productNameFor(movement); const finalProduct = finalProductFor(movement); const linkedProduct = linkedFinalProductFor(movement); return <div className="cogsRow" key={movement.id}><span>{new Date(`${movement.date}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span><div className="cogsName"><strong title={itemName}>{itemName}</strong><small>{productSkuFor(movement)}{movement.note ? ` · ${movement.note}` : ""}</small></div><span className={`activityTag ${movement.type}`}>{movement.type === "sale" ? "Sold" : "Production use"}</span><strong>{whole.format(movement.quantity)}</strong><strong>{money.format(movement.unitCost)}</strong><strong>{money.format(totalCost)}</strong><strong>{movement.type === "sale" ? money.format(movement.quantity * movement.unitPrice) : "—"}</strong><div className="cogsFinal">{linkedProduct ? <a className="cogsProductLink" href={`#product-${linkedProduct.id}`} title={`Open ${linkedProduct.name}`} onClick={(event) => { event.preventDefault(); onOpenProduct(linkedProduct); }}>{finalProduct}</a> : <strong title={finalProduct}>{finalProduct}</strong>}{linkedProduct && <small>Open product</small>}</div><SourceDocumentsCell index={documents} entityType="movement" entityId={movement.id} /></div>; })}{!entries.length && <Empty text="No COGS entries match this view." />}</div>
       <p className="footnote">Production-use cost reduces component inventory but is shown separately from recognized sale COGS to prevent double counting on tax reports.</p>
     </section>
     <PurchasedInventorySection state={state} onViewExpenses={onViewExpenses} />
   </div>;
 }
 
-function MovementTable({ movements, products }: { movements: Movement[]; products: Product[] }) {
-  type MovementSortKey = "date" | "product" | "type" | "quantity" | "amount" | "tax";
+function MovementTable({ movements, products, documents = emptyImportDocumentIndex }: { movements: Movement[]; products: Product[]; documents?: ImportDocumentIndex }) {
+  type MovementSortKey = "date" | "product" | "type" | "quantity" | "amount" | "tax" | "documents";
   const [sort, setSort] = useState<{ key: MovementSortKey; direction: SortDirection }>({ key: "date", direction: "desc" });
   const columns: Array<{ key: MovementSortKey; label: string }> = [
     { key: "date", label: "Date" }, { key: "product", label: "Product" }, { key: "type", label: "Activity" },
     { key: "quantity", label: "Qty" }, { key: "amount", label: "Amount" }, { key: "tax", label: "Tax" },
+    { key: "documents", label: "Source documents" },
   ];
   const productFor = (movement: Movement) => products.find((product) => product.id === movement.productId);
   const amountFor = (movement: Movement) => movement.quantity * (movement.type === "sale" ? movement.unitPrice : movement.unitCost);
@@ -635,11 +678,12 @@ function MovementTable({ movements, products }: { movements: Movement[]; product
     if (sort.key === "quantity") return movement.quantity;
     if (sort.key === "amount") return amountFor(movement);
     if (sort.key === "tax") return movement.salesTax;
+    if (sort.key === "documents") return documents.links.filter((link) => link.entityType === "movement" && link.entityId === movement.id).length;
     return movement.date;
   };
   const sortedMovements = [...movements].sort((left, right) => compareSortValues(movementSortValue(left), movementSortValue(right), sort.direction));
   const changeSort = (key: MovementSortKey) => setSort((current) => ({ key, direction: current.key === key && current.direction === "asc" ? "desc" : "asc" }));
-  return <div className="ledger"><div className="ledgerHead">{columns.map((column) => <button role="columnheader" aria-sort={sort.key === column.key ? (sort.direction === "asc" ? "ascending" : "descending") : "none"} type="button" key={column.key} className={`stockHeaderCell ${sort.key === column.key ? `sorted ${sort.direction}` : ""}`} onClick={() => changeSort(column.key)}><span>{column.label}</span><span className="sortPair" aria-hidden="true"><i /><b /></span></button>)}</div>{sortedMovements.map((m) => { const p = productFor(m); const amount = amountFor(m); return <div className="ledgerRow" key={m.id}><span>{new Date(`${m.date}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span><div><strong>{m.productName || p?.name || "Removed product"}</strong><small>{m.note || m.productSku || p?.sku}</small></div><span className={`activityTag ${m.type}`}>{m.type.replaceAll("_", " ")}</span><strong>{m.type === "purchase" || (m.type === "adjustment" && m.quantity > 0) ? "+" : "−"}{Math.abs(m.quantity)}</strong><strong>{money.format(amount)}</strong><span className="taxLedger">{m.salesTax ? money.format(m.salesTax) : "—"}{(m.localTax ?? 0) > 0 && <small>{money.format(m.localTax ?? 0)} local</small>}</span></div>})}{!movements.length && <Empty text="No activity has been recorded yet." />}</div>;
+  return <div className="ledger"><div className="ledgerHead">{columns.map((column) => <button role="columnheader" aria-sort={sort.key === column.key ? (sort.direction === "asc" ? "ascending" : "descending") : "none"} type="button" key={column.key} className={`stockHeaderCell ${sort.key === column.key ? `sorted ${sort.direction}` : ""}`} onClick={() => changeSort(column.key)}><span>{column.label}</span><span className="sortPair" aria-hidden="true"><i /><b /></span></button>)}</div>{sortedMovements.map((m) => { const p = productFor(m); const amount = amountFor(m); return <div className="ledgerRow" key={m.id}><span>{new Date(`${m.date}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span><div><strong>{m.productName || p?.name || "Removed product"}</strong><small>{m.note || m.productSku || p?.sku}</small></div><span className={`activityTag ${m.type}`}>{m.type.replaceAll("_", " ")}</span><strong>{m.type === "purchase" || (m.type === "adjustment" && m.quantity > 0) ? "+" : "−"}{Math.abs(m.quantity)}</strong><strong>{money.format(amount)}</strong><span className="taxLedger">{m.salesTax ? money.format(m.salesTax) : "—"}{(m.localTax ?? 0) > 0 && <small>{money.format(m.localTax ?? 0)} local</small>}</span><SourceDocumentsCell index={documents} entityType="movement" entityId={m.id} /></div>})}{!movements.length && <Empty text="No activity has been recorded yet." />}</div>;
 }
 
 type PurchasedInventorySortKey = "name" | "category" | "quantity" | "unitCost" | "totalCost" | "vendor" | "purchaseSource" | "date" | "externalKey";
@@ -706,7 +750,7 @@ function PurchasedInventorySection({ state, onViewExpenses }: { state: AppState;
   </div>;
 }
 
-function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppState; setState: React.Dispatch<React.SetStateAction<AppState>>; onExpense: () => void; onDeleteExpense: (id: string) => void }) {
+function Expenses({ state, setState, documents, onDocumentsChanged, onExpense, onDeleteExpense }: { state: AppState; setState: React.Dispatch<React.SetStateAction<AppState>>; documents: ImportDocumentIndex; onDocumentsChanged: () => Promise<void>; onExpense: () => void; onDeleteExpense: (id: string) => void }) {
   const [expenseQuery, setExpenseQuery] = useState("");
   const [expenseCategory, setExpenseCategory] = useState<ExpenseCategory | "All">("All");
   const [expenseAccountingClass, setExpenseAccountingClass] = useState<ExpenseAccountingClass | "All">("All");
@@ -720,6 +764,7 @@ function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppS
   const [categoryNameDrafts, setCategoryNameDrafts] = useState<Record<string, string>>({});
   const [expenseYear, setExpenseYear] = useState<string>("All");
   const [expenseImport, setExpenseImport] = useState<ExpenseImportPreview | null>(null);
+  const [expenseImportFile, setExpenseImportFile] = useState<File | null>(null);
   const [importPurchaseSource, setImportPurchaseSource] = useState("");
   const [importing, setImporting] = useState(false);
   const [columnConfigOpen, setColumnConfigOpen] = useState(false);
@@ -769,6 +814,7 @@ function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppS
     if (expenseSort.key === "externalKey") return expense.externalKey;
     if (expenseSort.key === "amount") return expense.amount;
     if (expenseSort.key === "source") return expense.source;
+    if (expenseSort.key === "documents") return documents.links.filter((link) => link.entityType === "expense" && link.entityId === expense.id).length;
     if (expenseSort.key === "date") return expense.date;
     const field = columnByKey.get(expenseSort.key)?.field;
     const raw = field ? expense.fields?.[field] ?? "" : "";
@@ -803,6 +849,7 @@ function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppS
     const file = input.files?.[0];
     input.value = "";
     if (!file) return;
+    setExpenseImportFile(file);
     setImporting(true);
     try {
       const preview = await parseExpenseImport(file, state.expenses, state.settings.customExpenseCategories.map((category) => category.name));
@@ -817,22 +864,29 @@ function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppS
       setExpenseImport({ fileName: file.name, ready: [], updates: [], duplicates: [], skipped: [], invalid: [`${message} Use a CSV or JSON expense export.`], years: [], readyTotal: 0, columns: [] });
     } finally { setImporting(false); }
   };
-  const applyExpenseImport = () => {
+  const applyExpenseImport = async () => {
     const sourceKey = importPurchaseSource.trim();
-    if (!expenseImport || !sourceKey || (!expenseImport.ready.length && !expenseImport.updates.length)) return;
+    if (!expenseImport || !expenseImportFile || !sourceKey || (!expenseImport.ready.length && !expenseImport.updates.length)) return;
     const importedYears = expenseImport.years;
-    setState((current) => {
+    setImporting(true);
+    try {
+      const current = state;
       const keys = new Set(current.expenses.map((expense) => normalizeExpenseKey(expense.externalKey)));
       const additions: Expense[] = [];
       const updates = new Map(expenseImport.updates.map((expense) => [normalizeExpenseKey(expense.externalKey), expense]));
+      const links: ImportDocumentLinkInput[] = [];
       for (const draft of expenseImport.ready) {
         const key = normalizeExpenseKey(draft.externalKey);
         if (keys.has(key)) continue;
-        keys.add(key); additions.push({ ...draft, personal: draft.personal ?? false, purchaseSource: sourceKey, id: uid() });
+        const addition: Expense = { ...draft, personal: draft.personal ?? false, purchaseSource: sourceKey, id: uid() };
+        keys.add(key); additions.push(addition);
+        links.push({ entityType: "expense", entityId: addition.id, relation: "created" });
       }
       const enriched = current.expenses.map((expense) => {
         const update = updates.get(normalizeExpenseKey(expense.externalKey));
-        return update ? {
+        if (!update) return expense;
+        links.push({ entityType: "expense", entityId: expense.id, relation: "updated" });
+        return {
           ...expense,
           vendor: update.vendor,
           asins: update.asins.length ? update.asins : expense.asins,
@@ -843,21 +897,28 @@ function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppS
           purchaseSource: sourceKey,
           fields: update.fields,
           importedAt: expense.importedAt ?? update.importedAt,
-        } : expense;
+        };
       });
       const importedColumnKeys = expenseImport.columns.filter((label) => label !== "ASIN").map(expenseCsvColumnKey);
       const expenseColumnOrder = [...current.settings.expenseColumnOrder, ...importedColumnKeys.filter((key) => !current.settings.expenseColumnOrder.includes(key))];
-      return { ...current, expenses: [...additions, ...enriched], settings: { ...current.settings, expenseColumnOrder } };
-    });
-    setExpenseYear(importedYears.length === 1 ? String(importedYears[0]) : "All");
-    setExpenseCategory("All");
-    setExpenseAccountingClass("All");
-    setExpenseCostTiming("All");
-    setExpensePurchaseSource(sourceKey);
-    setExpenseUse("All");
-    setExpenseQuery("");
-    setExpenseImport(null);
-    setImportPurchaseSource("");
+      if (!links.length) throw new Error("No existing or new expense entries could be linked to this document.");
+      const archived = await archiveImportDocument(expenseImportFile, "expense", sourceKey, links);
+      setState({ ...current, expenses: [...additions, ...enriched], settings: { ...current.settings, expenseColumnOrder } });
+      await onDocumentsChanged();
+      setExpenseYear(importedYears.length === 1 ? String(importedYears[0]) : "All");
+      setExpenseCategory("All");
+      setExpenseAccountingClass("All");
+      setExpenseCostTiming("All");
+      setExpensePurchaseSource(sourceKey);
+      setExpenseUse("All");
+      setExpenseQuery("");
+      setExpenseImport(null);
+      setExpenseImportFile(null);
+      setImportPurchaseSource("");
+      if (archived.deduplicated) alert(`“${expenseImportFile.name}” already existed with the same functional content. StockBot discarded the duplicate copy and refreshed its row links and last-imported time.`);
+    } catch (caught) {
+      alert(caught instanceof Error ? caught.message : "The expense document could not be archived.");
+    } finally { setImporting(false); }
   };
   const toggleExpenseColumn = (key: string) => {
     setState((current) => {
@@ -1060,6 +1121,7 @@ function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppS
     if (column.key === "externalKey") return <span className="expenseCell"><code>{expense.externalKey}</code></span>;
     if (column.key === "amount") return <span className="expenseCell amount"><strong>{money.format(expense.amount)}</strong></span>;
     if (column.key === "source") return <span className="expenseCell"><small>{expense.source}</small></span>;
+    if (column.key === "documents") return <span className="expenseCell"><SourceDocumentsCell index={documents} entityType="expense" entityId={expense.id} /></span>;
     return <span className="expenseCell">{expense.date}</span>;
   };
   return <div className="expenseLayout">
@@ -1076,15 +1138,15 @@ function Expenses({ state, setState, onExpense, onDeleteExpense }: { state: AppS
       <div className="expenseTable"><div className="expenseDataGrid" style={{ "--expense-columns": expenseGridColumns } as CSSProperties}><div className="expenseHead">{visibleColumns.map((column) => <button role="columnheader" aria-sort={expenseSort.key === column.key ? (expenseSort.direction === "asc" ? "ascending" : "descending") : "none"} type="button" key={column.key} className={`stockHeaderCell draggable ${expenseSort.key === column.key ? `sorted ${expenseSort.direction}` : ""} ${draggedExpenseColumn === column.key ? "dragging" : ""}`} onPointerDown={() => { expenseColumnWasDragged.current = false; setDraggedExpenseColumn(column.key); }} onPointerEnter={(event) => { if (draggedExpenseColumn && event.buttons === 1) moveExpenseColumn(draggedExpenseColumn, column.key); }} onPointerUp={() => setDraggedExpenseColumn(null)} onPointerCancel={() => setDraggedExpenseColumn(null)} onClick={() => { if (expenseColumnWasDragged.current) { expenseColumnWasDragged.current = false; return; } changeExpenseSort(column.key); }} title="Click to sort; drag to reorder"><span>{column.label}</span><span className="sortPair" aria-hidden="true"><i /><b /></span></button>)}<span className="stockHeaderSpacer" /></div>{visibleExpenses.map((expense) => <div role="row" tabIndex={0} aria-selected={selectedExpenseSet.has(expense.id)} aria-label={`Expense ${expense.externalKey}`} className={`expenseRow ${expense.personal ? "personal" : ""} ${selectedExpenseSet.has(expense.id) ? "selected" : ""}`} key={expense.id} onClick={(event) => selectExpenseRow(expense.id, event.shiftKey)} onKeyDown={(event) => { if (event.target !== event.currentTarget || (event.key !== "Enter" && event.key !== " ")) return; event.preventDefault(); selectExpenseRow(expense.id, event.shiftKey); }}>{visibleColumns.map((column) => <span key={column.key}>{expenseCell(expense, column)}</span>)}<button aria-label={`Delete expense ${expense.externalKey}`} onClick={(event) => { event.stopPropagation(); if (!confirm(`Delete expense ${expense.externalKey}?`)) return; setSelectedExpenseIds((current) => current.filter((id) => id !== expense.id)); onDeleteExpense(expense.id); }}>×</button></div>)}{!visibleExpenses.length && <Empty text="No expense records match this view." />}</div></div>
     </section>
     <div className="disclaimer"><strong>Good records, calmer filing.</strong><span>The Tax center uses the selected tax year for its filing worksheet. This ledger shows all years unless you filter it.</span></div>
-    {expenseImport && <Modal title="Review expense import" eyebrow="Duplicate-safe import" onClose={() => { setExpenseImport(null); setImportPurchaseSource(""); }}>
+    {expenseImport && <Modal title="Review expense import" eyebrow="Duplicate-safe import" onClose={() => { setExpenseImport(null); setExpenseImportFile(null); setImportPurchaseSource(""); }}>
       <div className="importSummary"><article><span>New records</span><strong>{expenseImport.ready.length}</strong></article><article><span>Existing records corrected</span><strong>{expenseImport.updates.length}</strong></article><article><span>Invalid records</span><strong>{expenseImport.invalid.length}</strong></article></div>
-      <p className="settingsCopy"><strong>{expenseImport.fileName}</strong> contains {expenseImport.columns.length} source columns. {importPreviewExpenses.length > 0 && <>The importable total is <strong>{money.format(expenseImport.readyTotal)}</strong>{expenseImport.years.length ? ` across ${expenseImport.years.join(", ")}` : ""}. Existing expense keys refresh their imported order details and source fields but are never duplicated.</>}</p>
+      <p className="settingsCopy"><strong>{expenseImport.fileName}</strong> contains {expenseImport.columns.length} source columns. {importPreviewExpenses.length > 0 && <>The importable total is <strong>{money.format(expenseImport.readyTotal)}</strong>{expenseImport.years.length ? ` across ${expenseImport.years.join(", ")}` : ""}. Existing expense keys refresh their imported order details without being duplicated, and this file is added to every matching row&apos;s source history.</>}</p>
       {importPreviewExpenses.length > 0 && <div className="formGrid importSourceForm"><label className="wide">Purchase source key<input autoFocus required value={importPurchaseSource} onChange={(event) => setImportPurchaseSource(event.target.value)} placeholder="Amazon Business, Amazon Personal, wholesale account…" /><small>This label is saved on every record in this file so you can sort and filter purchases by account or source.</small></label></div>}
       {importPreviewExpenses.length > 0 && <div className="importPreviewList">{importPreviewExpenses.slice(0, 6).map((expense) => <div key={expense.externalKey}><span><strong>{expense.vendor}</strong><small>{expense.externalKey} · {expense.category} · {expense.date}{expense.asins.length ? ` · ASIN ${expense.asins.slice(0, 2).join(", ")}${expense.asins.length > 2 ? ` +${expense.asins.length - 2}` : ""}` : ""}{expenseImport.updates.some((update) => update.externalKey === expense.externalKey) ? " · existing" : " · new"}</small></span><b>{money.format(expense.amount)}</b></div>)}{importPreviewExpenses.length > 6 && <small>+ {importPreviewExpenses.length - 6} more records</small>}</div>}
       {expenseImport.duplicates.length > 0 && <details className="importDetails"><summary>{expenseImport.duplicates.length} duplicate row{expenseImport.duplicates.length === 1 ? "" : "s"} inside this file skipped</summary><p>{expenseImport.duplicates.slice(0, 12).join(", ")}</p></details>}
       {expenseImport.skipped.length > 0 && <details className="importDetails"><summary>{expenseImport.skipped.length} cancelled or zero-dollar order{expenseImport.skipped.length === 1 ? "" : "s"} ignored</summary>{expenseImport.skipped.slice(0, 12).map((message) => <p key={message}>{message}</p>)}</details>}
       {expenseImport.invalid.length > 0 && <details className="importDetails"><summary>{expenseImport.invalid.length} invalid record{expenseImport.invalid.length === 1 ? "" : "s"} skipped</summary>{expenseImport.invalid.slice(0, 12).map((message) => <p key={message}>{message}</p>)}</details>}
-      <div className="modalActions"><button type="button" className="secondary" onClick={() => { setExpenseImport(null); setImportPurchaseSource(""); }}>Cancel</button><button type="button" className="primary" disabled={!importPreviewExpenses.length || !importPurchaseSource.trim()} onClick={applyExpenseImport}>Save {importPreviewExpenses.length} records</button></div>
+      <div className="modalActions"><button type="button" className="secondary" onClick={() => { setExpenseImport(null); setExpenseImportFile(null); setImportPurchaseSource(""); }}>Cancel</button><button type="button" className="primary" disabled={importing || !importPreviewExpenses.length || !importPurchaseSource.trim()} onClick={() => void applyExpenseImport()}>{importing ? "Archiving document…" : `Save ${importPreviewExpenses.length} records + document`}</button></div>
     </Modal>}
     {categoryEditorOpen && <Modal className="categoryEditorModal" title="Edit expense categories" eyebrow="Accounting setup" onClose={() => { setCategoryEditorOpen(false); setCategoryNameDrafts({}); }}>
       <p className="categoryEditorIntro">Accounting class describes what a purchase is. Product costs also choose when the cost becomes COGS: after inventory is sold or used, or immediately. Built-in names stay fixed for reliable imports.</p>
@@ -1250,7 +1312,7 @@ function DataSettings({ state, setState, fileRef, onImport }: { state: AppState;
   const clearAllRecords = async () => {
     const clearedState: AppState = {
       ...state,
-      version: 16,
+      version: 17,
       products: [],
       movements: [],
       expenses: [],
@@ -1439,6 +1501,9 @@ function normalizeState(raw: unknown): AppState {
   const expenseColumnOrder = savedVersion < 16
     ? [...orderWithoutAsin.slice(0, asinColumnIndex), "asin", ...orderWithoutAsin.slice(asinColumnIndex)]
     : treatmentMigratedColumnOrder;
+  const documentsMigratedColumnOrder = savedVersion < 17 && !expenseColumnOrder.includes("documents")
+    ? [...expenseColumnOrder, "documents"]
+    : expenseColumnOrder;
   const expenseColumnKeys = new Set(expenseColumns.map((column) => column.key));
   const savedVisibleColumns = Array.isArray(incoming.settings?.expenseVisibleColumns) ? incoming.settings.expenseVisibleColumns.filter((key): key is string => typeof key === "string" && expenseColumnKeys.has(key)) : [];
   const sourceMigratedVisibleColumns = savedVersion < 10 && savedVisibleColumns.length && !savedVisibleColumns.includes("purchaseSource")
@@ -1456,6 +1521,9 @@ function normalizeState(raw: unknown): AppState {
   const migratedVisibleColumns = savedVersion < 16 && visibleWithoutAsin.length
     ? [...visibleWithoutAsin.slice(0, asinVisibleColumnIndex), "asin", ...visibleWithoutAsin.slice(asinVisibleColumnIndex)]
     : treatmentMigratedVisibleColumns;
+  const documentsMigratedVisibleColumns = savedVersion < 17 && migratedVisibleColumns.length && !migratedVisibleColumns.includes("documents")
+    ? [...migratedVisibleColumns, "documents"]
+    : migratedVisibleColumns;
   const products = (Array.isArray(incoming.products) ? incoming.products : seed.products).map((product) => ({ ...product, vendor: typeof product.vendor === "string" ? product.vendor.trim() : "" }));
   const seenCustomerKeys = new Set<string>();
   const customers = (Array.isArray(incoming.customers) ? incoming.customers : []).map((customer, index): Customer => {
@@ -1492,7 +1560,7 @@ function normalizeState(raw: unknown): AppState {
     seenMovementSourceKeys.add(key); return true;
   });
   return {
-    version: 16,
+    version: 17,
     products,
     movements,
     expenses,
@@ -1508,8 +1576,8 @@ function normalizeState(raw: unknown): AppState {
       taxUpdateHistory: Array.isArray(incoming.settings?.taxUpdateHistory) ? incoming.settings.taxUpdateHistory : [],
       customExpenseCategories,
       expenseCategoryOverrides,
-      expenseColumnOrder,
-      expenseVisibleColumns: migratedVisibleColumns.length ? migratedVisibleColumns : defaultExpenseVisibleColumns,
+      expenseColumnOrder: documentsMigratedColumnOrder,
+      expenseVisibleColumns: documentsMigratedVisibleColumns.length ? documentsMigratedVisibleColumns : defaultExpenseVisibleColumns,
     },
   };
 }
