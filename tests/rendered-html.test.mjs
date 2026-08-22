@@ -144,7 +144,7 @@ test("includes item-level COGS and final-product tracking", async () => {
   assert.match(page, /href=\{`#product-\$\{linkedProduct\.id\}`\}/);
   assert.match(page, /onOpenProduct\(linkedProduct\)/);
   assert.match(page, /linkedFinalProductFor/);
-  assert.match(page, /version: 17/);
+  assert.match(page, /version: 18/);
   assert.match(styles, /\.cogsHead,.cogsRow/);
   assert.match(styles, /\.cogsProductLink/);
   assert.match(styles, /activityTag\.production_use/);
@@ -227,7 +227,8 @@ test("tracks sortable and filterable purchase sources", async () => {
   assert.match(page, /setExpensePurchaseSource\(sourceKey\)/);
   assert.match(page, /purchase_source,vendor/);
   assert.match(expenseImport, /purchasesourcekey/);
-  assert.match(expenseImport, /Amazon · \$\{accountGroups\.join/);
+  assert.match(expenseImport, /purchasesource: "Amazon"/);
+  assert.doesNotMatch(expenseImport, /accountGroups\.join/);
   assert.match(styles, /min-width:1390px/);
 });
 
@@ -290,7 +291,7 @@ test("combines purchased inventory and recognized costs in the COGS workspace", 
   assert.match(page, /isDirectCogsCategory\(expense\.category, state\.settings\)/);
   assert.match(page, /parseExpenseInventoryDescription\(expense\.note, expense\.amount\)/);
   assert.match(page, /Inventory waiting to become COGS/);
-  assert.match(page, /Product costs waiting to become COGS/);
+  assert.match(page, /Materials and resale goods waiting to become COGS/);
   assert.match(page, /className="expenseCategorySelect"/);
   assert.match(page, /Category for \$\{expense\.externalKey\}/);
   assert.match(page, /targetIds\.has\(item\.id\) \? \{ \.\.\.item, category \} : item/);
@@ -403,7 +404,7 @@ test("separates persistent expense accounting class from product-cost timing", a
   assert.match(page, /aria-label="Expense accounting class"/);
   assert.match(page, /aria-label="Expense cost timing"/);
   assert.match(expenseImport, /customCategories: readonly string\[\] = \[\]/);
-  assert.match(expenseImport, /expenseAccountingClasses = \["Product cost", "Operating expense", "Taxes & fees"\]/);
+  assert.match(expenseImport, /expenseAccountingClasses = \["Product cost", "Operating expense", "Capital asset", "Taxes & fees", "Needs review"\]/);
   assert.match(expenseImport, /expenseCostTimings = \["Track in inventory", "Recognize directly as COGS"\]/);
   assert.match(expenseImport, /normalizeExpenseCategory\(valueFor\(record, aliases\.category\), customCategories\)/);
   assert.match(styles, /\.expenseCategoryCreator/);

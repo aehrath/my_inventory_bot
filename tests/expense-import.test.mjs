@@ -49,7 +49,7 @@ test("groups Amazon consumer Order History items and sums every line total", asy
   assert.equal(preview.ready[0].externalKey, "111-1111111-1111111");
   assert.equal(preview.ready[0].amount, 22.55);
   assert.equal(preview.ready[0].vendor, "Amazon.com");
-  assert.equal(preview.ready[0].purchaseSource, "Amazon · Amazon.com");
+  assert.equal(preview.ready[0].purchaseSource, "Amazon");
   assert.deepEqual(preview.ready[0].asins, ["B000000001", "B000000002"]);
   assert.equal(preview.ready[0].date, "2026-01-15");
   assert.match(preview.ready[0].note, /Shipping labels, 200 pieces/);
@@ -77,7 +77,8 @@ test("suggests and imports purchase source keys", () => {
     "01/15/2026,444-4444444-4444444,Studio account,25.00,Shipping labels,Amazon",
   ].join("\n");
   const amazonPreview = parseExpenseImportText(amazon, "amazon-orders.csv", []);
-  assert.equal(amazonPreview.ready[0].purchaseSource, "Amazon · Studio account");
+  assert.equal(amazonPreview.ready[0].purchaseSource, "Amazon");
+  assert.equal(amazonPreview.ready[0].fields["Account Group"], "Studio account");
 
   const generic = [
     "external_key,purchase_source,vendor,date,amount,category,note",
@@ -128,18 +129,57 @@ test("normalizes and deduplicates imported ASIN values", () => {
 test("includes inventory categories and normalizes their common labels", () => {
   assert.ok(expenseCategories.includes("Raw materials"));
   assert.ok(expenseCategories.includes("Resale item"));
+  assert.ok(expenseCategories.includes("Review needed"));
   assert.equal(normalizeExpenseCategory("raw material"), "Raw materials");
   assert.equal(normalizeExpenseCategory("resale inventory"), "Resale item");
 });
 
 test("separates accounting class from product-cost timing", () => {
-  assert.deepEqual(expenseAccountingClasses, ["Product cost", "Operating expense", "Taxes & fees"]);
+  assert.deepEqual(expenseAccountingClasses, ["Product cost", "Operating expense", "Capital asset", "Taxes & fees", "Needs review"]);
   assert.deepEqual(expenseCostTimings, ["Track in inventory", "Recognize directly as COGS"]);
   assert.equal(expenseCategoryDefinitions.length, expenseCategories.length);
   assert.deepEqual(expenseCategoryDefinitions.find((category) => category.name === "Raw materials"), { name: "Raw materials", accountingClass: "Product cost", costTiming: "Track in inventory" });
   assert.deepEqual(expenseCategoryDefinitions.find((category) => category.name === "Cost of goods"), { name: "Cost of goods", accountingClass: "Product cost", costTiming: "Recognize directly as COGS" });
   assert.deepEqual(expenseCategoryDefinitions.find((category) => category.name === "Utilities"), { name: "Utilities", accountingClass: "Operating expense" });
+  assert.deepEqual(expenseCategoryDefinitions.find((category) => category.name === "Office equipment"), { name: "Office equipment", accountingClass: "Capital asset" });
   assert.deepEqual(expenseCategoryDefinitions.find((category) => category.name === "Taxes & licenses"), { name: "Taxes & licenses", accountingClass: "Taxes & fees" });
+  assert.deepEqual(expenseCategoryDefinitions.find((category) => category.name === "Review needed"), { name: "Review needed", accountingClass: "Needs review" });
+});
+
+test("does not mistake an Amazon account group for the purchase source", () => {
+  const text = [
+    "Order Date,Order ID,Account Group,Order Net Total,Tax Exemption Applied,Tax Exemption Type,Amazon-Internal Product Category,Title,Family,Seller Name",
+    "01/15/2026,113-6042479-6755452,Maxi's Crafty Services LLC,25.00,Yes,RESALE,Industrial Supplies,100Pcs tactile PCB switches,Electrical equipment and components and supplies,Parts Vendor",
+  ].join("\n");
+  const preview = parseExpenseImportText(text, "amazon-business.csv", []);
+
+  assert.equal(preview.ready[0].purchaseSource, "Amazon");
+  assert.equal(preview.ready[0].vendor, "Parts Vendor");
+  assert.equal(preview.ready[0].fields["Account Group"], "Maxi's Crafty Services LLC");
+  assert.equal(preview.ready[0].category, "Raw materials");
+});
+
+test("distinguishes exempt production inputs from finished resale goods", () => {
+  const text = [
+    "Order Date,Order ID,Order Net Total,Tax Exemption Applied,Tax Exemption Type,Amazon-Internal Product Category,Title,Family,Seller Name",
+    "01/15/2026,RAW-1,20.00,Yes,RESALE,Art and Craft Supply,60 blank leatherette patches,Arts and crafts equipment and accessories and supplies,Maker Supply",
+    "01/16/2026,RESALE-1,30.00,Yes,RESALE,Apparel,Finished branded backpack,Luggage and handbags,Wholesale Co",
+  ].join("\n");
+  const preview = parseExpenseImportText(text, "amazon-business.csv", []);
+
+  assert.equal(preview.ready.find((expense) => expense.externalKey === "RAW-1").category, "Raw materials");
+  assert.equal(preview.ready.find((expense) => expense.externalKey === "RESALE-1").category, "Resale item");
+});
+
+test("holds mixed Amazon orders for review instead of guessing their accounting treatment", () => {
+  const text = [
+    "Order Date,Order ID,Order Net Total,Tax Exemption Applied,Tax Exemption Type,Amazon-Internal Product Category,Title,Family,Seller Name",
+    "01/15/2026,MIXED-1,80.00,Yes,RESALE,Art and Craft Supply,30 acrylic blanks,Arts and crafts equipment and accessories and supplies,Amazon",
+    "01/15/2026,MIXED-1,80.00,No,,Personal Computer,Computer monitor,Computer Equipment and Accessories,Amazon",
+  ].join("\n");
+  const preview = parseExpenseImportText(text, "amazon-business.csv", []);
+
+  assert.equal(preview.ready[0].category, "Review needed");
 });
 
 test("preserves configured custom categories during expense import", () => {

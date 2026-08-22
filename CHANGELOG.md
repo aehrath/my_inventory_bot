@@ -4,6 +4,23 @@ All notable changes to StockBot are documented here.
 
 ## Unreleased
 
+## 0.36.0 - 2026-08-22
+
+### Added
+
+- Added **Capital asset** and **Needs review** accounting classes so durable equipment and ambiguous purchases stay out of operating-expense and tax totals.
+- Added Amazon import classification for production ingredients and components, finished resale goods, ordinary consumables, durable equipment, and mixed orders.
+
+### Changed
+
+- Tax-exempt Amazon purchases now use product and taxonomy clues instead of assuming every resale exemption represents a finished resale item.
+- Re-importing can correct legacy auto-assigned **Other**, **Office supplies**, or **Office equipment** categories when stronger product-cost evidence is present, while preserving custom categories.
+
+### Fixed
+
+- Amazon Business imports now use **Amazon** as the purchase source instead of mistaking the buyer's **Account Group** for a marketplace or account source.
+- Preserved Account Group as an imported source-data column and Seller Name as the vendor.
+
 ## 0.35.1 - 2026-08-22
 
 ### Fixed

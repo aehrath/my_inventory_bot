@@ -1,4 +1,4 @@
-export const expenseAccountingClasses = ["Product cost", "Operating expense", "Taxes & fees"] as const;
+export const expenseAccountingClasses = ["Product cost", "Operating expense", "Capital asset", "Taxes & fees", "Needs review"] as const;
 export type ExpenseAccountingClass = typeof expenseAccountingClasses[number];
 export const expenseCostTimings = ["Track in inventory", "Recognize directly as COGS"] as const;
 export type ExpenseCostTiming = typeof expenseCostTimings[number];
@@ -14,7 +14,7 @@ export const expenseCategoryDefinitions: readonly ExpenseCategoryDefinition[] = 
   { name: "Resale item", accountingClass: "Product cost", costTiming: "Track in inventory" },
   { name: "Utilities", accountingClass: "Operating expense" },
   { name: "Rent", accountingClass: "Operating expense" },
-  { name: "Office equipment", accountingClass: "Operating expense" },
+  { name: "Office equipment", accountingClass: "Capital asset" },
   { name: "Office supplies", accountingClass: "Operating expense" },
   { name: "Advertising & marketing", accountingClass: "Operating expense" },
   { name: "Shipping & postage", accountingClass: "Operating expense" },
@@ -26,6 +26,7 @@ export const expenseCategoryDefinitions: readonly ExpenseCategoryDefinition[] = 
   { name: "Taxes & licenses", accountingClass: "Taxes & fees" },
   { name: "Bank & processing fees", accountingClass: "Taxes & fees" },
   { name: "Other", accountingClass: "Operating expense" },
+  { name: "Review needed", accountingClass: "Needs review" },
 ] as const;
 
 export const expenseCategories = expenseCategoryDefinitions.map((category) => category.name);
@@ -170,20 +171,39 @@ const valueFor = (record: Record<string, unknown>, names: readonly string[]) => 
   .map((name) => record[name])
   .find((value) => value !== undefined && String(value).trim() !== "");
 
+const categoryForAmazonLine = (row: Record<string, unknown>): ExpenseCategory => {
+  const title = ["title", "description"].map((field) => String(row[field] ?? "").trim()).filter(Boolean).join(" ").toLowerCase();
+  const taxonomy = ["amazoninternalproductcategory", "segment", "family", "class", "commodity"]
+    .map((field) => String(row[field] ?? "").trim()).filter(Boolean).join(" ").toLowerCase();
+  const corpus = `${title} ${taxonomy}`;
+  const exemptionType = String(row.taxexemptiontype ?? "").trim().toLowerCase();
+  const productionExemption = /production|manufactur|ingredient|component|raw material/.test(exemptionType);
+  const resaleExemption = /resale/.test(exemptionType);
+  const intrinsicMaterial = /\b(raw materials?|ingredients?|blanks?|unfinished|filaments?|fabrics?|leatherette|decals?|patches?|transfer paper|transfer vinyl|heat transfer|adhesives?|glue|lumber|plywood|acrylic|plexiglass|resin|pigments?|dyes?|beads?|sewing thread|yarn)\b/.test(title);
+  const componentInput = /\b(components?|connectors?|switches?|stepper motors?|wires?|cables?|clasps?|key rings?|fasteners?|screws?|capacitors?|relays?|sockets?|circuit boards?|pcb)\b/.test(title);
+  const productionUse = /\b[1-9][0-9]+\s*(?:pcs|pieces)|\b(?:diy|craft|jewelry|laser|engraving|sublimation|heat press|3d print|cnc|assembly|manufactur)/.test(title);
+  const materialTaxonomy = /manufacturing components|electronic components and supplies|electrical equipment and components|arts and crafts equipment and accessories and supplies|sewing supplies/.test(taxonomy);
+  const materialInput = intrinsicMaterial || (componentInput && productionUse) || (materialTaxonomy && productionUse);
+  const consumable = /office supplies|stationery|printer paper|copy paper|writing paper|shipping labels?|packing tape|envelopes?|toner|ink cartridges?|cleaning supplies|sanitizer|paper towels?|trash bags?/.test(corpus);
+  const equipmentProduct = /\b(laminators?|printers?|monitors?|computers?|laptops?|cameras?|speakers?|drives?|usb hubs?|power tools?|hand tools?|machines?|lamps?)\b/.test(title);
+  const equipment = equipmentProduct || /office equipment|office machines?|computer equipment|consumer electronics|audio and visual equipment|furniture|power tools?|hand tools?|machinery/.test(taxonomy);
+  const shipping = /shipping|postage|mailing|freight/.test(corpus);
+  const service = /digital software|software|subscription|membership|professional service/.test(corpus);
+
+  if (productionExemption || (resaleExemption && materialInput)) return "Raw materials";
+  if (resaleExemption) return "Resale item";
+  if (materialInput) return "Raw materials";
+  if (equipmentProduct) return "Office equipment";
+  if (consumable) return "Office supplies";
+  if (shipping) return "Shipping & postage";
+  if (equipment) return "Office equipment";
+  if (service) return "Other";
+  return "Review needed";
+};
+
 const categoryForAmazonOrder = (rows: Array<Record<string, unknown>>): ExpenseCategory => {
-  const valuesForField = (field: string) => rows.map((row) => String(row[field] ?? "").trim()).filter(Boolean);
-  const taxonomy = Array.from(new Set([
-    ...valuesForField("amazoninternalproductcategory"),
-    ...valuesForField("segment"),
-    ...valuesForField("family"),
-    ...valuesForField("class"),
-    ...valuesForField("commodity"),
-  ])).join(" ").toLowerCase();
-  if (/office supplies|stationery|paper|writing|label|packaging/.test(taxonomy)) return "Office supplies";
-  if (/office equipment|office machine|computer|electronic|printer|monitor|furniture/.test(taxonomy)) return "Office equipment";
-  if (/office product/.test(taxonomy)) return "Office supplies";
-  if (/shipping|postage|mailing|freight/.test(taxonomy)) return "Shipping & postage";
-  return "Other";
+  const categories = Array.from(new Set(rows.map(categoryForAmazonLine)));
+  return categories.length === 1 ? categories[0] : "Review needed";
 };
 
 export function parseExpenseImportText(
@@ -230,7 +250,6 @@ export function parseExpenseImportText(
       const first = orderRows[0];
       const uniqueValues = (fields: readonly string[]) => Array.from(new Set(orderRows.map((record) => String(valueFor(record, fields) ?? "").trim()).filter(Boolean)));
       const sellers = uniqueValues(["sellername", "vendor", "merchant"]);
-      const accountGroups = uniqueValues(["accountgroup"]);
       const titles = uniqueValues(["title", "description"]);
       const amazonCategories = uniqueValues(["amazoninternalproductcategory"]);
       const titleNote = titles.slice(0, 3).join("; ");
@@ -242,7 +261,7 @@ export function parseExpenseImportText(
       }));
       return {
         externalkey: orderId,
-        purchasesource: accountGroups.length ? `Amazon · ${accountGroups.join(" · ")}` : "Amazon",
+        purchasesource: "Amazon",
         vendor: sellers.slice(0, 3).join(", ") || "Amazon",
         asin: uniqueValues(["asin"]).join(" · "),
         category: categoryForAmazonOrder(orderRows),
@@ -285,10 +304,10 @@ export function parseExpenseImportText(
       }));
       return {
         externalkey: orderId,
-        purchasesource: websites.length ? `Amazon · ${websites.join(" · ")}` : "Amazon",
+        purchasesource: "Amazon",
         vendor: websites[0] || "Amazon",
         asin: uniqueValues(["asin"]).join(" · "),
-        category: "Other",
+        category: categoryForAmazonOrder(orderRows),
         amount,
         date: valueFor(first, ["orderdate"]),
         note: `${titleNote}${moreItems}`,

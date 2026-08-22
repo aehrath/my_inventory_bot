@@ -41,7 +41,7 @@ type TaxUpdateAudit = { id: string; checkedAt: string; appliedAt: string | null;
 type CustomExpenseCategory = ExpenseCategoryDefinition;
 type ExpenseCategoryTreatment = Omit<ExpenseCategoryDefinition, "name">;
 type Settings = { businessName: string; taxYear: number; beginningInventory: number; ownAddress: Address; stateTaxes: Record<string, StateTaxSetting>; localTaxRules: LocalTaxRule[]; addressTaxRates: AddressTaxRate[]; taxUpdateHistory: TaxUpdateAudit[]; customExpenseCategories: CustomExpenseCategory[]; expenseCategoryOverrides: Record<string, ExpenseCategoryTreatment>; expenseColumnOrder: string[]; expenseVisibleColumns: string[] };
-type AppState = { version: 17; products: Product[]; movements: Movement[]; expenses: Expense[]; customers: Customer[]; settings: Settings };
+type AppState = { version: 18; products: Product[]; movements: Movement[]; expenses: Expense[]; customers: Customer[]; settings: Settings };
 type Metrics = { inventoryValue: number; units: number; revenue: number; inventoryCogs: number; additionalCogs: number; cogs: number; salesTax: number; stateSalesTax: number; localSalesTax: number; useTax: number; stateUseTax: number; localUseTax: number; expenses: number; expenseRecordsTotal: number; purchases: number; grossProfit: number; taxableIncome: number };
 type ExpenseColumnDefinition = { key: string; label: string; width: string; field?: string };
 type SortDirection = "asc" | "desc";
@@ -172,6 +172,8 @@ const isDirectCogsCategory = (category: ExpenseCategory, settings: ExpenseCatego
   expenseAccountingClassFor(category, settings) === "Product cost" && expenseCostTimingFor(category, settings) === "Recognize directly as COGS";
 const fallbackExpenseCategoryForTreatment = (definition: ExpenseCategoryDefinition): ExpenseCategory => {
   if (definition.accountingClass === "Product cost") return definition.costTiming === "Track in inventory" ? "Raw materials" : "Cost of goods";
+  if (definition.accountingClass === "Capital asset") return "Office equipment";
+  if (definition.accountingClass === "Needs review") return "Review needed";
   return definition.accountingClass === "Taxes & fees" ? "Taxes & licenses" : "Other";
 };
 async function parseExpenseImport(file: File, existingExpenses: Expense[], customCategories: readonly string[]): Promise<ExpenseImportPreview> {
@@ -204,7 +206,7 @@ const resolveAddressRate = (address: Address, settings: Settings, liveRate?: Tax
 };
 
 const seed: AppState = {
-  version: 17,
+  version: 18,
   settings: { businessName: "Juniper & Co.", taxYear: nowYear, beginningInventory: 3180, ownAddress: blankAddress("CA"), stateTaxes: defaultStateTaxSettings("CA"), localTaxRules: [], addressTaxRates: [], taxUpdateHistory: [], customExpenseCategories: [], expenseCategoryOverrides: {}, expenseColumnOrder: defaultExpenseColumnOrder, expenseVisibleColumns: defaultExpenseVisibleColumns },
   products: [
     { id: "p1", sku: "CER-101", name: "Speckled Ceramic Mug", vendor: "Clay & Kiln Supply", category: "Home", quantity: 24, unitCost: 8.5, salePrice: 24, reorderPoint: 8, salesTaxPaid: false, createdAt: `${nowYear}-01-05` },
@@ -580,7 +582,7 @@ function Customers({ state, setState, documents, onDocumentsChanged }: { state: 
       }
       if (!links.length) throw new Error("No existing or new data entries could be linked to this document.");
       const archived = await archiveImportDocument(invoiceFile, "invoice", "", links);
-      setState({ ...current, version: 17, customers, products: [...productAdditions, ...current.products], movements: [...movementAdditions, ...current.movements] });
+      setState({ ...current, version: 18, customers, products: [...productAdditions, ...current.products], movements: [...movementAdditions, ...current.movements] });
       await onDocumentsChanged();
       setPreview(null);
       setInvoiceFile(null);
@@ -843,6 +845,8 @@ function Expenses({ state, setState, documents, onDocumentsChanged, onExpense, o
   const cogsTotal = businessExpenses.filter((expense) => isDirectCogsCategory(expense.category, state.settings)).reduce((sum, expense) => sum + expense.amount, 0);
   const inventoryPurchaseTotal = businessExpenses.filter((expense) => isTrackedInventoryCategory(expense.category, state.settings)).reduce((sum, expense) => sum + expense.amount, 0);
   const operatingTotal = totalForClass("Operating expense") + totalForClass("Taxes & fees");
+  const capitalAssetTotal = totalForClass("Capital asset");
+  const reviewTotal = totalForClass("Needs review");
   const importPreviewExpenses = expenseImport ? [...expenseImport.ready, ...expenseImport.updates] : [];
   const openExpenseImport = async (event: ChangeEvent<HTMLInputElement>) => {
     const input = event.currentTarget;
@@ -886,6 +890,10 @@ function Expenses({ state, setState, documents, onDocumentsChanged, onExpense, o
         const update = updates.get(normalizeExpenseKey(expense.externalKey));
         if (!update) return expense;
         links.push({ entityType: "expense", entityId: expense.id, relation: "updated" });
+        const legacyAmazonCategory = expense.source === "import" && (
+          expense.category === "Other"
+          || (["Office equipment", "Office supplies"].includes(expense.category) && ["Raw materials", "Resale item"].includes(update.category))
+        );
         return {
           ...expense,
           vendor: update.vendor,
@@ -895,6 +903,7 @@ function Expenses({ state, setState, documents, onDocumentsChanged, onExpense, o
           note: update.note || expense.note,
           personal: update.personal ?? expense.personal,
           purchaseSource: sourceKey,
+          category: legacyAmazonCategory ? update.category : expense.category,
           fields: update.fields,
           importedAt: expense.importedAt ?? update.importedAt,
         };
@@ -1126,9 +1135,9 @@ function Expenses({ state, setState, documents, onDocumentsChanged, onExpense, o
   };
   return <div className="expenseLayout">
     <section className="expenseHero"><div><p className="eyebrow">Business spending</p><h2>Every expense, easy to find.</h2><p>Import purchase history or add a record by hand. Mark personal purchases so they stay visible without affecting business totals or taxes.</p></div><div className="expenseHeroTotal"><span>{expenseYear === "All" ? "Business total · all years" : `Business total · ${expenseYear}`}</span><strong>{money.format(expenseTotal)}</strong><small>{businessExpenses.length} business records · {personalExpenses.length} personal excluded</small></div></section>
-    <div className="taxCards expenseCards"><Metric label="Business purchase records" value={money.format(expenseTotal)} note={expenseYear === "All" ? "Across every recorded year" : `Dated in ${expenseYear}`} accent="green" /><Metric label="Operating expenses" value={money.format(operatingTotal)} note="Operating expenses plus taxes & fees" accent="blue" /><Metric label="Direct COGS" value={money.format(cogsTotal)} note="Product costs recognized immediately" accent="sand" /><Metric label="Purchased inventory" value={money.format(inventoryPurchaseTotal)} note="Product costs waiting to become COGS" accent="green" /><Metric label="Personal excluded" value={money.format(personalExpenseTotal)} note={`${personalExpenses.length} record${personalExpenses.length === 1 ? "" : "s"} kept out of business totals`} accent="coral" /></div>
+    <div className="taxCards expenseCards"><Metric label="Business purchase records" value={money.format(expenseTotal)} note={expenseYear === "All" ? "Across every recorded year" : `Dated in ${expenseYear}`} accent="green" /><Metric label="Operating expenses" value={money.format(operatingTotal)} note="Operating expenses plus taxes & fees" accent="blue" /><Metric label="Direct COGS" value={money.format(cogsTotal)} note="Product costs recognized immediately" accent="sand" /><Metric label="Purchased inventory" value={money.format(inventoryPurchaseTotal)} note="Materials and resale goods waiting to become COGS" accent="green" /><Metric label="Capital assets" value={money.format(capitalAssetTotal)} note="Durable equipment kept outside operating-expense totals" accent="blue" /><Metric label="Needs review" value={money.format(reviewTotal)} note="Unclear purchases excluded from tax totals" accent="sand" /><Metric label="Personal excluded" value={money.format(personalExpenseTotal)} note={`${personalExpenses.length} record${personalExpenses.length === 1 ? "" : "s"} kept out of business totals`} accent="coral" /></div>
     <div className="taxColumns expenseColumns"><section className="panel expenseCategories"><div className="panelTitle"><div><p className="eyebrow">Expense summary</p><h3>Business spending by category</h3></div><div className="categorySummaryActions"><span className="pill neutral">{businessExpenses.length} records</span><button className="secondary" type="button" onClick={() => setCategoryEditorOpen(true)}>Edit categories</button></div></div><p className="categorySummaryCopy">Accounting class describes what a cost is. Product-cost timing determines whether it waits in inventory or is recognized directly as COGS.</p><div className="categoryTotals">{categoryTotals.map((item) => <button className={expenseCategory === item.category ? "active" : ""} key={item.category} onClick={() => { setExpenseCategory(item.category); setExpenseAccountingClass("All"); setExpenseCostTiming("All"); }}><span><strong>{item.category}</strong><small>{item.accountingClass}{item.costTiming ? ` · ${item.costTiming}` : ""} · {businessExpenses.filter((expense) => expense.category === item.category).length} records</small></span><b>{money.format(item.total)}</b></button>)}{!categoryTotals.length && <Empty text="No business expenses recorded for this period." />}</div><div className="expenseGrandTotal"><span>Total business purchase records</span><strong>{money.format(expenseTotal)}</strong></div></section>
-    <section className="panel expenseGuide"><div className="panelTitle"><div><p className="eyebrow">Import guide</p><h3>Amazon Business exports</h3></div></div><p>StockBot groups multi-item rows into one expense per Amazon Order ID and uses Order Net Total, so the same order is not counted twice.</p><div className="importFacts"><span><strong>Unique key</strong><small>Amazon Order ID</small></span><span><strong>Expense amount</strong><small>Order Net Total</small></span><span><strong>Purchase source</strong><small>Account key assigned on review</small></span><span><strong>Imported years</strong><small>Shown automatically after import</small></span></div></section></div>
+    <section className="panel expenseGuide"><div className="panelTitle"><div><p className="eyebrow">Import guide</p><h3>Amazon Business exports</h3></div></div><p>StockBot groups multi-item rows into one expense per Amazon Order ID and uses Order Net Total, so the same order is not counted twice. Tax-exemption details and product clues separate resale goods, production inputs, consumables, and equipment; mixed orders are held for review.</p><div className="importFacts"><span><strong>Unique key</strong><small>Amazon Order ID</small></span><span><strong>Expense amount</strong><small>Order Net Total</small></span><span><strong>Purchase source</strong><small>Amazon, editable on review</small></span><span><strong>Imported years</strong><small>Shown automatically after import</small></span></div></section></div>
     <section className="panel expenseLedger">
       <div className="panelTitle"><div><p className="eyebrow">Deduplicated records</p><h3>Expense ledger</h3></div><div className="expenseActions"><button className={columnConfigOpen ? "secondary active" : "secondary"} onClick={() => setColumnConfigOpen((open) => !open)}>☷ Columns ({visibleColumns.length}/{orderedColumns.length})</button><button className="secondary" onClick={downloadExpenseTemplate}>↓ CSV template</button><button className="secondary" disabled={importing} onClick={() => expenseFileRef.current?.click()}>{importing ? "Reading file…" : "↑ Import CSV or JSON"}</button><button className="primary" onClick={onExpense}>+ Add expense</button><input ref={expenseFileRef} hidden type="file" accept="text/csv,.csv,application/json,.json" onChange={openExpenseImport} /></div></div>
       <p className="settingsCopy">Every record requires a unique external key—such as an Amazon order ID, invoice number, or bank transaction ID. Re-importing enriches existing records with every source column without creating duplicates.</p>
@@ -1141,6 +1150,7 @@ function Expenses({ state, setState, documents, onDocumentsChanged, onExpense, o
     {expenseImport && <Modal title="Review expense import" eyebrow="Duplicate-safe import" onClose={() => { setExpenseImport(null); setExpenseImportFile(null); setImportPurchaseSource(""); }}>
       <div className="importSummary"><article><span>New records</span><strong>{expenseImport.ready.length}</strong></article><article><span>Existing records corrected</span><strong>{expenseImport.updates.length}</strong></article><article><span>Invalid records</span><strong>{expenseImport.invalid.length}</strong></article></div>
       <p className="settingsCopy"><strong>{expenseImport.fileName}</strong> contains {expenseImport.columns.length} source columns. {importPreviewExpenses.length > 0 && <>The importable total is <strong>{money.format(expenseImport.readyTotal)}</strong>{expenseImport.years.length ? ` across ${expenseImport.years.join(", ")}` : ""}. Existing expense keys refresh their imported order details without being duplicated, and this file is added to every matching row&apos;s source history.</>}</p>
+      {importPreviewExpenses.some((expense) => expense.category === "Review needed") && <div className="formNotice"><strong>Some orders need review.</strong><span>Mixed or ambiguous purchases are excluded from tax totals until you choose a category in the expense ledger.</span></div>}
       {importPreviewExpenses.length > 0 && <div className="formGrid importSourceForm"><label className="wide">Purchase source key<input autoFocus required value={importPurchaseSource} onChange={(event) => setImportPurchaseSource(event.target.value)} placeholder="Amazon Business, Amazon Personal, wholesale account…" /><small>This label is saved on every record in this file so you can sort and filter purchases by account or source.</small></label></div>}
       {importPreviewExpenses.length > 0 && <div className="importPreviewList">{importPreviewExpenses.slice(0, 6).map((expense) => <div key={expense.externalKey}><span><strong>{expense.vendor}</strong><small>{expense.externalKey} · {expense.category} · {expense.date}{expense.asins.length ? ` · ASIN ${expense.asins.slice(0, 2).join(", ")}${expense.asins.length > 2 ? ` +${expense.asins.length - 2}` : ""}` : ""}{expenseImport.updates.some((update) => update.externalKey === expense.externalKey) ? " · existing" : " · new"}</small></span><b>{money.format(expense.amount)}</b></div>)}{importPreviewExpenses.length > 6 && <small>+ {importPreviewExpenses.length - 6} more records</small>}</div>}
       {expenseImport.duplicates.length > 0 && <details className="importDetails"><summary>{expenseImport.duplicates.length} duplicate row{expenseImport.duplicates.length === 1 ? "" : "s"} inside this file skipped</summary><p>{expenseImport.duplicates.slice(0, 12).join(", ")}</p></details>}
@@ -1149,7 +1159,7 @@ function Expenses({ state, setState, documents, onDocumentsChanged, onExpense, o
       <div className="modalActions"><button type="button" className="secondary" onClick={() => { setExpenseImport(null); setExpenseImportFile(null); setImportPurchaseSource(""); }}>Cancel</button><button type="button" className="primary" disabled={importing || !importPreviewExpenses.length || !importPurchaseSource.trim()} onClick={() => void applyExpenseImport()}>{importing ? "Archiving document…" : `Save ${importPreviewExpenses.length} records + document`}</button></div>
     </Modal>}
     {categoryEditorOpen && <Modal className="categoryEditorModal" title="Edit expense categories" eyebrow="Accounting setup" onClose={() => { setCategoryEditorOpen(false); setCategoryNameDrafts({}); }}>
-      <p className="categoryEditorIntro">Accounting class describes what a purchase is. Product costs also choose when the cost becomes COGS: after inventory is sold or used, or immediately. Built-in names stay fixed for reliable imports.</p>
+      <p className="categoryEditorIntro">Accounting class describes what a purchase is. Product costs also choose when the cost becomes COGS: after inventory is sold or used, or immediately. Capital asset keeps durable equipment outside operating-expense totals, and Needs review keeps uncertain purchases out of tax calculations until you decide. Built-in names stay fixed for reliable imports.</p>
       <form className="expenseCategoryCreator categoryEditorCreate" onSubmit={createExpenseCategory}><label><span>New category</span><input aria-label="New expense category" maxLength={60} value={newExpenseCategory} onChange={(event) => setNewExpenseCategory(event.target.value)} placeholder="Subscriptions, samples, storage…" /></label><label className="categoryClassField"><span>Accounting class</span><select aria-label="New expense accounting class" value={newExpenseAccountingClass} onChange={(event) => setNewExpenseAccountingClass(event.target.value as ExpenseAccountingClass)}>{expenseAccountingClasses.map((accountingClass) => <option key={accountingClass}>{accountingClass}</option>)}</select></label>{newExpenseAccountingClass === "Product cost" && <label className="categoryTimingField"><span>Cost timing</span><select aria-label="New expense cost timing" value={newExpenseCostTiming} onChange={(event) => setNewExpenseCostTiming(event.target.value as ExpenseCostTiming)}>{expenseCostTimings.map((costTiming) => <option key={costTiming}>{costTiming}</option>)}</select></label>}<button className="secondary" type="submit" disabled={!newExpenseCategory.trim()}>+ Add</button></form>
       <div className="categoryEditorLegend"><span>Category</span><span>Accounting class</span><span>Cost timing</span><span>Actions</span></div>
       <div className="categoryEditorList">{availableExpenseCategoryDefinitions.map((definition) => {
@@ -1176,7 +1186,7 @@ function TaxCenter({ state, metrics, setState }: { state: AppState; metrics: Met
     ["Inventory-ledger COGS", metrics.inventoryCogs, "Unit cost captured when each sale was recorded"],
     ["Additional COGS records", metrics.additionalCogs, "Imported or manually entered costs not already in product unit cost"],
     ["Gross profit", metrics.grossProfit, "Gross sales minus both COGS sources"],
-    ["Operating expenses", metrics.expenses, "Excludes cost of goods and inventory purchase records"],
+    ["Operating expenses", metrics.expenses, "Excludes product costs, capital assets, and purchases awaiting review"],
     ["Estimated net business income", metrics.taxableIncome, "Before owner-specific deductions and income taxes"],
   ] as const;
   const taxMovements = state.movements.filter((movement) => movement.type === "sale" && new Date(`${movement.date}T12:00:00`).getFullYear() === state.settings.taxYear);
@@ -1312,7 +1322,7 @@ function DataSettings({ state, setState, fileRef, onImport }: { state: AppState;
   const clearAllRecords = async () => {
     const clearedState: AppState = {
       ...state,
-      version: 17,
+      version: 18,
       products: [],
       movements: [],
       expenses: [],
@@ -1560,7 +1570,7 @@ function normalizeState(raw: unknown): AppState {
     seenMovementSourceKeys.add(key); return true;
   });
   return {
-    version: 17,
+    version: 18,
     products,
     movements,
     expenses,

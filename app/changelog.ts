@@ -13,6 +13,35 @@ export type ChangelogRelease = {
 
 export const changelogReleases: readonly ChangelogRelease[] = [
   {
+    version: "0.36.0",
+    date: "August 22, 2026",
+    title: "Smarter Amazon purchase accounting",
+    summary: "Amazon imports now identify the marketplace correctly and separate production inputs, resale goods, consumables, equipment, and uncertain purchases.",
+    sections: [
+      {
+        title: "Added",
+        items: [
+          "Added Capital asset and Needs review accounting classes so equipment and ambiguous purchases stay outside operating-expense and tax totals.",
+          "Added line-level Amazon classification using exemption details, product descriptions, and Amazon taxonomy fields.",
+        ],
+      },
+      {
+        title: "Changed",
+        items: [
+          "Resale-exempt ingredients, blanks, components, and other production inputs now become Raw materials rather than finished resale goods.",
+          "Mixed Amazon orders are marked Review needed instead of forcing the entire order into an unreliable category.",
+        ],
+      },
+      {
+        title: "Fixed",
+        items: [
+          "Amazon Business imports now use Amazon as the purchase source while preserving Account Group as source data and Seller Name as the vendor.",
+          "Re-imports can correct legacy auto-assigned categories when stronger product-cost evidence is available.",
+        ],
+      },
+    ],
+  },
+  {
     version: "0.35.1",
     date: "August 22, 2026",
     title: "Stable local preview startup",
