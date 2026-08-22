@@ -13,6 +13,27 @@ export type ChangelogRelease = {
 
 export const changelogReleases: readonly ChangelogRelease[] = [
   {
+    version: "0.38.1",
+    date: "August 22, 2026",
+    title: "Complete Amazon source details",
+    summary: "Seller/source and import date now remain visible as separate expense columns, even for older Amazon rows without document links.",
+    sections: [
+      {
+        title: "Fixed",
+        items: [
+          "Filled older Amazon rows from their saved purchase source, seller, import timestamp, and Order Date when an archived-document link is unavailable.",
+          "Normalized blank or unknown Amazon sellers to Amazon.",
+        ],
+      },
+      {
+        title: "Changed",
+        items: [
+          "Split the combined source-document badge into configurable Seller / source and Source date columns in the expense ledger.",
+        ],
+      },
+    ],
+  },
+  {
     version: "0.38.0",
     date: "August 22, 2026",
     title: "Canceled-order protection",

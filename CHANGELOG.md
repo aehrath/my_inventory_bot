@@ -4,6 +4,17 @@ All notable changes to StockBot are documented here.
 
 ## Unreleased
 
+## 0.38.1 - 2026-08-22
+
+### Fixed
+
+- Amazon expenses without a linked archived document now fall back to their saved purchase source, seller, import timestamp, and order date instead of displaying blank provenance metadata.
+- Existing Amazon records with a blank or unknown seller normalize to **Amazon**, and missing purchase dates are recovered from imported Order Date data when available.
+
+### Changed
+
+- Split the combined source-document badge into configurable **Seller / source** and **Source date** columns in the expense ledger.
+
 ## 0.38.0 - 2026-08-22
 
 ### Added

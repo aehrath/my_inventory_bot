@@ -144,7 +144,7 @@ test("includes item-level COGS and final-product tracking", async () => {
   assert.match(page, /href=\{`#product-\$\{linkedProduct\.id\}`\}/);
   assert.match(page, /onOpenProduct\(linkedProduct\)/);
   assert.match(page, /linkedFinalProductFor/);
-  assert.match(page, /version: 19/);
+  assert.match(page, /version: 20/);
   assert.match(styles, /\.cogsHead,.cogsRow/);
   assert.match(styles, /\.cogsProductLink/);
   assert.match(styles, /activityTag\.production_use/);
@@ -230,7 +230,7 @@ test("tracks sortable and filterable purchase sources", async () => {
   assert.match(expenseImport, /normalizeExpensePurchaseSource/);
   assert.match(expenseImport, /purchasesource: "Amazon"/);
   assert.doesNotMatch(expenseImport, /accountGroups\.join/);
-  assert.match(page, /purchaseSource: normalizeExpensePurchaseSource\(expense\.purchaseSource\)/);
+  assert.match(page, /const purchaseSource = normalizeExpensePurchaseSource\(expense\.purchaseSource\)/);
   assert.match(page, /const sourceKey = normalizeExpensePurchaseSource\(importPurchaseSource\)/);
   assert.match(styles, /min-width:1390px/);
 });
@@ -299,6 +299,26 @@ test("retains canceled purchase records without counting or showing them by defa
   assert.match(page, /expenseStatus/);
   assert.match(format, /"personal", "canceled", "source"/);
   assert.match(styles, /\.expenseRow\.canceled/);
+});
+
+test("splits expense source seller and date with fallbacks for older Amazon rows", async () => {
+  const [page, sourceDocuments, styles] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/source-documents.tsx"),
+    read("app/globals.css"),
+  ]);
+  assert.match(page, /key: "documentSeller", label: "Seller \/ source"/);
+  assert.match(page, /key: "documentDate", label: "Source date"/);
+  assert.match(page, /SourceDocumentSellerCell/);
+  assert.match(page, /SourceDocumentDateCell/);
+  assert.match(page, /fallback=\{expense\.vendor && expense\.vendor !== "Unknown vendor" \? expense\.vendor : expense\.purchaseSource\}/);
+  assert.match(page, /fallback=\{expense\.importedAt \|\| expense\.date\}/);
+  assert.match(page, /purchaseSource === "Amazon" \? "Amazon" : "Unknown vendor"/);
+  assert.match(page, /normalizeExpenseDate\(importedOrderDate\)/);
+  assert.match(page, /savedVersion < 20/);
+  assert.match(sourceDocuments, /sourceLabel\(fallback\)/);
+  assert.match(sourceDocuments, /fallback \? shortDate\(fallback\) : "—"/);
+  assert.match(styles, /\.sourceDocumentFallback/);
 });
 
 test("combines purchased inventory and recognized costs in the COGS workspace", async () => {
