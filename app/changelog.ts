@@ -13,6 +13,22 @@ export type ChangelogRelease = {
 
 export const changelogReleases: readonly ChangelogRelease[] = [
   {
+    version: "0.39.0",
+    date: "August 22, 2026",
+    title: "Workspace undo",
+    summary: "Recent inventory and accounting changes can now be safely rolled back from anywhere in StockBot.",
+    sections: [
+      {
+        title: "Added",
+        items: [
+          "Added a prominent Undo button that restores the complete workspace snapshot from before the last change.",
+          "Added Command+Z and Ctrl+Z shortcuts outside editable fields, while preserving native text undo inside inputs.",
+          "Kept up to 50 recent workspace changes available in the current app session.",
+        ],
+      },
+    ],
+  },
+  {
     version: "0.38.1",
     date: "August 22, 2026",
     title: "Complete Amazon source details",

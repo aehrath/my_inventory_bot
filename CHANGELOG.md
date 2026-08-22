@@ -4,6 +4,14 @@ All notable changes to StockBot are documented here.
 
 ## Unreleased
 
+## 0.39.0 - 2026-08-22
+
+### Added
+
+- Added a workspace-wide **Undo** button that restores the complete product, customer, activity, expense, tax, and settings snapshot from before the last change.
+- Added **Command+Z** and **Ctrl+Z** shortcuts outside editable fields, while leaving native text undo intact inside inputs.
+- Kept the 50 most recent workspace changes available for undo during the current app session.
+
 ## 0.38.1 - 2026-08-22
 
 ### Fixed

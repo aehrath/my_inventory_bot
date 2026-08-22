@@ -384,6 +384,26 @@ test("offers separate clear-all and demo-reset workspace actions", async () => {
   assert.match(styles, /\.dangerActions/);
 });
 
+test("offers bounded workspace undo with a visible button and keyboard shortcut", async () => {
+  const [page, styles, changelog] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/globals.css"),
+    read("app/changelog.ts"),
+  ]);
+  assert.match(page, /const MAX_UNDO_STEPS = 50/);
+  assert.match(page, /type AppStateHistory = \{ present: AppState; past: AppState\[\] \}/);
+  assert.match(page, /past: \[\.\.\.current\.past\.slice\(-\(MAX_UNDO_STEPS - 1\)\), current\.present\]/);
+  assert.match(page, /const undo = useCallback/);
+  assert.match(page, /present: current\.past\[current\.past\.length - 1\]/);
+  assert.match(page, /replaceState\(normalizeState\(payload\.state\)\)/);
+  assert.match(page, /className="secondary undoButton" disabled=\{!canUndo\}/);
+  assert.match(page, /Command\/Ctrl\+Z/);
+  assert.match(page, /target\?\.matches\("input, textarea, select"\)/);
+  assert.match(page, /window\.addEventListener\("keydown", handleUndoShortcut\)/);
+  assert.match(styles, /\.topActions \.undoButton:disabled/);
+  assert.match(changelog, /version: "0\.39\.0"/);
+});
+
 test("keeps personal expenses visible but out of business calculations", async () => {
   const [page, styles] = await Promise.all([
     read("app/page.tsx"),
