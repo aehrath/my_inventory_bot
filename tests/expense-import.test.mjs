@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { amazonBusinessCsvColumns, amazonOrderHistoryCsvColumns, expenseAccountingClasses, expenseCategories, expenseCategoryDefinitions, expenseCostTimings, normalizeExpenseAsins, normalizeExpenseCategory, normalizeExpensePurchaseSource, parseExpenseImportText } from "../app/expense-import.ts";
+import { amazonBusinessCsvColumns, amazonOrderHistoryCsvColumns, expenseAccountingClasses, expenseCategories, expenseCategoryDefinitions, expenseCostTimings, isCanceledOrderStatus, normalizeExpenseAsins, normalizeExpenseCanceled, normalizeExpenseCategory, normalizeExpensePurchaseSource, parseExpenseImportText } from "../app/expense-import.ts";
 
 const fixture = new URL("./fixtures/amazon-business-orders.csv", import.meta.url);
 const amazonOrderHistoryFixture = new URL("./fixtures/amazon-order-history.csv", import.meta.url);
@@ -40,11 +40,10 @@ test("groups Amazon consumer Order History items and sums every line total", asy
   const text = await readFile(amazonOrderHistoryFixture, "utf8");
   const preview = parseExpenseImportText(text, "Order History.csv", [], "2026-07-28T00:00:00.000Z");
 
-  assert.equal(preview.ready.length, 2);
+  assert.equal(preview.ready.length, 3);
   assert.equal(preview.duplicates.length, 0);
-  assert.equal(preview.skipped.length, 1);
+  assert.equal(preview.skipped.length, 0);
   assert.equal(preview.invalid.length, 0);
-  assert.match(preview.skipped[0], /cancelled Amazon order/);
   assert.equal(preview.readyTotal, 27.8);
   assert.equal(preview.ready[0].externalKey, "111-1111111-1111111");
   assert.equal(preview.ready[0].amount, 22.55);
@@ -58,17 +57,50 @@ test("groups Amazon consumer Order History items and sums every line total", asy
   assert.equal(Object.keys(preview.ready[0].fields).length, 28);
   assert.match(preview.ready[0].fields["Product Name"], /Shipping labels, 200 pieces/);
   assert.match(preview.ready[0].fields["Product Name"], /Laminating pouches/);
+  assert.equal(preview.ready.find((expense) => expense.externalKey === "333-3333333-3333333").canceled, true);
+  assert.equal(preview.ready.find((expense) => expense.externalKey === "333-3333333-3333333").amount, 0);
 });
 
 test("uses an Amazon Order History order ID to correct an existing expense", async () => {
   const text = await readFile(amazonOrderHistoryFixture, "utf8");
   const preview = parseExpenseImportText(text, "Order History.csv", ["111-1111111-1111111"], "2026-07-28T00:00:00.000Z");
 
-  assert.equal(preview.ready.length, 1);
+  assert.equal(preview.ready.length, 2);
   assert.equal(preview.updates.length, 1);
   assert.equal(preview.updates[0].amount, 22.55);
   assert.equal(preview.updates[0].vendor, "Amazon.com");
   assert.match(preview.updates[0].note, /Laminating pouches/);
+});
+
+test("retains canceled orders for audit while excluding them from accounting totals", () => {
+  const text = [
+    "Order Date,Order ID,Order Net Total,Order Status,Title,Seller Name",
+    "01/15/2026,ACTIVE-1,25.00,Shipped,Shipping labels,Amazon",
+    "01/16/2026,CANCELED-1,18.00,Canceled,Cancelled item,Amazon",
+  ].join("\n");
+  const preview = parseExpenseImportText(text, "amazon-business.csv", []);
+
+  assert.equal(preview.ready.length, 2);
+  assert.equal(preview.ready.find((expense) => expense.externalKey === "ACTIVE-1").canceled, false);
+  assert.equal(preview.ready.find((expense) => expense.externalKey === "CANCELED-1").canceled, true);
+  assert.equal(preview.readyTotal, 25);
+  assert.deepEqual(preview.years, [2026]);
+});
+
+test("recognizes cancellation flags and status spellings without matching not canceled", () => {
+  assert.equal(isCanceledOrderStatus("Canceled"), true);
+  assert.equal(isCanceledOrderStatus("Cancelled by seller"), true);
+  assert.equal(isCanceledOrderStatus("Not canceled"), false);
+  assert.equal(normalizeExpenseCanceled(undefined, { "Order Status": "Cancelled" }), true);
+  assert.equal(normalizeExpenseCanceled(false, { "Order Status": "Cancelled" }), false);
+
+  const generic = [
+    "external_key,vendor,date,amount,category,status,note",
+    "GENERIC-CANCELLED,Supply Co.,2026-01-20,19.00,Office supplies,Cancelled,Cancelled paper",
+  ].join("\n");
+  const preview = parseExpenseImportText(generic, "purchases.csv", []);
+  assert.equal(preview.ready[0].canceled, true);
+  assert.equal(preview.readyTotal, 0);
 });
 
 test("suggests and imports purchase source keys", () => {

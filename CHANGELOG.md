@@ -4,6 +4,20 @@ All notable changes to StockBot are documented here.
 
 ## Unreleased
 
+## 0.38.0 - 2026-08-22
+
+### Added
+
+- Added a blank-by-default **Show canceled orders** checkbox to the expense ledger.
+- Added a persistent, configurable **Order status** column and canceled-order status badges.
+
+### Changed
+
+- Canceled orders are retained with their imported document provenance for audit history but excluded from expense, inventory, COGS, tax, and business totals.
+- Amazon Business, Amazon consumer Order History, and generic imports now recognize both **Canceled** and **Cancelled** status spellings.
+- Existing imported records infer cancellation from saved Order Status, Shipment Status, or Status fields when the app loads.
+- Introduced **stockbot-data v3** so the full data grid and Git snapshots expose the normalized canceled field.
+
 ## 0.37.1 - 2026-08-22
 
 ### Fixed

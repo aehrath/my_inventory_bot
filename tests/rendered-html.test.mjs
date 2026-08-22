@@ -97,7 +97,7 @@ test("includes versioned Git data history with an all-field diff grid", async ()
   assert.match(history, /Previous value/);
   assert.match(history, /Current value/);
   assert.match(history, /stockHeaderCell/);
-  assert.match(format, /STOCKBOT_DATA_FORMAT_VERSION = 2/);
+  assert.match(format, /STOCKBOT_DATA_FORMAT_VERSION = 3/);
   assert.match(format, /diffStockBotDataFiles/);
   assert.match(route, /pushStockBotDataToGitHub/);
   assert.match(styles, /\.dataDiffGrid/);
@@ -144,7 +144,7 @@ test("includes item-level COGS and final-product tracking", async () => {
   assert.match(page, /href=\{`#product-\$\{linkedProduct\.id\}`\}/);
   assert.match(page, /onOpenProduct\(linkedProduct\)/);
   assert.match(page, /linkedFinalProductFor/);
-  assert.match(page, /version: 18/);
+  assert.match(page, /version: 19/);
   assert.match(styles, /\.cogsHead,.cogsRow/);
   assert.match(styles, /\.cogsProductLink/);
   assert.match(styles, /activityTag\.production_use/);
@@ -280,6 +280,27 @@ test("keeps expense imports isolated from products and inventory", async () => {
   assert.match(expensesSection, /expenses: \[\.\.\.additions, \.\.\.enriched\]/);
 });
 
+test("retains canceled purchase records without counting or showing them by default", async () => {
+  const [page, expenseImport, format, styles] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/expense-import.ts"),
+    read("app/data-format.ts"),
+    read("app/globals.css"),
+  ]);
+  assert.match(expenseImport, /canceled: boolean/);
+  assert.match(expenseImport, /normalizeExpenseCanceled/);
+  assert.match(expenseImport, /filter\(\(expense\) => !expense\.canceled\)/);
+  assert.match(page, /const \[showCanceledOrders, setShowCanceledOrders\] = useState\(false\)/);
+  assert.match(page, /Show canceled orders/);
+  assert.match(page, /showCanceledOrders \|\| !expense\.canceled/);
+  assert.match(page, /!e\.personal && !e\.canceled/);
+  assert.match(page, /!expense\.personal && !expense\.canceled/);
+  assert.match(page, /canceled: update\.canceled/);
+  assert.match(page, /expenseStatus/);
+  assert.match(format, /"personal", "canceled", "source"/);
+  assert.match(styles, /\.expenseRow\.canceled/);
+});
+
 test("combines purchased inventory and recognized costs in the COGS workspace", async () => {
   const [page, expenseImport, inventory, styles] = await Promise.all([
     read("app/page.tsx"),
@@ -352,13 +373,13 @@ test("keeps personal expenses visible but out of business calculations", async (
   assert.match(page, /key: "personal", label: "Personal"/);
   assert.match(page, /Expense business or personal use/);
   assert.match(page, /expenseSort\.key === "personal"/);
-  assert.match(page, /!e\.personal && new Date/);
-  assert.match(page, /!expense\.personal && isTrackedInventoryCategory/);
-  assert.match(page, /const businessExpenses = selectedExpenses\.filter\(\(expense\) => !expense\.personal\)/);
+  assert.match(page, /!e\.personal && !e\.canceled && new Date/);
+  assert.match(page, /!expense\.personal && !expense\.canceled && isTrackedInventoryCategory/);
+  assert.match(page, /const businessExpenses = selectedExpenses\.filter\(\(expense\) => !expense\.personal && !expense\.canceled\)/);
   assert.match(page, /Personal expense \$\{expense\.externalKey\}/);
   assert.match(page, /targetIds\.has\(item\.id\) \? \{ \.\.\.item, personal \} : item/);
   assert.match(page, /personal: Boolean\(expense\.personal\)/);
-  assert.match(page, /category,personal,note/);
+  assert.match(page, /category,personal,canceled,note/);
   assert.match(styles, /\.expenseRow\.personal/);
   assert.match(styles, /\.expensePersonalToggle/);
 });
@@ -376,7 +397,7 @@ test("reviews business use for every imported expense before saving", async () =
   assert.match(page, />Mark all business<\/button>/);
   assert.match(page, />Mark all unrelated<\/button>/);
   assert.match(page, /Business purchase \$\{expense\.externalKey\}/);
-  assert.match(page, /excludes them from inventory, COGS, expenses, and tax calculations/);
+  assert.match(page, /excluded from inventory, COGS, expenses, and tax calculations/);
   assert.doesNotMatch(page, /importPreviewExpenses\.slice\(0, 6\)/);
   assert.match(styles, /\.expenseImportReviewList/);
   assert.match(styles, /\.importBusinessToggle/);

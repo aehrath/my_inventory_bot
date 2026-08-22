@@ -1,8 +1,8 @@
 import type { ImportDocumentIndex } from "./import-documents";
 
 export const STOCKBOT_DATA_FORMAT_ID = "stockbot-data" as const;
-export const STOCKBOT_DATA_FORMAT_VERSION = 2 as const;
-export const STOCKBOT_DATA_SCHEMA = "https://stockbot-inventory.aehrath.chatgpt.site/data-format/v2" as const;
+export const STOCKBOT_DATA_FORMAT_VERSION = 3 as const;
+export const STOCKBOT_DATA_SCHEMA = "https://stockbot-inventory.aehrath.chatgpt.site/data-format/v3" as const;
 
 type JsonScalar = string | number | boolean | null;
 type JsonValue = JsonScalar | JsonValue[] | { [key: string]: JsonValue };
@@ -50,7 +50,7 @@ export type DataDiffRow = {
 
 const productFields = ["id", "sku", "name", "vendor", "category", "quantity", "unitCost", "salePrice", "reorderPoint", "salesTaxPaid", "createdAt"] as const;
 const movementFields = ["id", "productId", "type", "quantity", "unitCost", "unitPrice", "salesTax", "date", "note", "taxRate", "stateTax", "localTax", "stateTaxRate", "localTaxRate", "taxJurisdiction", "localJurisdiction", "taxCollected", "customerAddress", "productName", "productSku", "finalProductId", "finalProductName", "sourceKey", "invoiceNumber", "customerId", "customerName"] as const;
-const expenseFields = ["id", "externalKey", "purchaseSource", "vendor", "asins", "category", "amount", "date", "note", "personal", "source", "importedAt"] as const;
+const expenseFields = ["id", "externalKey", "purchaseSource", "vendor", "asins", "category", "amount", "date", "note", "personal", "canceled", "source", "importedAt"] as const;
 const customerFields = ["id", "externalKey", "name", "email", "phone", "address", "createdAt", "updatedAt"] as const;
 const settingsFields = ["businessName", "taxYear", "beginningInventory", "ownAddress"] as const;
 const stateTaxFields = ["state", "enabled", "rate", "manualOverride", "sourceName", "sourceUrl", "checkedAt", "effectiveDate"] as const;
@@ -82,7 +82,7 @@ export function createStockBotDataFile(rawState: unknown, provenance?: ImportDoc
   const settings = sourceRecord(state.settings);
   const importedFieldNames = Array.from(new Set(sourceArray(state.expenses).flatMap((expense) => Object.keys(sourceRecord(expense.fields))))).sort((left, right) => left.localeCompare(right));
   const expenses = sourceArray(state.expenses).map((expense) => ({
-    ...record(expense, expenseFields, { asins: [], personal: false }),
+    ...record(expense, expenseFields, { asins: [], personal: false, canceled: false }),
     fields: Object.fromEntries(importedFieldNames.map((field) => [field, jsonValue(sourceRecord(expense.fields)[field] ?? "")])),
   }));
   const stateTaxes = Object.entries(sourceRecord(settings.stateTaxes)).map(([stateCode, value]) => record({ state: stateCode, ...sourceRecord(value) }, stateTaxFields, { enabled: false, rate: 0 }));

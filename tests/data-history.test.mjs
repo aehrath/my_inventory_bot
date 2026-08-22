@@ -8,8 +8,8 @@ const state = {
   products: [{ id: "p1", sku: "SKU-1", name: "Widget", quantity: 2, unitCost: 3, salesTaxPaid: false }],
   movements: [],
   expenses: [
-    { id: "e2", externalKey: "ORDER-2", fields: { ASIN: "", Color: "Blue" } },
-    { id: "e1", externalKey: "ORDER-1", fields: { ASIN: "B000000001" } },
+    { id: "e2", externalKey: "ORDER-2", canceled: true, fields: { ASIN: "", Color: "Blue" } },
+    { id: "e1", externalKey: "ORDER-1", canceled: false, fields: { ASIN: "B000000001" } },
   ],
   customers: [],
   settings: {
@@ -37,6 +37,8 @@ test("creates a stable, explicitly versioned full-data format", () => {
   assert.deepEqual(file.data.expenses.map((expense) => expense.id), ["e1", "e2"]);
   assert.deepEqual(file.data.expenses[0].fields, { ASIN: "B000000001", Color: "" });
   assert.deepEqual(file.data.expenses[1].fields, { ASIN: "", Color: "Blue" });
+  assert.equal(file.data.expenses[0].canceled, false);
+  assert.equal(file.data.expenses[1].canceled, true);
   assert.equal(stableStockBotDataJson(file), stableStockBotDataJson(createStockBotDataFile({ ...state, expenses: [...state.expenses].reverse() })));
 });
 
@@ -67,11 +69,11 @@ test("validates safe GitHub repository targets without retaining credentials", (
   assert.throws(() => validateGitHubTarget({ provider: "github", repository: "owner/repo", branch: "main", path: "..\/secret.json", token: "secret" }), /safe relative/);
 });
 
-test("publishes a matching JSON schema route for data format version 2", async () => {
-  const { GET } = await import("../app/data-format/v2/route.ts");
+test("publishes a matching JSON schema route for data format version 3", async () => {
+  const { GET } = await import("../app/data-format/v3/route.ts");
   const response = await GET();
   const schema = await response.json();
-  assert.equal(schema.$id, "https://stockbot-inventory.aehrath.chatgpt.site/data-format/v2");
+  assert.equal(schema.$id, "https://stockbot-inventory.aehrath.chatgpt.site/data-format/v3");
   assert.equal(schema.properties.format.const, STOCKBOT_DATA_FORMAT_ID);
   assert.equal(schema.properties.formatVersion.const, STOCKBOT_DATA_FORMAT_VERSION);
   assert.ok(schema.properties.data.required.includes("expenses"));

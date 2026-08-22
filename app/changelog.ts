@@ -13,6 +13,29 @@ export type ChangelogRelease = {
 
 export const changelogReleases: readonly ChangelogRelease[] = [
   {
+    version: "0.38.0",
+    date: "August 22, 2026",
+    title: "Canceled-order protection",
+    summary: "Canceled purchases stay available for audit without entering any business accounting totals.",
+    sections: [
+      {
+        title: "Added",
+        items: [
+          "Added a blank-by-default Show canceled orders checkbox to the expense ledger.",
+          "Added a persistent, configurable Order status column with clear active and canceled badges.",
+        ],
+      },
+      {
+        title: "Changed",
+        items: [
+          "Canceled orders remain linked to their imported source documents but are excluded from expenses, inventory, COGS, taxes, and all business totals.",
+          "Amazon Business, Amazon consumer Order History, and generic imports recognize Canceled and Cancelled spellings, including existing saved status fields.",
+          "Advanced the complete Git and Data History snapshot format to stockbot-data v3 so cancellation status is always visible in full-field diffs.",
+        ],
+      },
+    ],
+  },
+  {
     version: "0.37.1",
     date: "August 22, 2026",
     title: "One Amazon source",

@@ -66,6 +66,7 @@ export type ImportedExpense = {
   date: string;
   note: string;
   personal?: boolean;
+  canceled: boolean;
   source: "import";
   importedAt: string;
   fields: Record<string, string>;
@@ -91,6 +92,29 @@ export const normalizeExpensePurchaseSource = (value: unknown) => {
   const parts = source.split(/\s*(?:·|\||–|—)\s*|\s+-\s+|\s+\/\s+/).filter(Boolean);
   const isAmazonMarketplace = (part: string) => /^(?:amazon|amazon\.com)$/.test(part.toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/$/, ""));
   return parts.length && parts.every(isAmazonMarketplace) ? "Amazon" : source;
+};
+
+export const isCanceledOrderStatus = (value: unknown) => {
+  const status = String(value ?? "").trim().toLowerCase();
+  return Boolean(status && !/\bnot\s+cancel(?:l)?ed\b/.test(status) && /\bcancel(?:l)?ed\b/.test(status));
+};
+
+const parseOptionalCanceled = (value: unknown) => {
+  if (typeof value === "boolean") return value;
+  const label = String(value ?? "").trim().toLowerCase();
+  if (!label) return undefined;
+  if (["1", "true", "yes", "y", "canceled", "cancelled"].includes(label)) return true;
+  if (["0", "false", "no", "n", "active", "completed"].includes(label)) return false;
+  return undefined;
+};
+
+export const normalizeExpenseCanceled = (value: unknown, fields?: Record<string, unknown>) => {
+  const explicit = parseOptionalCanceled(value);
+  if (explicit !== undefined) return explicit;
+  return Object.entries(fields ?? {}).some(([key, status]) => {
+    const canonicalKey = key.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+    return ["orderstatus", "shipmentstatus", "status"].includes(canonicalKey) && isCanceledOrderStatus(status);
+  });
 };
 
 export const normalizeExpenseAsins = (value: unknown) => Array.from(new Set(
@@ -260,6 +284,7 @@ export function parseExpenseImportText(
       const sellers = uniqueValues(["sellername", "vendor", "merchant"]);
       const titles = uniqueValues(["title", "description"]);
       const amazonCategories = uniqueValues(["amazoninternalproductcategory"]);
+      const canceled = uniqueValues(["orderstatus"]).some(isCanceledOrderStatus);
       const titleNote = titles.slice(0, 3).join("; ");
       const moreItems = titles.length > 3 ? ` (+${titles.length - 3} more items)` : "";
       const categoryNote = amazonCategories[0] ? ` · Amazon category: ${amazonCategories[0]}` : "";
@@ -276,6 +301,7 @@ export function parseExpenseImportText(
         amount: valueFor(first, ["ordernettotal"]),
         date: valueFor(first, ["orderdate"]),
         note: `${titleNote}${moreItems}${categoryNote}`,
+        canceled,
         fields,
       };
     });
@@ -299,7 +325,7 @@ export function parseExpenseImportText(
       const uniqueValues = (fields: readonly string[]) => Array.from(new Set(orderRows.map((record) => String(valueFor(record, fields) ?? "").trim()).filter(Boolean)));
       const websites = uniqueValues(["website"]);
       const titles = uniqueValues(["productname"]);
-      const statuses = uniqueValues(["orderstatus"]).map((status) => status.toLowerCase());
+      const canceled = uniqueValues(["orderstatus", "shipmentstatus"]).some(isCanceledOrderStatus);
       const titleNote = titles.slice(0, 3).join("; ");
       const moreItems = titles.length > 3 ? ` (+${titles.length - 3} more items)` : "";
       const amount = Math.round(orderRows.reduce((sum, record) => {
@@ -319,7 +345,8 @@ export function parseExpenseImportText(
         amount,
         date: valueFor(first, ["orderdate"]),
         note: `${titleNote}${moreItems}`,
-        importskipreason: statuses.includes("cancelled") ? "cancelled Amazon order" : amount <= 0 ? "zero-dollar Amazon order" : "",
+        canceled,
+        importskipreason: !canceled && amount <= 0 ? "zero-dollar Amazon order" : "",
         fields,
       };
     });
@@ -342,6 +369,8 @@ export function parseExpenseImportText(
     date: ["date", "orderdate", "transactiondate", "purchasedate", "posteddate"],
     note: ["note", "title", "description", "memo", "item", "product", "details"],
     personal: ["personal", "ispersonal", "personaluse"],
+    canceled: ["canceled", "cancelled", "iscanceled", "iscancelled"],
+    status: ["orderstatus", "shipmentstatus", "status"],
   } as const;
 
   records.forEach((record, index) => {
@@ -354,7 +383,10 @@ export function parseExpenseImportText(
     }
     const amount = parseExpenseAmount(valueFor(record, aliases.amount));
     const date = normalizeExpenseDate(valueFor(record, aliases.date));
-    if (!normalizedKey || !Number.isFinite(amount) || amount <= 0 || !date) {
+    const canceled = normalizeExpenseCanceled(valueFor(record, aliases.canceled), {
+      "Order Status": valueFor(record, aliases.status),
+    });
+    if (!normalizedKey || !Number.isFinite(amount) || (canceled ? amount < 0 : amount <= 0) || !date) {
       const label = externalKey ? `Record ${externalKey}` : `Row ${index + 2}`;
       invalid.push(`${label}: ${!normalizedKey ? "missing unique key" : !date ? "invalid date" : "invalid amount"}`);
       return;
@@ -378,6 +410,7 @@ export function parseExpenseImportText(
       date,
       note: String(valueFor(record, aliases.note) ?? "").trim(),
       personal: parseOptionalPersonal(valueFor(record, aliases.personal)),
+      canceled,
       source: "import",
       importedAt,
       fields,
@@ -388,6 +421,6 @@ export function parseExpenseImportText(
 
   const importable = [...ready, ...updates];
   const years = Array.from(new Set(importable.map((expense) => Number(expense.date.slice(0, 4))))).filter(Number.isFinite).sort((a, b) => b - a);
-  const readyTotal = Math.round(importable.reduce((sum, expense) => sum + expense.amount, 0) * 100) / 100;
+  const readyTotal = Math.round(importable.filter((expense) => !expense.canceled).reduce((sum, expense) => sum + expense.amount, 0) * 100) / 100;
   return { fileName, ready, updates, duplicates, skipped, invalid, years, readyTotal, columns: sourceColumns.map((column) => column.label) };
 }
