@@ -29,6 +29,14 @@ const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
+    // The local preview controller probes this Socket.IO endpoint even though
+    // StockBot does not use Socket.IO. Let it fail directly instead of passing
+    // through vinext's trailing-slash redirect, which a WebSocket client will
+    // otherwise follow in a loop until it terminates the development server.
+    if (url.pathname === "/ws/socket.io" || url.pathname === "/ws/socket.io/") {
+      return new Response(null, { status: 404 });
+    }
+
     if (url.pathname === "/_vinext/image") {
       const allowedWidths = [...DEFAULT_DEVICE_SIZES, ...DEFAULT_IMAGE_SIZES];
       return handleImageOptimization(request, {

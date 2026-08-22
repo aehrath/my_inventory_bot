@@ -21,6 +21,8 @@ test("includes a visible release changelog", async () => {
   assert.match(page, /label: "Changelog"/);
   assert.match(page, /What&apos;s new in StockBot/);
   assert.match(page, /changelogReleases\.map/);
+  assert.match(changelog, /version: "0\.35\.1"/);
+  assert.match(changelog, /version: "0\.35\.0"/);
   assert.match(changelog, /version: "0\.26\.0"/);
   assert.match(changelog, /version: "0\.25\.0"/);
   assert.match(changelog, /version: "0\.24\.0"/);
@@ -43,6 +45,8 @@ test("includes a visible release changelog", async () => {
   assert.match(changelog, /version: "0\.7\.0"/);
   assert.match(changelog, /version: "0\.6\.0"/);
   assert.match(changelog, /version: "0\.1\.0"/);
+  assert.match(markdown, /## 0\.35\.1 - 2026-08-22/);
+  assert.match(markdown, /## 0\.35\.0 - 2026-08-22/);
   assert.match(markdown, /## 0\.26\.0 - 2026-07-28/);
   assert.match(markdown, /## 0\.25\.0 - 2026-07-28/);
   assert.match(markdown, /## 0\.24\.0 - 2026-07-28/);
@@ -65,6 +69,13 @@ test("includes a visible release changelog", async () => {
   assert.match(markdown, /## 0\.7\.0 - 2026-07-22/);
   assert.match(markdown, /## 0\.6\.0 - 2026-07-22/);
   assert.match(markdown, /## 0\.1\.0 - 2026-07-22/);
+});
+
+test("rejects the unused local preview WebSocket probe before vinext redirects it", async () => {
+  const worker = await read("worker/index.ts");
+  assert.match(worker, /url\.pathname === "\/ws\/socket\.io"/);
+  assert.match(worker, /url\.pathname === "\/ws\/socket\.io\/"/);
+  assert.match(worker, /new Response\(null, \{ status: 404 \}\)/);
 });
 
 test("includes versioned Git data history with an all-field diff grid", async () => {

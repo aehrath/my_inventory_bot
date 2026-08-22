@@ -13,6 +13,21 @@ export type ChangelogRelease = {
 
 export const changelogReleases: readonly ChangelogRelease[] = [
   {
+    version: "0.35.1",
+    date: "August 22, 2026",
+    title: "Stable local preview startup",
+    summary: "The local development server now ignores an unrelated preview-controller WebSocket probe instead of following it through a redirect loop.",
+    sections: [
+      {
+        title: "Fixed",
+        items: [
+          "Prevented the unused /ws/socket.io preview probe from repeatedly following vinext's trailing-slash redirect and terminating local startup.",
+          "Kept StockBot's application routes, HMR connection, and deployed behavior unchanged.",
+        ],
+      },
+    ],
+  },
+  {
     version: "0.35.0",
     date: "August 22, 2026",
     title: "Imported-document provenance",

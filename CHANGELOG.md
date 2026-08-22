@@ -4,6 +4,27 @@ All notable changes to StockBot are documented here.
 
 ## Unreleased
 
+## 0.35.1 - 2026-08-22
+
+### Fixed
+
+- Prevented an unused local preview-controller WebSocket probe from following vinext's trailing-slash redirect until the development server crashed with `Maximum redirects exceeded`.
+- Kept normal application requests and Vite hot reloading unaffected.
+
+## 0.35.0 - 2026-08-22
+
+### Added
+
+- Added a durable imported-document archive with detected source names and UTC timestamps embedded in stored filenames.
+- Added many-to-many source-document links for expenses, products, customers, inventory activity, and COGS entries.
+- Added imported documents and provenance links to the complete Data History diff grid and GitHub pushes.
+- Introduced the independently versioned **stockbot-data v2** format.
+
+### Changed
+
+- Functionally identical documents with only formatting or whitespace differences now reuse the existing archive copy.
+- Repeated imports update the document's last-imported time and import count, merge row links, and tell the user that the copy already existed.
+
 ## 0.34.0 - 2026-08-21
 
 ### Added
