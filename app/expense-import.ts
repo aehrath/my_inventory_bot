@@ -85,6 +85,14 @@ export type ExpenseImportPreview = {
 
 export const normalizeExpenseKey = (key: string) => key.trim().toLowerCase().replace(/\s+/g, "");
 
+export const normalizeExpensePurchaseSource = (value: unknown) => {
+  const source = String(value ?? "").trim().replace(/\s+/g, " ");
+  if (!source) return "";
+  const parts = source.split(/\s*(?:·|\||–|—)\s*|\s+-\s+|\s+\/\s+/).filter(Boolean);
+  const isAmazonMarketplace = (part: string) => /^(?:amazon|amazon\.com)$/.test(part.toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/$/, ""));
+  return parts.length && parts.every(isAmazonMarketplace) ? "Amazon" : source;
+};
+
 export const normalizeExpenseAsins = (value: unknown) => Array.from(new Set(
   (Array.isArray(value) ? value : [value]).flatMap((entry) => String(entry ?? "").toUpperCase().match(/\b[A-Z0-9]{10}\b/g) ?? []),
 ));
@@ -362,7 +370,7 @@ export function parseExpenseImportText(
       : Object.fromEntries(sourceColumns.map((column) => [column.label, String(record[column.key] ?? "").trim()]));
     const importedExpense: ImportedExpense = {
       externalKey,
-      purchaseSource: String(valueFor(record, aliases.purchaseSource) ?? "").trim(),
+      purchaseSource: normalizeExpensePurchaseSource(valueFor(record, aliases.purchaseSource)),
       vendor: String(valueFor(record, aliases.vendor) ?? "Unknown vendor").trim(),
       asins: normalizeExpenseAsins(valueFor(record, aliases.asin)),
       category: normalizeExpenseCategory(valueFor(record, aliases.category), customCategories),

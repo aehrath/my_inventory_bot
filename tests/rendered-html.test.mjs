@@ -227,8 +227,11 @@ test("tracks sortable and filterable purchase sources", async () => {
   assert.match(page, /setExpensePurchaseSource\(sourceKey\)/);
   assert.match(page, /purchase_source,vendor/);
   assert.match(expenseImport, /purchasesourcekey/);
+  assert.match(expenseImport, /normalizeExpensePurchaseSource/);
   assert.match(expenseImport, /purchasesource: "Amazon"/);
   assert.doesNotMatch(expenseImport, /accountGroups\.join/);
+  assert.match(page, /purchaseSource: normalizeExpensePurchaseSource\(expense\.purchaseSource\)/);
+  assert.match(page, /const sourceKey = normalizeExpensePurchaseSource\(importPurchaseSource\)/);
   assert.match(styles, /min-width:1390px/);
 });
 

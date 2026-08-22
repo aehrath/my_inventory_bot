@@ -4,6 +4,13 @@ All notable changes to StockBot are documented here.
 
 ## Unreleased
 
+## 0.37.1 - 2026-08-22
+
+### Fixed
+
+- Consolidated redundant Amazon source labels such as **Amazon**, **Amazon.com**, **Amazon · Amazon.com**, and **Amazon - Amazon.com** into the single source **Amazon**.
+- Existing saved expenses are normalized when loaded, and future imports or manual entries use the same rule while intentionally named accounts such as **Amazon Business** and **Amazon Personal** remain distinct.
+
 ## 0.37.0 - 2026-08-22
 
 ### Added

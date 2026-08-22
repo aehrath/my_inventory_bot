@@ -13,6 +13,21 @@ export type ChangelogRelease = {
 
 export const changelogReleases: readonly ChangelogRelease[] = [
   {
+    version: "0.37.1",
+    date: "August 22, 2026",
+    title: "One Amazon source",
+    summary: "Equivalent Amazon marketplace labels now consolidate into one clean purchase source.",
+    sections: [
+      {
+        title: "Fixed",
+        items: [
+          "Consolidated Amazon, Amazon.com, Amazon · Amazon.com, and Amazon - Amazon.com into the single source Amazon.",
+          "Applied the same normalization to existing data, new imports, import source edits, and manually entered expenses without merging intentionally named Amazon accounts.",
+        ],
+      },
+    ],
+  },
+  {
     version: "0.37.0",
     date: "August 22, 2026",
     title: "Business-use import review",

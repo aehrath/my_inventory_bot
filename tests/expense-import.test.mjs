@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { amazonBusinessCsvColumns, amazonOrderHistoryCsvColumns, expenseAccountingClasses, expenseCategories, expenseCategoryDefinitions, expenseCostTimings, normalizeExpenseAsins, normalizeExpenseCategory, parseExpenseImportText } from "../app/expense-import.ts";
+import { amazonBusinessCsvColumns, amazonOrderHistoryCsvColumns, expenseAccountingClasses, expenseCategories, expenseCategoryDefinitions, expenseCostTimings, normalizeExpenseAsins, normalizeExpenseCategory, normalizeExpensePurchaseSource, parseExpenseImportText } from "../app/expense-import.ts";
 
 const fixture = new URL("./fixtures/amazon-business-orders.csv", import.meta.url);
 const amazonOrderHistoryFixture = new URL("./fixtures/amazon-order-history.csv", import.meta.url);
@@ -86,6 +86,16 @@ test("suggests and imports purchase source keys", () => {
   ].join("\n");
   const genericPreview = parseExpenseImportText(generic, "purchases.csv", []);
   assert.equal(genericPreview.ready[0].purchaseSource, "Wholesale portal");
+});
+
+test("canonicalizes redundant Amazon marketplace source labels", () => {
+  assert.equal(normalizeExpensePurchaseSource("Amazon"), "Amazon");
+  assert.equal(normalizeExpensePurchaseSource("Amazon.com"), "Amazon");
+  assert.equal(normalizeExpensePurchaseSource("Amazon · Amazon.com"), "Amazon");
+  assert.equal(normalizeExpensePurchaseSource("Amazon - Amazon.com"), "Amazon");
+  assert.equal(normalizeExpensePurchaseSource("https://www.amazon.com/"), "Amazon");
+  assert.equal(normalizeExpensePurchaseSource("Amazon Business"), "Amazon Business");
+  assert.equal(normalizeExpensePurchaseSource("Amazon Personal"), "Amazon Personal");
 });
 
 test("imports an optional personal flag without defaulting missing values", () => {
