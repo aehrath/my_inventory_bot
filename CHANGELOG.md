@@ -4,6 +4,15 @@ All notable changes to StockBot are documented here.
 
 ## Unreleased
 
+## 0.34.0 - 2026-08-21
+
+### Added
+
+- Added immutable server-side data commits with complete downloadable JSON snapshots.
+- Added optional GitHub pushes that create a real Git commit without storing the one-time token.
+- Added a full-field version comparison grid that includes populated, empty, changed, and unchanged values.
+- Introduced the independently versioned **stockbot-data v1** format.
+
 ## 0.33.0 - 2026-07-28
 
 ### Added

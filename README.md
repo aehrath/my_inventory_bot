@@ -10,6 +10,19 @@ Existing installations migrate automatically from the original single-record
 state snapshot. After migration, saves compare individual records and write only
 the rows that changed.
 
+## Data history and Git
+
+The Data History workspace stores immutable commit metadata in D1 and complete
+JSON snapshots in R2. Every file identifies itself as `stockbot-data` and has an
+independent numeric format version, beginning with version 1. The comparison
+grid expands every known record field, including empty and unchanged values.
+
+Snapshots can optionally be checked into a GitHub repository as a real Git
+commit. The repository, branch, and JSON path are remembered as device-local
+preferences. A fine-grained GitHub token is used for one push only, is cleared
+from the interface immediately afterward, and is never stored in StockBot data,
+history, exports, or server settings.
+
 ## Expense imports
 
 The Tax Center includes a categorized expense ledger and accepts CSV or JSON records. Every imported row must provide a stable unique key, such as an Amazon order ID, invoice ID, receipt ID, or bank transaction ID. StockBot normalizes key casing and whitespace, rejects keys already in the database, rejects duplicates within the same file, previews the result, and performs the duplicate check again when the user applies the import.

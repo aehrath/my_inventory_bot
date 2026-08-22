@@ -67,6 +67,32 @@ test("includes a visible release changelog", async () => {
   assert.match(markdown, /## 0\.1\.0 - 2026-07-22/);
 });
 
+test("includes versioned Git data history with an all-field diff grid", async () => {
+  const [page, history, format, route, styles, hosting] = await Promise.all([
+    read("app/page.tsx"),
+    read("app/data-history-view.tsx"),
+    read("app/data-format.ts"),
+    read("app/api/data-history/route.ts"),
+    read("app/globals.css"),
+    read(".openai/hosting.json"),
+  ]);
+  assert.match(page, /id: "history", label: "Data history"/);
+  assert.match(page, /<DataHistory saveStatus=\{saving\}/);
+  assert.match(history, /Every data change/);
+  assert.match(history, /Also push a real Git commit to GitHub/);
+  assert.match(history, /token is sent for this push, then cleared and never stored/);
+  assert.match(history, /Nothing is hidden/);
+  assert.match(history, /Empty values are labeled “Empty,” and unchanged values remain visible/);
+  assert.match(history, /Previous value/);
+  assert.match(history, /Current value/);
+  assert.match(history, /stockHeaderCell/);
+  assert.match(format, /STOCKBOT_DATA_FORMAT_VERSION = 1/);
+  assert.match(format, /diffStockBotDataFiles/);
+  assert.match(route, /pushStockBotDataToGitHub/);
+  assert.match(styles, /\.dataDiffGrid/);
+  assert.match(hosting, /"r2": "DATA_SNAPSHOTS"/);
+});
+
 test("stores and displays product vendors", async () => {
   const page = await read("app/page.tsx");
   assert.match(page, /name: string; vendor: string; category: string/);

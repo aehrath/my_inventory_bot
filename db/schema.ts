@@ -83,6 +83,32 @@ export const customers = sqliteTable("customers", {
   index("customers_location_idx").on(table.state, table.postalCode),
 ]);
 
+export const dataCommits = sqliteTable("data_commits", {
+  id: text("id").primaryKey(),
+  parentId: text("parent_id"),
+  message: text("message").notNull(),
+  createdAt: text("created_at").notNull(),
+  formatVersion: integer("format_version").notNull(),
+  applicationStateVersion: integer("application_state_version").notNull(),
+  contentHash: text("content_hash").notNull(),
+  snapshotKey: text("snapshot_key").notNull(),
+  snapshotBytes: integer("snapshot_bytes").notNull(),
+  recordCount: integer("record_count").notNull(),
+  fieldCount: integer("field_count").notNull(),
+  changedFieldCount: integer("changed_field_count").notNull(),
+  remoteStatus: text("remote_status").notNull().default("not_pushed"),
+  remoteRepository: text("remote_repository"),
+  remoteBranch: text("remote_branch"),
+  remotePath: text("remote_path"),
+  remoteCommitSha: text("remote_commit_sha"),
+  remoteUrl: text("remote_url"),
+  remoteError: text("remote_error"),
+}, (table) => [
+  index("data_commits_created_at_idx").on(table.createdAt),
+  index("data_commits_parent_idx").on(table.parentId),
+  index("data_commits_content_hash_idx").on(table.contentHash),
+]);
+
 export const inventorySchemaStatements = [
   `CREATE TABLE IF NOT EXISTS inventory_state (
     id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -161,4 +187,28 @@ export const inventorySchemaStatements = [
   "CREATE INDEX IF NOT EXISTS customers_name_idx ON customers (name)",
   "CREATE INDEX IF NOT EXISTS customers_email_idx ON customers (email)",
   "CREATE INDEX IF NOT EXISTS customers_location_idx ON customers (state, postal_code)",
+  `CREATE TABLE IF NOT EXISTS data_commits (
+    id TEXT PRIMARY KEY,
+    parent_id TEXT,
+    message TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    format_version INTEGER NOT NULL,
+    application_state_version INTEGER NOT NULL,
+    content_hash TEXT NOT NULL,
+    snapshot_key TEXT NOT NULL,
+    snapshot_bytes INTEGER NOT NULL,
+    record_count INTEGER NOT NULL,
+    field_count INTEGER NOT NULL,
+    changed_field_count INTEGER NOT NULL,
+    remote_status TEXT NOT NULL DEFAULT 'not_pushed',
+    remote_repository TEXT,
+    remote_branch TEXT,
+    remote_path TEXT,
+    remote_commit_sha TEXT,
+    remote_url TEXT,
+    remote_error TEXT
+  )`,
+  "CREATE INDEX IF NOT EXISTS data_commits_created_at_idx ON data_commits (created_at)",
+  "CREATE INDEX IF NOT EXISTS data_commits_parent_idx ON data_commits (parent_id)",
+  "CREATE INDEX IF NOT EXISTS data_commits_content_hash_idx ON data_commits (content_hash)",
 ] as const;

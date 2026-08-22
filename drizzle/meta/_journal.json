@@ -15,6 +15,13 @@
       "when": 1785226100519,
       "tag": "0001_third_rockslide",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1787380556124,
+      "tag": "0002_silent_wong",
+      "breakpoints": true
     }
   ]
 }

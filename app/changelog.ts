@@ -13,6 +13,23 @@ export type ChangelogRelease = {
 
 export const changelogReleases: readonly ChangelogRelease[] = [
   {
+    version: "0.34.0",
+    date: "August 21, 2026",
+    title: "Git data history",
+    summary: "StockBot data can now be committed, pushed to GitHub, and compared field by field.",
+    sections: [
+      {
+        title: "Added",
+        items: [
+          "Added immutable server-side data commits with complete downloadable JSON snapshots.",
+          "Added optional GitHub pushes that create a real Git commit without storing the one-time access token.",
+          "Added a full-field comparison grid covering populated, empty, changed, and unchanged values.",
+          "Introduced the independently versioned stockbot-data v1 format.",
+        ],
+      },
+    ],
+  },
+  {
     version: "0.33.0",
     date: "July 28, 2026",
     title: "ASIN product previews",

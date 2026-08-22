@@ -3,6 +3,7 @@
 
 import { ChangeEvent, CSSProperties, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { changelogReleases } from "./changelog";
+import { DataHistory } from "./data-history-view";
 import { amazonBusinessCsvColumns, amazonOrderHistoryCsvColumns, expenseAccountingClasses, expenseCategories, expenseCategoryDefinitions, expenseCostTimings, normalizeExpenseAsins, normalizeExpenseCategory, normalizeExpenseDate, normalizeExpenseKey, parseExpenseImportText } from "./expense-import";
 import type { ExpenseAccountingClass, ExpenseCategory, ExpenseCategoryDefinition, ExpenseCostTiming, ExpenseImportPreview } from "./expense-import";
 import { parseExpenseInventoryDescription } from "./expense-inventory";
@@ -11,7 +12,7 @@ import type { InvoiceImportPreview } from "./invoice-import";
 import { defaultStateTaxSettings, stateName, stateTaxDefaults } from "./tax-data";
 import type { TaxAddress, TaxRateLookup, TaxRateLookupResponse, TaxSourceStatus } from "./tax-rate-types";
 
-type View = "dashboard" | "products" | "customers" | "activity" | "cogs" | "expenses" | "taxes" | "data" | "changelog";
+type View = "dashboard" | "products" | "customers" | "activity" | "cogs" | "expenses" | "taxes" | "history" | "data" | "changelog";
 type MovementType = "purchase" | "sale" | "production_use" | "personal_use" | "adjustment";
 type Product = {
   id: string; sku: string; name: string; vendor: string; category: string; quantity: number; unitCost: number;
@@ -224,7 +225,7 @@ const seed: AppState = {
 };
 
 const icons: Record<View | "plus" | "search" | "download" | "upload" | "alert" | "arrow", string> = {
-  dashboard: "▦", products: "□", customers: "◉", activity: "↕", cogs: "∑", expenses: "$", taxes: "%", data: "↥", changelog: "≡", plus: "+", search: "⌕", download: "↓", upload: "↑", alert: "!", arrow: "→",
+  dashboard: "▦", products: "□", customers: "◉", activity: "↕", cogs: "∑", expenses: "$", taxes: "%", history: "⑂", data: "↥", changelog: "≡", plus: "+", search: "⌕", download: "↓", upload: "↑", alert: "!", arrow: "→",
 };
 
 export default function Home() {
@@ -299,7 +300,7 @@ export default function Home() {
   const openUse = (product: Product) => { setSelectedProduct(product); setMovementType("personal_use"); setMovementModal(true); };
   const openLinkedProduct = (product: Product) => { setView("products"); setQuery(product.sku); setSelectedProduct(product); setProductModal(true); };
   const nav: { id: View; label: string }[] = [
-    { id: "dashboard", label: "Overview" }, { id: "products", label: "Products" }, { id: "customers", label: "Customers" }, { id: "activity", label: "Activity" }, { id: "cogs", label: "COGS" }, { id: "expenses", label: "Expenses" }, { id: "taxes", label: "Tax center" }, { id: "data", label: "Data & settings" }, { id: "changelog", label: "Changelog" },
+    { id: "dashboard", label: "Overview" }, { id: "products", label: "Products" }, { id: "customers", label: "Customers" }, { id: "activity", label: "Activity" }, { id: "cogs", label: "COGS" }, { id: "expenses", label: "Expenses" }, { id: "taxes", label: "Tax center" }, { id: "history", label: "Data history" }, { id: "data", label: "Data & settings" }, { id: "changelog", label: "Changelog" },
   ];
 
   return (
@@ -321,6 +322,7 @@ export default function Home() {
         {view === "cogs" && <CogsCenter state={state} onOpenProduct={openLinkedProduct} onProductionUse={() => { setSelectedProduct(null); setMovementType("production_use"); setMovementModal(true); }} onViewExpenses={() => setView("expenses")} />}
         {view === "expenses" && <Expenses state={state} setState={setState} onExpense={() => setExpenseModal(true)} onDeleteExpense={(id) => setState((s) => ({ ...s, expenses: s.expenses.filter((e) => e.id !== id) }))} />}
         {view === "taxes" && <TaxCenter state={state} metrics={metrics} setState={setState} />}
+        {view === "history" && <DataHistory saveStatus={saving} />}
         {view === "data" && <DataSettings state={state} setState={setState} fileRef={fileRef} onImport={(e) => importState(e, setState)} />}
         {view === "changelog" && <Changelog />}
       </main>

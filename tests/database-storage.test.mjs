@@ -6,12 +6,14 @@ const root = new URL("../", import.meta.url);
 const read = (path) => readFile(new URL(path, root), "utf8");
 
 test("uses indexed relational D1 storage for business records", async () => {
-  const [schema, repository, route, migration, personalMigration, page] = await Promise.all([
+  const [schema, repository, route, migration, personalMigration, historyMigration, historyRepository, page] = await Promise.all([
     read("db/schema.ts"),
     read("db/inventory-repository.ts"),
     read("app/api/state/route.ts"),
     read("drizzle/0000_burly_sage.sql"),
     read("drizzle/0001_third_rockslide.sql"),
+    read("drizzle/0002_silent_wong.sql"),
+    read("db/data-history-repository.ts"),
     read("app/page.tsx"),
   ]);
 
@@ -28,6 +30,7 @@ test("uses indexed relational D1 storage for business records", async () => {
   assert.match(schema, /movements_source_key_idx/);
   assert.match(schema, /customers_external_key_idx/);
   assert.match(repository, /existing\.get\(id\) === recordJson/);
+  assert.match(repository, /const schemaVersion = 3/);
   assert.match(repository, /ALTER TABLE expenses ADD COLUMN personal INTEGER NOT NULL DEFAULT 0/);
   assert.match(repository, /booleanValue\(record\.personal\)/);
   assert.match(personalMigration, /ALTER TABLE `expenses` ADD `personal` integer DEFAULT false NOT NULL/);
@@ -39,4 +42,9 @@ test("uses indexed relational D1 storage for business records", async () => {
   assert.match(route, /saveInventoryState/);
   assert.match(route, /storage: "d1-relational"/);
   assert.match(page, /Lightweight SQLite storage/);
+  assert.match(schema, /sqliteTable\("data_commits"/);
+  assert.match(schema, /data_commits_created_at_idx/);
+  assert.match(historyMigration, /CREATE TABLE `data_commits`/);
+  assert.match(historyRepository, /DATA_SNAPSHOTS/);
+  assert.match(historyRepository, /stockbot-data\/v\$\{STOCKBOT_DATA_FORMAT_VERSION\}/);
 });
