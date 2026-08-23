@@ -384,28 +384,36 @@ test("offers separate clear-all and demo-reset workspace actions", async () => {
   assert.match(styles, /\.dangerActions/);
 });
 
-test("offers bounded workspace undo with a visible button and keyboard shortcut", async () => {
+test("offers bounded workspace undo and redo with visible buttons and keyboard shortcuts", async () => {
   const [page, styles, changelog] = await Promise.all([
     read("app/page.tsx"),
     read("app/globals.css"),
     read("app/changelog.ts"),
   ]);
   assert.match(page, /const MAX_UNDO_STEPS = 50/);
-  assert.match(page, /type AppStateHistory = \{ present: AppState; past: AppState\[\] \}/);
-  assert.match(page, /past: \[\.\.\.current\.past\.slice\(-\(MAX_UNDO_STEPS - 1\)\), current\.present\]/);
+  assert.match(page, /type AppStateHistory = \{ present: AppState; past: AppState\[\]; future: AppState\[\] \}/);
+  assert.match(page, /past: \[\.\.\.current\.past\.slice\(-\(MAX_UNDO_STEPS - 1\)\), current\.present\], future: \[\]/);
   assert.match(page, /const undo = useCallback/);
   assert.match(page, /present: current\.past\[current\.past\.length - 1\]/);
+  assert.match(page, /future: \[current\.present, \.\.\.current\.future\]\.slice\(0, MAX_UNDO_STEPS\)/);
+  assert.match(page, /const redo = useCallback/);
+  assert.match(page, /present: current\.future\[0\]/);
+  assert.match(page, /future: current\.future\.slice\(1\)/);
   assert.match(page, /replaceState\(normalizeState\(payload\.state\)\)/);
   assert.match(page, /className="secondary undoButton" disabled=\{!canUndo\}/);
+  assert.match(page, /className="secondary redoButton" disabled=\{!canRedo\}/);
   assert.match(page, /Command\/Ctrl\+Z/);
+  assert.match(page, /Command\/Ctrl\+Shift\+Z/);
   assert.match(page, /event\.key\.toLowerCase\(\) === "z" \|\| event\.code === "KeyZ"/);
+  assert.doesNotMatch(page, /event\.shiftKey \|\| event\.altKey/);
   assert.match(page, /target\?\.matches\("textarea"\)/);
   assert.match(page, /target\?\.matches\("input"\) && textInputTypes\.has/);
   assert.doesNotMatch(page, /matches\("input, textarea, select"\)/);
   assert.match(page, /event\.stopPropagation\(\)/);
+  assert.match(page, /if \(event\.shiftKey\) redo\(\); else undo\(\)/);
   assert.match(page, /window\.addEventListener\("keydown", handleUndoShortcut, true\)/);
-  assert.match(styles, /\.topActions \.undoButton:disabled/);
-  assert.match(changelog, /version: "0\.39\.1"/);
+  assert.match(styles, /\.topActions \.undoButton:disabled,\.topActions \.redoButton:disabled/);
+  assert.match(changelog, /version: "0\.40\.0"/);
 });
 
 test("keeps personal expenses visible but out of business calculations", async () => {

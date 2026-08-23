@@ -4,6 +4,17 @@ All notable changes to StockBot are documented here.
 
 ## Unreleased
 
+## 0.40.0 - 2026-08-22
+
+### Added
+
+- Added a visible **Redo** button beside Undo with up to 50 forward workspace snapshots.
+- Added **Command+Shift+Z** and **Ctrl+Shift+Z** shortcuts outside active text editing.
+
+### Changed
+
+- A new workspace change made after undoing now clears the abandoned redo path, matching standard editor behavior.
+
 ## 0.39.1 - 2026-08-22
 
 ### Fixed

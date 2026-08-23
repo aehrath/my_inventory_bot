@@ -13,6 +13,27 @@ export type ChangelogRelease = {
 
 export const changelogReleases: readonly ChangelogRelease[] = [
   {
+    version: "0.40.0",
+    date: "August 22, 2026",
+    title: "Undo and redo",
+    summary: "Workspace changes can now move safely in both directions.",
+    sections: [
+      {
+        title: "Added",
+        items: [
+          "Added a Redo button beside Undo with up to 50 forward workspace snapshots.",
+          "Added Command+Shift+Z and Ctrl+Shift+Z shortcuts outside active text editing.",
+        ],
+      },
+      {
+        title: "Changed",
+        items: [
+          "Making a new workspace change after undoing now clears the abandoned redo path, matching standard editor behavior.",
+        ],
+      },
+    ],
+  },
+  {
     version: "0.39.1",
     date: "August 22, 2026",
     title: "Reliable keyboard undo",

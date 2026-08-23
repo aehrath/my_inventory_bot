@@ -42,7 +42,7 @@ type CustomExpenseCategory = ExpenseCategoryDefinition;
 type ExpenseCategoryTreatment = Omit<ExpenseCategoryDefinition, "name">;
 type Settings = { businessName: string; taxYear: number; beginningInventory: number; ownAddress: Address; stateTaxes: Record<string, StateTaxSetting>; localTaxRules: LocalTaxRule[]; addressTaxRates: AddressTaxRate[]; taxUpdateHistory: TaxUpdateAudit[]; customExpenseCategories: CustomExpenseCategory[]; expenseCategoryOverrides: Record<string, ExpenseCategoryTreatment>; expenseColumnOrder: string[]; expenseVisibleColumns: string[] };
 type AppState = { version: 20; products: Product[]; movements: Movement[]; expenses: Expense[]; customers: Customer[]; settings: Settings };
-type AppStateHistory = { present: AppState; past: AppState[] };
+type AppStateHistory = { present: AppState; past: AppState[]; future: AppState[] };
 type Metrics = { inventoryValue: number; units: number; revenue: number; inventoryCogs: number; additionalCogs: number; cogs: number; salesTax: number; stateSalesTax: number; localSalesTax: number; useTax: number; stateUseTax: number; localUseTax: number; expenses: number; expenseRecordsTotal: number; purchases: number; grossProfit: number; taxableIncome: number };
 type ExpenseColumnDefinition = { key: string; label: string; width: string; field?: string };
 type SortDirection = "asc" | "desc";
@@ -239,22 +239,28 @@ const icons: Record<View | "plus" | "search" | "download" | "upload" | "alert" |
 };
 
 export default function Home() {
-  const [stateHistory, setStateHistory] = useState<AppStateHistory>({ present: seed, past: [] });
+  const [stateHistory, setStateHistory] = useState<AppStateHistory>({ present: seed, past: [], future: [] });
   const state = stateHistory.present;
   const setState = useCallback<React.Dispatch<React.SetStateAction<AppState>>>((update) => {
     setStateHistory((current) => {
       const next = typeof update === "function" ? update(current.present) : update;
       if (Object.is(next, current.present)) return current;
-      return { present: next, past: [...current.past.slice(-(MAX_UNDO_STEPS - 1)), current.present] };
+      return { present: next, past: [...current.past.slice(-(MAX_UNDO_STEPS - 1)), current.present], future: [] };
     });
   }, []);
-  const replaceState = useCallback((next: AppState) => setStateHistory({ present: next, past: [] }), []);
+  const replaceState = useCallback((next: AppState) => setStateHistory({ present: next, past: [], future: [] }), []);
   const undo = useCallback(() => {
     setStateHistory((current) => current.past.length
-      ? { present: current.past[current.past.length - 1], past: current.past.slice(0, -1) }
+      ? { present: current.past[current.past.length - 1], past: current.past.slice(0, -1), future: [current.present, ...current.future].slice(0, MAX_UNDO_STEPS) }
+      : current);
+  }, []);
+  const redo = useCallback(() => {
+    setStateHistory((current) => current.future.length
+      ? { present: current.future[0], past: [...current.past.slice(-(MAX_UNDO_STEPS - 1)), current.present], future: current.future.slice(1) }
       : current);
   }, []);
   const canUndo = stateHistory.past.length > 0;
+  const canRedo = stateHistory.future.length > 0;
   const [view, setView] = useState<View>("dashboard");
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState<"saved" | "saving" | "error">("saved");
@@ -282,7 +288,7 @@ export default function Home() {
   useEffect(() => {
     const handleUndoShortcut = (event: KeyboardEvent) => {
       const isUndoKey = event.key.toLowerCase() === "z" || event.code === "KeyZ";
-      if (!(event.metaKey || event.ctrlKey) || event.shiftKey || event.altKey || !isUndoKey) return;
+      if (!(event.metaKey || event.ctrlKey) || event.altKey || !isUndoKey) return;
       const target = event.target as HTMLElement | null;
       const textInputTypes = new Set(["text", "search", "email", "url", "tel", "password", "number"]);
       const isTextEditing = target?.isContentEditable
@@ -291,11 +297,11 @@ export default function Home() {
       if (isTextEditing) return;
       event.preventDefault();
       event.stopPropagation();
-      undo();
+      if (event.shiftKey) redo(); else undo();
     };
     window.addEventListener("keydown", handleUndoShortcut, true);
     return () => window.removeEventListener("keydown", handleUndoShortcut, true);
-  }, [undo]);
+  }, [redo, undo]);
 
   useEffect(() => { queueMicrotask(() => { void refreshImportDocuments().catch(() => undefined); }); }, [refreshImportDocuments]);
 
@@ -365,7 +371,7 @@ export default function Home() {
       </aside>
 
       <main>
-        <header className="topbar"><div><p className="eyebrow">{state.settings.businessName} · {state.settings.taxYear}</p><h1>{nav.find((n) => n.id === view)?.label}</h1></div><div className="topActions"><button className="secondary undoButton" disabled={!canUndo} onClick={undo} title="Undo the last workspace change (Command/Ctrl+Z)" aria-label={`Undo the last workspace change${canUndo ? `; ${stateHistory.past.length} available` : "; no changes available"}`}><span aria-hidden="true">↶</span> Undo</button><button className="secondary" onClick={() => { setMovementType(null); setMovementModal(true); }}>{icons.arrow} Record activity</button><button className="primary" onClick={() => { setSelectedProduct(null); setProductModal(true); }}>{icons.plus} Add product</button></div></header>
+        <header className="topbar"><div><p className="eyebrow">{state.settings.businessName} · {state.settings.taxYear}</p><h1>{nav.find((n) => n.id === view)?.label}</h1></div><div className="topActions"><button className="secondary undoButton" disabled={!canUndo} onClick={undo} title="Undo the last workspace change (Command/Ctrl+Z)" aria-label={`Undo the last workspace change${canUndo ? `; ${stateHistory.past.length} available` : "; no changes available"}`}><span aria-hidden="true">↶</span> Undo</button><button className="secondary redoButton" disabled={!canRedo} onClick={redo} title="Redo the next workspace change (Command/Ctrl+Shift+Z)" aria-label={`Redo the next workspace change${canRedo ? `; ${stateHistory.future.length} available` : "; no changes available"}`}><span aria-hidden="true">↷</span> Redo</button><button className="secondary" onClick={() => { setMovementType(null); setMovementModal(true); }}>{icons.arrow} Record activity</button><button className="primary" onClick={() => { setSelectedProduct(null); setProductModal(true); }}>{icons.plus} Add product</button></div></header>
 
         {view === "dashboard" && <Dashboard state={state} metrics={metrics} onView={setView} onUse={openUse} />}
         {view === "products" && <Products state={state} documents={importDocuments} query={query} setQuery={setQuery} onEdit={(p) => { setSelectedProduct(p); setProductModal(true); }} onUse={openUse} onDelete={(p) => confirm(`Delete ${p.name}? Its activity history will remain.`) && setState((s) => ({ ...s, products: s.products.filter((x) => x.id !== p.id) }))} />}
