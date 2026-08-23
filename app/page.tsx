@@ -281,14 +281,20 @@ export default function Home() {
 
   useEffect(() => {
     const handleUndoShortcut = (event: KeyboardEvent) => {
-      if (!(event.metaKey || event.ctrlKey) || event.shiftKey || event.altKey || event.key.toLowerCase() !== "z") return;
+      const isUndoKey = event.key.toLowerCase() === "z" || event.code === "KeyZ";
+      if (!(event.metaKey || event.ctrlKey) || event.shiftKey || event.altKey || !isUndoKey) return;
       const target = event.target as HTMLElement | null;
-      if (target?.isContentEditable || target?.matches("input, textarea, select")) return;
+      const textInputTypes = new Set(["text", "search", "email", "url", "tel", "password", "number"]);
+      const isTextEditing = target?.isContentEditable
+        || target?.matches("textarea")
+        || (target?.matches("input") && textInputTypes.has((target as HTMLInputElement).type));
+      if (isTextEditing) return;
       event.preventDefault();
+      event.stopPropagation();
       undo();
     };
-    window.addEventListener("keydown", handleUndoShortcut);
-    return () => window.removeEventListener("keydown", handleUndoShortcut);
+    window.addEventListener("keydown", handleUndoShortcut, true);
+    return () => window.removeEventListener("keydown", handleUndoShortcut, true);
   }, [undo]);
 
   useEffect(() => { queueMicrotask(() => { void refreshImportDocuments().catch(() => undefined); }); }, [refreshImportDocuments]);

@@ -4,6 +4,14 @@ All notable changes to StockBot are documented here.
 
 ## Unreleased
 
+## 0.39.1 - 2026-08-22
+
+### Fixed
+
+- **Command+Z** and **Ctrl+Z** now undo workspace changes after using dropdowns, checkboxes, buttons, and other non-text controls.
+- The shortcut is handled before focused controls can consume it and also recognizes the physical Z key across keyboard layouts.
+- Native field undo remains available while editing text, numeric, and multiline inputs.
+
 ## 0.39.0 - 2026-08-22
 
 ### Added

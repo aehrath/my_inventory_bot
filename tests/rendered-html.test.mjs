@@ -398,10 +398,14 @@ test("offers bounded workspace undo with a visible button and keyboard shortcut"
   assert.match(page, /replaceState\(normalizeState\(payload\.state\)\)/);
   assert.match(page, /className="secondary undoButton" disabled=\{!canUndo\}/);
   assert.match(page, /Command\/Ctrl\+Z/);
-  assert.match(page, /target\?\.matches\("input, textarea, select"\)/);
-  assert.match(page, /window\.addEventListener\("keydown", handleUndoShortcut\)/);
+  assert.match(page, /event\.key\.toLowerCase\(\) === "z" \|\| event\.code === "KeyZ"/);
+  assert.match(page, /target\?\.matches\("textarea"\)/);
+  assert.match(page, /target\?\.matches\("input"\) && textInputTypes\.has/);
+  assert.doesNotMatch(page, /matches\("input, textarea, select"\)/);
+  assert.match(page, /event\.stopPropagation\(\)/);
+  assert.match(page, /window\.addEventListener\("keydown", handleUndoShortcut, true\)/);
   assert.match(styles, /\.topActions \.undoButton:disabled/);
-  assert.match(changelog, /version: "0\.39\.0"/);
+  assert.match(changelog, /version: "0\.39\.1"/);
 });
 
 test("keeps personal expenses visible but out of business calculations", async () => {

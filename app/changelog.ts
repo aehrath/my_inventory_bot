@@ -13,6 +13,22 @@ export type ChangelogRelease = {
 
 export const changelogReleases: readonly ChangelogRelease[] = [
   {
+    version: "0.39.1",
+    date: "August 22, 2026",
+    title: "Reliable keyboard undo",
+    summary: "Command+Z and Ctrl+Z now reach StockBot after changing dropdowns, toggles, and other workspace controls.",
+    sections: [
+      {
+        title: "Fixed",
+        items: [
+          "Stopped dropdown focus from suppressing workspace undo, including expense category changes.",
+          "Handled the undo shortcut during the capture phase and recognized the physical Z key for more dependable keyboard behavior.",
+          "Preserved native text undo only while actively editing text, numeric, or multiline fields.",
+        ],
+      },
+    ],
+  },
+  {
     version: "0.39.0",
     date: "August 22, 2026",
     title: "Workspace undo",
