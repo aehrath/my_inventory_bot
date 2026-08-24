@@ -4,16 +4,25 @@ export type ParsedExpenseInventoryItem = {
   unitCost: number;
 };
 
+export function importedExpenseOrderQuantity(fields?: Record<string, string>) {
+  const raw = ["Quantity", "Item Quantity", "Original Quantity"]
+    .map((key) => fields?.[key]?.trim())
+    .find(Boolean);
+  return raw && /^\d[\d,]*$/.test(raw) ? positiveCount(raw) ?? 1 : 1;
+}
+
 const positiveCount = (value: string) => {
   const count = Number(value.replace(/,/g, ""));
   return Number.isSafeInteger(count) && count > 0 ? count : null;
 };
 
+const perUnitCost = (totalCost: number, quantity: number) => Math.round((totalCost / quantity) * 1_000_000) / 1_000_000;
+
 const cleanInventoryName = (value: string, fallback: string) => {
   const cleaned = value
     .replace(/\(\s*\)|\[\s*\]/g, " ")
     .replace(/\s+/g, " ")
-    .replace(/^[\s,;:|/–—-]+|[\s,;:|/–—-]+$/g, "")
+    .replace(/^[\s,;:|/·–—-]+|[\s,;:|/·–—-]+$/g, "")
     .replace(/^of\s+/i, "")
     .trim();
   return cleaned || fallback;
@@ -23,11 +32,12 @@ const cleanInventoryName = (value: string, fallback: string) => {
  * Converts clear package/count language in an expense description into
  * individual inventory units. Ambiguous descriptions keep a quantity of one.
  */
-export function parseExpenseInventoryDescription(description: string, totalCost: number): ParsedExpenseInventoryItem {
+export function parseExpenseInventoryDescription(description: string, totalCost: number, orderedPackages = 1): ParsedExpenseInventoryItem {
   const original = description.trim().replace(/\s+/g, " ") || "Untitled inventory item";
+  const packageMultiplier = Number.isSafeInteger(orderedPackages) && orderedPackages > 0 ? orderedPackages : 1;
   const explicitPatterns: Array<{ expression: RegExp; quantity: (match: RegExpMatchArray) => number | null }> = [
     {
-      expression: /\b(\d[\d,]*)\s*(?:packs?|boxes?|sets?)\s+of\s+(\d[\d,]*)\s*(?:pcs?|pieces?|units?|count|ct)?\b/i,
+      expression: /\b(\d[\d,]*)\s*(?:packs?|boxes?|sets?)\s+of\s+(\d[\d,]*)\s*(?:pcs?|pieces?|units?|count|ct)?\b/gi,
       quantity: (match) => {
         const packages = positiveCount(match[1]);
         const pieces = positiveCount(match[2]);
@@ -35,7 +45,7 @@ export function parseExpenseInventoryDescription(description: string, totalCost:
       },
     },
     {
-      expression: /\b(\d[\d,]*)\s*[x×]\s*(\d[\d,]*)\s*(?:pcs?|pieces?|units?|count|ct|packs?)\b/i,
+      expression: /\b(\d[\d,]*)\s*[x×]\s*(\d[\d,]*)\s*(?:pcs?|pieces?|units?|count|ct|packs?)\b/gi,
       quantity: (match) => {
         const groups = positiveCount(match[1]);
         const pieces = positiveCount(match[2]);
@@ -43,26 +53,29 @@ export function parseExpenseInventoryDescription(description: string, totalCost:
       },
     },
     {
-      expression: /\b(?:packs?|boxes?|sets?)\s+of\s+(\d[\d,]*)\s*(?:pcs?|pieces?|units?|count|ct)?\b/i,
+      expression: /\b(?:packs?|boxes?|sets?)\s+of\s+(\d[\d,]*)\s*(?:pcs?|pieces?|units?|count|ct)?\b/gi,
       quantity: (match) => positiveCount(match[1]),
     },
     {
-      expression: /\b(\d[\d,]*)\s*[- ]?\s*(?:pcs?|pieces?|units?|count|ct|packs?)\b/i,
+      expression: /\b(\d[\d,]*)\s*[- ]?\s*(?:pcs?|pieces?|units?|count|ct|packs?)\b/gi,
       quantity: (match) => positiveCount(match[1]),
     },
   ];
 
   for (const pattern of explicitPatterns) {
-    const match = original.match(pattern.expression);
-    if (!match || match.index === undefined) continue;
-    const quantity = pattern.quantity(match);
-    if (!quantity) continue;
-    const withoutCount = `${original.slice(0, match.index)} ${original.slice(match.index + match[0].length)}`;
-    return {
-      name: cleanInventoryName(withoutCount, original),
-      quantity,
-      unitCost: totalCost / quantity,
-    };
+    const matches = Array.from(original.matchAll(pattern.expression));
+    for (const match of matches.reverse()) {
+      if (match.index === undefined) continue;
+      const piecesPerPackage = pattern.quantity(match);
+      if (!piecesPerPackage) continue;
+      const quantity = piecesPerPackage * packageMultiplier;
+      const withoutCount = `${original.slice(0, match.index)} ${original.slice(match.index + match[0].length)}`;
+      return {
+        name: cleanInventoryName(withoutCount, original),
+        quantity,
+        unitCost: perUnitCost(totalCost, quantity),
+      };
+    }
   }
 
   const leading = original.match(/^(\d[\d,]*)\s+(.+)$/);
@@ -73,11 +86,12 @@ export function parseExpenseInventoryDescription(description: string, totalCost:
     if (quantity && !looksLikeYear) {
       return {
         name: cleanInventoryName(leading[2], original),
-        quantity,
-        unitCost: totalCost / quantity,
+        quantity: quantity * packageMultiplier,
+        unitCost: perUnitCost(totalCost, quantity * packageMultiplier),
       };
     }
   }
 
+  if (packageMultiplier > 1) return { name: cleanInventoryName(original, original), quantity: packageMultiplier, unitCost: perUnitCost(totalCost, packageMultiplier) };
   return { name: cleanInventoryName(original, original), quantity: 1, unitCost: totalCost };
 }

@@ -216,7 +216,7 @@ const categoryForAmazonLine = (row: Record<string, unknown>): ExpenseCategory =>
   const productionExemption = /production|manufactur|ingredient|component|raw material/.test(exemptionType);
   const resaleExemption = /resale/.test(exemptionType);
   const intrinsicMaterial = /\b(raw materials?|ingredients?|blanks?|unfinished|filaments?|fabrics?|leatherette|decals?|patches?|transfer paper|transfer vinyl|heat transfer|adhesives?|glue|lumber|plywood|acrylic|plexiglass|resin|pigments?|dyes?|beads?|sewing thread|yarn)\b/.test(title);
-  const componentInput = /\b(components?|connectors?|switches?|stepper motors?|wires?|cables?|clasps?|key rings?|fasteners?|screws?|capacitors?|relays?|sockets?|circuit boards?|pcb)\b/.test(title);
+  const componentInput = /\b(components?|connectors?|switches?|stepper motors?|wires?|cables?|clasps?|key rings?|fasteners?|screws?|capacitors?|relays?|sockets?|circuit boards?|pcb|chips?|integrated circuits?|ics?|modules?|displays?|processors?|servos?|dip(?:-\d+)?|(?:sn)?74[a-z0-9-]+)\b/.test(title);
   const productionUse = /\b[1-9][0-9]+\s*(?:pcs|pieces)|\b(?:diy|craft|jewelry|laser|engraving|sublimation|heat press|3d print|cnc|assembly|manufactur)/.test(title);
   const materialTaxonomy = /manufacturing components|electronic components and supplies|electrical equipment and components|arts and crafts equipment and accessories and supplies|sewing supplies/.test(taxonomy);
   const materialInput = intrinsicMaterial || (componentInput && productionUse) || (materialTaxonomy && productionUse);

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseExpenseInventoryDescription } from "../app/expense-inventory.ts";
+import { importedExpenseOrderQuantity, parseExpenseInventoryDescription } from "../app/expense-inventory.ts";
 
 test("extracts explicit piece and pack counts and divides total cost", () => {
   assert.deepEqual(parseExpenseInventoryDescription("Blue widgets (200 PCS)", 80), {
@@ -44,4 +44,35 @@ test("keeps ambiguous or year-like descriptions as one item", () => {
     quantity: 1,
     unitCost: 18,
   });
+});
+
+test("expands AliExpress piece labels and multiplies by the ordered quantity", () => {
+  assert.deepEqual(parseExpenseInventoryDescription("100PCS 74LS153 DIP chips", 29.8, 1), {
+    name: "74LS153 DIP chips",
+    quantity: 100,
+    unitCost: 0.298,
+  });
+  assert.deepEqual(parseExpenseInventoryDescription("Connector assortment · 100piece", 25, 1), {
+    name: "Connector assortment",
+    quantity: 100,
+    unitCost: 0.25,
+  });
+  assert.deepEqual(parseExpenseInventoryDescription("5/10PCS RS232 connector · Male head, 10PCS", 17.25, 5), {
+    name: "5/10PCS RS232 connector · Male head",
+    quantity: 50,
+    unitCost: 0.345,
+  });
+  assert.deepEqual(parseExpenseInventoryDescription("Display module", 10.05, 5), {
+    name: "Display module",
+    quantity: 5,
+    unitCost: 2.01,
+  });
+});
+
+test("reads a single imported marketplace order quantity safely", () => {
+  assert.equal(importedExpenseOrderQuantity({ Quantity: "5" }), 5);
+  assert.equal(importedExpenseOrderQuantity({ "Item Quantity": "100" }), 100);
+  assert.equal(importedExpenseOrderQuantity({ "Original Quantity": "2" }), 2);
+  assert.equal(importedExpenseOrderQuantity({ "Item Quantity": "1 · 2" }), 1);
+  assert.equal(importedExpenseOrderQuantity(), 1);
 });

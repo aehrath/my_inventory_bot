@@ -333,7 +333,7 @@ test("combines purchased inventory and recognized costs in the COGS workspace", 
   assert.match(page, /<PurchasedInventorySection state=\{state\}/);
   assert.match(page, /isTrackedInventoryCategory\(expense\.category, state\.settings\)/);
   assert.match(page, /isDirectCogsCategory\(expense\.category, state\.settings\)/);
-  assert.match(page, /parseExpenseInventoryDescription\(expense\.note, expense\.amount\)/);
+  assert.match(page, /parseExpenseInventoryDescription\(expense\.note, expense\.amount, importedExpenseOrderQuantity\(expense\.fields\)\)/);
   assert.match(page, /Inventory waiting to become COGS/);
   assert.match(page, /Materials and resale goods waiting to become COGS/);
   assert.match(page, /className="expenseCategorySelect"/);

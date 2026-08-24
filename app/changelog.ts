@@ -23,6 +23,7 @@ export const changelogReleases: readonly ChangelogRelease[] = [
         items: [
           "Added a paste window that reads AliExpress order status, date, reference number, supplier, item details, quantity, price, and total.",
           "Added supplier checkboxes that hide selected vendors from the expense ledger without changing saved records or totals.",
+          "Expanded AliExpress pack labels such as 100PCS and 100piece into individual inventory units with total cost divided into a per-piece cost.",
         ],
       },
       {
