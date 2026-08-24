@@ -216,10 +216,11 @@ const categoryForAmazonLine = (row: Record<string, unknown>): ExpenseCategory =>
   const productionExemption = /production|manufactur|ingredient|component|raw material/.test(exemptionType);
   const resaleExemption = /resale/.test(exemptionType);
   const intrinsicMaterial = /\b(raw materials?|ingredients?|blanks?|unfinished|filaments?|fabrics?|leatherette|decals?|patches?|transfer paper|transfer vinyl|heat transfer|adhesives?|glue|lumber|plywood|acrylic|plexiglass|resin|pigments?|dyes?|beads?|sewing thread|yarn)\b/.test(title);
+  const knownIntegratedCircuit = /\b(?:sn)?74(?:ls|als|f|s|hc|hct|ac|act)[a-z0-9-]*\b/.test(title);
   const componentInput = /\b(components?|connectors?|switches?|stepper motors?|wires?|cables?|clasps?|key rings?|fasteners?|screws?|capacitors?|relays?|sockets?|circuit boards?|pcb|chips?|integrated circuits?|ics?|modules?|displays?|processors?|servos?|dip(?:-\d+)?|(?:sn)?74[a-z0-9-]+)\b/.test(title);
   const productionUse = /\b[1-9][0-9]+\s*(?:pcs|pieces)|\b(?:diy|craft|jewelry|laser|engraving|sublimation|heat press|3d print|cnc|assembly|manufactur)/.test(title);
   const materialTaxonomy = /manufacturing components|electronic components and supplies|electrical equipment and components|arts and crafts equipment and accessories and supplies|sewing supplies/.test(taxonomy);
-  const materialInput = intrinsicMaterial || (componentInput && productionUse) || (materialTaxonomy && productionUse);
+  const materialInput = intrinsicMaterial || knownIntegratedCircuit || (componentInput && productionUse) || (materialTaxonomy && productionUse);
   const consumable = /office supplies|stationery|printer paper|copy paper|writing paper|shipping labels?|packing tape|envelopes?|toner|ink cartridges?|cleaning supplies|sanitizer|paper towels?|trash bags?/.test(corpus);
   const equipmentProduct = /\b(laminators?|printers?|monitors?|computers?|laptops?|cameras?|speakers?|drives?|usb hubs?|power tools?|hand tools?|machines?|lamps?)\b/.test(title);
   const equipment = equipmentProduct || /office equipment|office machines?|computer equipment|consumer electronics|audio and visual equipment|furniture|power tools?|hand tools?|machinery/.test(taxonomy);

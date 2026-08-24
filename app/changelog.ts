@@ -31,6 +31,7 @@ export const changelogReleases: readonly ChangelogRelease[] = [
         items: [
           "AliExpress reference numbers now update matching expenses instead of creating duplicate orders.",
           "Canceled AliExpress orders remain available for audit while staying excluded from business totals.",
+          "74LS and related 74-series logic ICs are classified as Raw materials even when a listing contains only one chip.",
         ],
       },
     ],

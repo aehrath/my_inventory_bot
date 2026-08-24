@@ -268,3 +268,16 @@ test("skips repeated AliExpress references pasted in the same import", () => {
   assert.equal(preview.ready.length, 1);
   assert.deepEqual(preview.duplicates, ["8211977349874907"]);
 });
+
+test("classifies 74-series logic ICs as raw materials even for a single chip", () => {
+  const text = [
+    "Completed", "Date: Aug 24, 2026", "Ref. Number: 8214000000000001", "Copy", "Details",
+    "IC Parts Store", "SN74LS00N quad NAND logic IC DIP-14", "$1.25 x1", "Total:$1.25",
+    "Completed", "Date: Aug 24, 2026", "Ref. Number: 8214000000000002", "Copy", "Details",
+    "IC Parts Store", "74HCT245 octal bus transceiver", "$2.50 x1", "Total:$2.50",
+  ].join("\n");
+  const preview = parseExpenseImportText(text, "aliexpress-orders.txt", []);
+  assert.equal(preview.ready.length, 2);
+  assert.equal(preview.ready[0].category, "Raw materials");
+  assert.equal(preview.ready[1].category, "Raw materials");
+});
