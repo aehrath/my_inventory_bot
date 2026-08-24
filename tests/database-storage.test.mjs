@@ -46,7 +46,7 @@ test("uses indexed relational D1 storage for business records", async () => {
   assert.match(schema, /data_commits_created_at_idx/);
   assert.match(historyMigration, /CREATE TABLE `data_commits`/);
   assert.match(historyRepository, /DATA_SNAPSHOTS/);
-  assert.match(historyRepository, /stockbot-data\/v\$\{STOCKBOT_DATA_FORMAT_VERSION\}/);
+  assert.match(historyRepository, /inventorybot-data\/v\$\{INVENTORYBOT_DATA_FORMAT_VERSION\}/);
   assert.match(schema, /sqliteTable\("import_documents"/);
   assert.match(schema, /sqliteTable\("import_document_links"/);
   assert.match(schema, /import_documents_semantic_hash_idx/);

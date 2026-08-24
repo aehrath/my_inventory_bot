@@ -1,7 +1,7 @@
 import { createDataCommit, getDataCommitFile, listDataCommits, updateDataCommitRemote } from "../../../db/data-history-repository";
 import { loadInventoryState } from "../../../db/inventory-repository";
-import { STOCKBOT_DATA_FORMAT_ID, STOCKBOT_DATA_FORMAT_VERSION, STOCKBOT_DATA_SCHEMA } from "../../data-format";
-import { pushStockBotDataToGitHub } from "../../github-data-push";
+import { INVENTORYBOT_DATA_FORMAT_ID, INVENTORYBOT_DATA_FORMAT_VERSION, INVENTORYBOT_DATA_SCHEMA } from "../../data-format";
+import { pushInventoryBotDataToGitHub } from "../../inventorybot-data-push";
 import type { CreateDataCommitRequest } from "../../data-history-types";
 import { listImportDocumentGitFiles, listImportDocuments } from "../../../db/import-document-repository";
 
@@ -19,7 +19,7 @@ export async function GET(request: Request) {
         return new Response(stored.json, {
           headers: {
             "content-type": "application/json; charset=utf-8",
-            "content-disposition": `attachment; filename="stockbot-data-v${stored.commit.formatVersion}-${stored.commit.id.slice(0, 12)}.json"`,
+            "content-disposition": `attachment; filename="inventorybot-data-v${stored.commit.formatVersion}-${stored.commit.id.slice(0, 12)}.json"`,
           },
         });
       }
@@ -28,7 +28,7 @@ export async function GET(request: Request) {
     const provenance = await listImportDocuments();
     return Response.json({
       commits: await listDataCommits(),
-      format: { id: STOCKBOT_DATA_FORMAT_ID, version: STOCKBOT_DATA_FORMAT_VERSION, schema: STOCKBOT_DATA_SCHEMA },
+      format: { id: INVENTORYBOT_DATA_FORMAT_ID, version: INVENTORYBOT_DATA_FORMAT_VERSION, schema: INVENTORYBOT_DATA_SCHEMA },
       storage: "d1+r2",
       documentCount: provenance.documents.length,
     });
@@ -47,14 +47,14 @@ export async function POST(request: Request) {
     if (body.remote) {
       try {
         const documentFiles = await listImportDocumentGitFiles();
-        const pushed = await pushStockBotDataToGitHub(body.remote, created.json, commit.message, documentFiles.map((file) => ({ path: file.path, content: file.content, contentType: file.document.contentType })));
+        const pushed = await pushInventoryBotDataToGitHub(body.remote, created.json, commit.message, documentFiles.map((file) => ({ path: file.path, content: file.content, contentType: file.document.contentType })));
         commit = await updateDataCommitRemote(commit.id, { status: "pushed", ...pushed }) ?? commit;
       } catch (error) {
         commit = await updateDataCommitRemote(commit.id, {
           status: "failed",
           repository: body.remote.repository.trim(),
           branch: body.remote.branch.trim() || "main",
-          path: body.remote.path.trim() || "stockbot-data.json",
+          path: body.remote.path.trim() || "inventorybot-data.json",
           error: error instanceof Error ? error.message : "The Git push failed.",
         }) ?? commit;
       }

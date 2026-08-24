@@ -37,7 +37,7 @@ export const changelogReleases: readonly ChangelogRelease[] = [
     version: "0.39.1",
     date: "August 22, 2026",
     title: "Reliable keyboard undo",
-    summary: "Command+Z and Ctrl+Z now reach StockBot after changing dropdowns, toggles, and other workspace controls.",
+    summary: "Command+Z and Ctrl+Z now reach InventoryBot after changing dropdowns, toggles, and other workspace controls.",
     sections: [
       {
         title: "Fixed",
@@ -53,7 +53,7 @@ export const changelogReleases: readonly ChangelogRelease[] = [
     version: "0.39.0",
     date: "August 22, 2026",
     title: "Workspace undo",
-    summary: "Recent inventory and accounting changes can now be safely rolled back from anywhere in StockBot.",
+    summary: "Recent inventory and accounting changes can now be safely rolled back from anywhere in InventoryBot.",
     sections: [
       {
         title: "Added",
@@ -104,7 +104,7 @@ export const changelogReleases: readonly ChangelogRelease[] = [
         items: [
           "Canceled orders remain linked to their imported source documents but are excluded from expenses, inventory, COGS, taxes, and all business totals.",
           "Amazon Business, Amazon consumer Order History, and generic imports recognize Canceled and Cancelled spellings, including existing saved status fields.",
-          "Advanced the complete Git and Data History snapshot format to stockbot-data v3 so cancellation status is always visible in full-field diffs.",
+          "Advanced the complete Git and Data History snapshot format to inventorybot-data v3 so cancellation status is always visible in full-field diffs.",
         ],
       },
     ],
@@ -185,7 +185,7 @@ export const changelogReleases: readonly ChangelogRelease[] = [
         title: "Fixed",
         items: [
           "Prevented the unused /ws/socket.io preview probe from repeatedly following vinext's trailing-slash redirect and terminating local startup.",
-          "Kept StockBot's application routes, HMR connection, and deployed behavior unchanged.",
+          "Kept InventoryBot's application routes, HMR connection, and deployed behavior unchanged.",
         ],
       },
     ],
@@ -202,7 +202,7 @@ export const changelogReleases: readonly ChangelogRelease[] = [
           "Added a durable imported-document archive with detected source names and UTC timestamps embedded in stored filenames.",
           "Added many-to-many source-document links for expenses, products, customers, inventory activity, and COGS entries.",
           "Added imported documents and provenance links to the complete Data History diff grid and GitHub pushes.",
-          "Introduced stockbot-data v2 with versioned document metadata and row-link datasets.",
+          "Introduced inventorybot-data v2 with versioned document metadata and row-link datasets.",
         ],
       },
       {
@@ -218,7 +218,7 @@ export const changelogReleases: readonly ChangelogRelease[] = [
     version: "0.34.0",
     date: "August 21, 2026",
     title: "Git data history",
-    summary: "StockBot data can now be committed, pushed to GitHub, and compared field by field.",
+    summary: "InventoryBot data can now be committed, pushed to GitHub, and compared field by field.",
     sections: [
       {
         title: "Added",
@@ -226,7 +226,7 @@ export const changelogReleases: readonly ChangelogRelease[] = [
           "Added immutable server-side data commits with complete downloadable JSON snapshots.",
           "Added optional GitHub pushes that create a real Git commit without storing the one-time access token.",
           "Added a full-field comparison grid covering populated, empty, changed, and unchanged values.",
-          "Introduced the independently versioned stockbot-data v1 format.",
+          "Introduced the independently versioned inventorybot-data v1 format.",
         ],
       },
     ],
@@ -436,7 +436,7 @@ export const changelogReleases: readonly ChangelogRelease[] = [
         title: "Changed",
         items: [
           "Personal expenses remain visible in the ledger but are excluded from business expenses, COGS, purchase inventory, taxable income, and Tax Center calculations.",
-          "Clear all now waits for the database to confirm the deletion and reloads StockBot into a fresh view.",
+          "Clear all now waits for the database to confirm the deletion and reloads InventoryBot into a fresh view.",
         ],
       },
     ],
@@ -445,7 +445,7 @@ export const changelogReleases: readonly ChangelogRelease[] = [
     version: "0.23.0",
     date: "July 28, 2026",
     title: "Lightweight relational storage",
-    summary: "StockBot now stores business records in indexed D1/SQLite tables with automatic migration from the legacy snapshot.",
+    summary: "InventoryBot now stores business records in indexed D1/SQLite tables with automatic migration from the legacy snapshot.",
     sections: [
       {
         title: "Changed",
@@ -459,7 +459,7 @@ export const changelogReleases: readonly ChangelogRelease[] = [
         title: "Added",
         items: [
           "Added database indexes for product SKUs, vendors, expense keys, purchase sources, categories, dates, customers, and imported invoice keys.",
-          "Added an automatic one-time migration that preserves existing StockBot data and the original snapshot as a safety fallback.",
+          "Added an automatic one-time migration that preserves existing InventoryBot data and the original snapshot as a safety fallback.",
         ],
       },
     ],
@@ -769,7 +769,7 @@ export const changelogReleases: readonly ChangelogRelease[] = [
     version: "0.7.0",
     date: "July 22, 2026",
     title: "True Wealth-style sortable tables",
-    summary: "Every StockBot table now shares MyTrueWealthBot’s crisp header treatment and sorting controls.",
+    summary: "Every InventoryBot table now shares MyTrueWealthBot’s crisp header treatment and sorting controls.",
     sections: [
       {
         title: "Added",
@@ -790,8 +790,8 @@ export const changelogReleases: readonly ChangelogRelease[] = [
   {
     version: "0.6.0",
     date: "July 22, 2026",
-    title: "A home for every StockBot update",
-    summary: "Release notes now live inside StockBot and in the project repository.",
+    title: "A home for every InventoryBot update",
+    summary: "Release notes now live inside InventoryBot and in the project repository.",
     sections: [
       {
         title: "Added",
@@ -845,7 +845,7 @@ export const changelogReleases: readonly ChangelogRelease[] = [
     version: "0.3.0",
     date: "July 22, 2026",
     title: "Amazon Business imports",
-    summary: "StockBot understands Amazon Business order exports as purchase records.",
+    summary: "InventoryBot understands Amazon Business order exports as purchase records.",
     sections: [
       {
         title: "Added",
@@ -884,7 +884,7 @@ export const changelogReleases: readonly ChangelogRelease[] = [
   {
     version: "0.1.0",
     date: "July 22, 2026",
-    title: "StockBot launches",
+    title: "InventoryBot launches",
     summary: "The first release brings inventory, profitability, sales tax, use tax, and backups together.",
     sections: [
       {

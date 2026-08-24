@@ -1,5 +1,5 @@
 {
-  "name": "stockbot-inventory",
+  "name": "inventorybot-inventory",
   "version": "0.40.0",
   "private": true,
   "engines": {

@@ -5,9 +5,9 @@ import test from "node:test";
 const root = new URL("../", import.meta.url);
 const read = (path) => readFile(new URL(path, root), "utf8");
 
-test("ships StockBot product metadata", async () => {
+test("ships InventoryBot product metadata", async () => {
   const layout = await read("app/layout.tsx");
-  assert.match(layout, /StockBot — Small Business Inventory/);
+  assert.match(layout, /InventoryBot — Small Business Inventory/);
   assert.match(layout, /Inventory, cost of goods, sales tax/);
   assert.doesNotMatch(layout, /Starter Project|codex-preview/);
 });
@@ -19,7 +19,7 @@ test("includes a visible release changelog", async () => {
     read("CHANGELOG.md"),
   ]);
   assert.match(page, /label: "Changelog"/);
-  assert.match(page, /What&apos;s new in StockBot/);
+  assert.match(page, /What&apos;s new in InventoryBot/);
   assert.match(page, /changelogReleases\.map/);
   assert.match(changelog, /version: "0\.35\.1"/);
   assert.match(changelog, /version: "0\.35\.0"/);
@@ -96,10 +96,10 @@ test("includes versioned Git data history with an all-field diff grid", async ()
   assert.match(history, /Empty values are labeled “Empty,” and unchanged values remain visible/);
   assert.match(history, /Previous value/);
   assert.match(history, /Current value/);
-  assert.match(history, /stockHeaderCell/);
-  assert.match(format, /STOCKBOT_DATA_FORMAT_VERSION = 3/);
-  assert.match(format, /diffStockBotDataFiles/);
-  assert.match(route, /pushStockBotDataToGitHub/);
+  assert.match(history, /inventoryHeaderCell/);
+  assert.match(format, /INVENTORYBOT_DATA_FORMAT_VERSION = 3/);
+  assert.match(format, /diffInventoryBotDataFiles/);
+  assert.match(route, /pushInventoryBotDataToGitHub/);
   assert.match(styles, /\.dataDiffGrid/);
   assert.match(hosting, /"r2": "DATA_SNAPSHOTS"/);
 });
@@ -163,7 +163,7 @@ test("uses True Wealth-style sortable headers on every table", async () => {
   assert.match(page, /changeExpenseSort/);
   assert.match(styles, /border-bottom:2px solid #2f7d32/);
   assert.match(styles, /background:#f5f5f5/);
-  assert.match(styles, /stockHeaderCell\.sorted\.asc/);
+  assert.match(styles, /inventoryHeaderCell\.sorted\.asc/);
 });
 
 test("includes preview, approval, protection, and audit controls", async () => {
@@ -384,21 +384,23 @@ test("offers separate clear-all and demo-reset workspace actions", async () => {
   assert.match(styles, /\.dangerActions/);
 });
 
-test("offers bounded workspace undo and redo with visible buttons and keyboard shortcuts", async () => {
-  const [page, styles, changelog] = await Promise.all([
+test("offers shared bounded workspace undo and redo with visible buttons and keyboard shortcuts", async () => {
+  const [page, styles, changelog, dataGrid] = await Promise.all([
     read("app/page.tsx"),
     read("app/globals.css"),
     read("app/changelog.ts"),
+    read("packages/workshop-data-grid/src/index.tsx"),
   ]);
   assert.match(page, /const MAX_UNDO_STEPS = 50/);
-  assert.match(page, /type AppStateHistory = \{ present: AppState; past: AppState\[\]; future: AppState\[\] \}/);
-  assert.match(page, /past: \[\.\.\.current\.past\.slice\(-\(MAX_UNDO_STEPS - 1\)\), current\.present\], future: \[\]/);
-  assert.match(page, /const undo = useCallback/);
-  assert.match(page, /present: current\.past\[current\.past\.length - 1\]/);
-  assert.match(page, /future: \[current\.present, \.\.\.current\.future\]\.slice\(0, MAX_UNDO_STEPS\)/);
-  assert.match(page, /const redo = useCallback/);
-  assert.match(page, /present: current\.future\[0\]/);
-  assert.match(page, /future: current\.future\.slice\(1\)/);
+  assert.match(page, /useUndoRedoState\(seed, MAX_UNDO_STEPS\)/);
+  assert.match(dataGrid, /useState\(\{ present: initial, past: \[\] as T\[\], future: \[\] as T\[\] \}\)/);
+  assert.match(dataGrid, /past: \[\.\.\.current\.past\.slice\(-\(maximumSteps - 1\)\), current\.present\]/);
+  assert.match(dataGrid, /const undo = useCallback/);
+  assert.match(dataGrid, /present: current\.past\[current\.past\.length - 1\]/);
+  assert.match(dataGrid, /future: \[current\.present, \.\.\.current\.future\]\.slice\(0, maximumSteps\)/);
+  assert.match(dataGrid, /const redo = useCallback/);
+  assert.match(dataGrid, /present: current\.future\[0\]/);
+  assert.match(dataGrid, /future: current\.future\.slice\(1\)/);
   assert.match(page, /replaceState\(normalizeState\(payload\.state\)\)/);
   assert.match(page, /className="secondary undoButton" disabled=\{!canUndo\}/);
   assert.match(page, /className="secondary redoButton" disabled=\{!canRedo\}/);

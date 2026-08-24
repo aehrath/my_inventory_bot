@@ -1,15 +1,15 @@
 import type { ImportDocumentIndex } from "./import-documents";
 
-export const STOCKBOT_DATA_FORMAT_ID = "stockbot-data" as const;
-export const STOCKBOT_DATA_FORMAT_VERSION = 3 as const;
-export const STOCKBOT_DATA_SCHEMA = "https://stockbot-inventory.aehrath.chatgpt.site/data-format/v3" as const;
+export const INVENTORYBOT_DATA_FORMAT_ID = "inventorybot-data" as const;
+export const INVENTORYBOT_DATA_FORMAT_VERSION = 3 as const;
+export const INVENTORYBOT_DATA_SCHEMA = "https://inventorybot-inventory.aehrath.chatgpt.site/data-format/v3" as const;
 
 type JsonScalar = string | number | boolean | null;
 type JsonValue = JsonScalar | JsonValue[] | { [key: string]: JsonValue };
 type JsonRecord = { [key: string]: JsonValue };
 type SourceRecord = Record<string, unknown>;
 
-export const stockBotDatasetLabels = {
+export const inventoryBotDatasetLabels = {
   products: "Products",
   movements: "Activity",
   expenses: "Expenses",
@@ -27,18 +27,18 @@ export const stockBotDatasetLabels = {
   importDocumentLinks: "Document provenance links",
 } as const;
 
-export type StockBotDataset = keyof typeof stockBotDatasetLabels;
-export type StockBotDataFile = {
-  $schema: typeof STOCKBOT_DATA_SCHEMA;
-  format: typeof STOCKBOT_DATA_FORMAT_ID;
-  formatVersion: typeof STOCKBOT_DATA_FORMAT_VERSION;
+export type InventoryBotDataset = keyof typeof inventoryBotDatasetLabels;
+export type InventoryBotDataFile = {
+  $schema: typeof INVENTORYBOT_DATA_SCHEMA;
+  format: typeof INVENTORYBOT_DATA_FORMAT_ID;
+  formatVersion: typeof INVENTORYBOT_DATA_FORMAT_VERSION;
   applicationStateVersion: number;
-  data: Record<StockBotDataset, JsonRecord[]>;
+  data: Record<InventoryBotDataset, JsonRecord[]>;
 };
 export type DataDiffChange = "added" | "removed" | "modified" | "unchanged";
 export type DataDiffRow = {
   id: string;
-  dataset: StockBotDataset;
+  dataset: InventoryBotDataset;
   datasetLabel: string;
   recordKey: string;
   recordLabel: string;
@@ -77,7 +77,7 @@ const record = (source: SourceRecord, fields: readonly string[], defaults: Recor
   Object.fromEntries(fields.map((field) => [field, source[field] === undefined ? (defaults[field] ?? null) : jsonValue(source[field])]));
 const sorted = (records: JsonRecord[], key: string) => [...records].sort((left, right) => String(left[key] ?? "").localeCompare(String(right[key] ?? ""), undefined, { numeric: true, sensitivity: "base" }));
 
-export function createStockBotDataFile(rawState: unknown, provenance?: ImportDocumentIndex): StockBotDataFile {
+export function createInventoryBotDataFile(rawState: unknown, provenance?: ImportDocumentIndex): InventoryBotDataFile {
   const state = sourceRecord(rawState);
   const settings = sourceRecord(state.settings);
   const importedFieldNames = Array.from(new Set(sourceArray(state.expenses).flatMap((expense) => Object.keys(sourceRecord(expense.fields))))).sort((left, right) => left.localeCompare(right));
@@ -90,9 +90,9 @@ export function createStockBotDataFile(rawState: unknown, provenance?: ImportDoc
   const positioned = (value: unknown) => (Array.isArray(value) ? value : []).map((key, position) => ({ position, key: jsonValue(key) }));
 
   return {
-    $schema: STOCKBOT_DATA_SCHEMA,
-    format: STOCKBOT_DATA_FORMAT_ID,
-    formatVersion: STOCKBOT_DATA_FORMAT_VERSION,
+    $schema: INVENTORYBOT_DATA_SCHEMA,
+    format: INVENTORYBOT_DATA_FORMAT_ID,
+    formatVersion: INVENTORYBOT_DATA_FORMAT_VERSION,
     applicationStateVersion: Number(state.version) || 0,
     data: {
       products: sorted(sourceArray(state.products).map((item) => record(item, productFields, { quantity: 0, unitCost: 0, salePrice: 0, reorderPoint: 0, salesTaxPaid: false })), "id"),
@@ -114,11 +114,11 @@ export function createStockBotDataFile(rawState: unknown, provenance?: ImportDoc
   };
 }
 
-export function stableStockBotDataJson(dataFile: StockBotDataFile) {
+export function stableInventoryBotDataJson(dataFile: InventoryBotDataFile) {
   return `${JSON.stringify(dataFile, null, 2)}\n`;
 }
 
-const recordKey = (dataset: StockBotDataset, item: JsonRecord, index: number) => {
+const recordKey = (dataset: InventoryBotDataset, item: JsonRecord, index: number) => {
   if (dataset === "products") return String(item.id ?? item.sku ?? index);
   if (dataset === "expenses" || dataset === "customers") return String(item.id ?? item.externalKey ?? index);
   if (dataset === "movements" || dataset === "localTaxRules" || dataset === "addressTaxRates" || dataset === "taxUpdateHistory") return String(item.id ?? index);
@@ -129,7 +129,7 @@ const recordKey = (dataset: StockBotDataset, item: JsonRecord, index: number) =>
   if (dataset === "importDocumentLinks") return `${item.documentId ?? ""}:${item.entityType ?? ""}:${item.entityId ?? index}`;
   return String(item.id ?? index);
 };
-const recordLabel = (dataset: StockBotDataset, item: JsonRecord, key: string) => {
+const recordLabel = (dataset: InventoryBotDataset, item: JsonRecord, key: string) => {
   const candidate = dataset === "products" ? item.name : dataset === "expenses" ? item.externalKey : dataset === "customers" ? item.name : dataset === "movements" ? (item.sourceKey ?? item.productName) : dataset === "stateTaxes" ? item.state : dataset === "localTaxRules" ? item.name : dataset === "customExpenseCategories" || dataset === "expenseCategoryOverrides" ? item.name : dataset === "expenseColumnOrder" || dataset === "expenseVisibleColumns" ? item.key : dataset === "importDocuments" ? item.storedName : dataset === "importDocumentLinks" ? `${item.entityType}:${item.entityId}` : item.id;
   return String(candidate ?? key);
 };
@@ -149,9 +149,9 @@ const flattened = (value: JsonValue, prefix = ""): Map<string, JsonValue> => {
 };
 const equalJson = (left: JsonValue | undefined, right: JsonValue | undefined) => JSON.stringify(left) === JSON.stringify(right);
 
-export function diffStockBotDataFiles(previous: StockBotDataFile | null, current: StockBotDataFile): DataDiffRow[] {
+export function diffInventoryBotDataFiles(previous: InventoryBotDataFile | null, current: InventoryBotDataFile): DataDiffRow[] {
   const rows: DataDiffRow[] = [];
-  for (const dataset of Object.keys(stockBotDatasetLabels) as StockBotDataset[]) {
+  for (const dataset of Object.keys(inventoryBotDatasetLabels) as InventoryBotDataset[]) {
     const previousRecords = new Map((previous?.data[dataset] ?? []).map((item, index) => [recordKey(dataset, item, index), item]));
     const currentRecords = new Map((current.data[dataset] ?? []).map((item, index) => [recordKey(dataset, item, index), item]));
     const datasetFields = Array.from(new Set(
@@ -170,7 +170,7 @@ export function diffStockBotDataFiles(previous: StockBotDataFile | null, current
         rows.push({
           id: `${dataset}:${key}:${field}`,
           dataset,
-          datasetLabel: stockBotDatasetLabels[dataset],
+          datasetLabel: inventoryBotDatasetLabels[dataset],
           recordKey: key,
           recordLabel: recordLabel(dataset, after ?? before ?? {}, key),
           field,

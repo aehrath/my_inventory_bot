@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
-import { createStockBotDataFile, diffStockBotDataFiles, stableStockBotDataJson, STOCKBOT_DATA_FORMAT_VERSION } from "../app/data-format";
-import type { StockBotDataFile } from "../app/data-format";
+import { createInventoryBotDataFile, diffInventoryBotDataFiles, stableInventoryBotDataJson, INVENTORYBOT_DATA_FORMAT_VERSION } from "../app/data-format";
+import type { InventoryBotDataFile } from "../app/data-format";
 import type { DataCommitSummary } from "../app/data-history-types";
 import { inventoryDatabase } from "./inventory-repository";
 import { listImportDocuments } from "./import-document-repository";
@@ -73,29 +73,29 @@ export async function getDataCommit(id: string) {
   return row ? summary(row) : null;
 }
 
-export async function getDataCommitFile(id: string): Promise<{ commit: DataCommitSummary; dataFile: StockBotDataFile; json: string } | null> {
+export async function getDataCommitFile(id: string): Promise<{ commit: DataCommitSummary; dataFile: InventoryBotDataFile; json: string } | null> {
   const db = await inventoryDatabase();
   const row = await db.prepare("SELECT * FROM data_commits WHERE id = ?").bind(id).first() as DataCommitRow | null;
   if (!row) return null;
   const object = await snapshotBucket().get(row.snapshot_key);
   if (!object) throw new Error("The snapshot file for this commit is missing.");
   const json = await object.text();
-  const dataFile = JSON.parse(json) as StockBotDataFile;
+  const dataFile = JSON.parse(json) as InventoryBotDataFile;
   return { commit: summary(row), dataFile, json };
 }
 
 export async function createDataCommit(rawState: unknown, requestedMessage: string) {
   const db = await inventoryDatabase();
   const latestRow = await db.prepare("SELECT * FROM data_commits ORDER BY created_at DESC, id DESC LIMIT 1").first() as DataCommitRow | null;
-  const dataFile = createStockBotDataFile(rawState, await listImportDocuments());
-  const json = stableStockBotDataJson(dataFile);
+  const dataFile = createInventoryBotDataFile(rawState, await listImportDocuments());
+  const json = stableInventoryBotDataJson(dataFile);
   const contentHash = await sha256(json);
   const createdAt = new Date().toISOString();
-  const message = requestedMessage.trim().slice(0, 160) || "Update StockBot data";
+  const message = requestedMessage.trim().slice(0, 160) || "Update InventoryBot data";
   const id = await sha256(`${latestRow?.id ?? "root"}\n${contentHash}\n${createdAt}\n${message}`);
-  const snapshotKey = `stockbot-data/v${STOCKBOT_DATA_FORMAT_VERSION}/${id}.json`;
+  const snapshotKey = `inventorybot-data/v${INVENTORYBOT_DATA_FORMAT_VERSION}/${id}.json`;
   const previous = latestRow ? await getDataCommitFile(latestRow.id) : null;
-  const diffRows = diffStockBotDataFiles(previous?.dataFile ?? null, dataFile);
+  const diffRows = diffInventoryBotDataFiles(previous?.dataFile ?? null, dataFile);
   const recordCount = Object.values(dataFile.data).reduce((total, records) => total + records.length, 0);
   const changedFieldCount = diffRows.filter((row) => row.change !== "unchanged").length;
 

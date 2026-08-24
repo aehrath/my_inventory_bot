@@ -10,7 +10,7 @@ const safePathPattern = /^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[A-Za-z0-9._/ -]+\.jso
 export function validateGitHubTarget(target: GitHubPushTarget) {
   const repository = target.repository.trim();
   const branch = target.branch.trim() || "main";
-  const path = target.path.trim() || "stockbot-data.json";
+  const path = target.path.trim() || "inventorybot-data.json";
   if (!repositoryPattern.test(repository)) throw new Error("Use a GitHub repository in owner/repository format.");
   if (!branchPattern.test(branch) || branch.includes("..") || branch.startsWith("/") || branch.endsWith("/")) throw new Error("The Git branch name is not valid.");
   if (!safePathPattern.test(path)) throw new Error("The Git data path must be a safe relative .json path.");
@@ -25,7 +25,7 @@ const githubRequest = async (repository: string, token: string, path: string, in
       accept: "application/vnd.github+json",
       authorization: `Bearer ${token}`,
       "content-type": "application/json",
-      "user-agent": "StockBot-Data-History",
+      "user-agent": "InventoryBot-Data-History",
       "x-github-api-version": "2022-11-28",
       ...init?.headers,
     },
@@ -52,7 +52,7 @@ const assetGitPath = (dataPath: string, assetPath: string) => {
   return `${parent}${assetPath}`;
 };
 
-export async function pushStockBotDataToGitHub(rawTarget: GitHubPushTarget, content: string, message: string, assets: GitHubPushAsset[] = []) {
+export async function pushInventoryBotDataToGitHub(rawTarget: GitHubPushTarget, content: string, message: string, assets: GitHubPushAsset[] = []) {
   const target = validateGitHubTarget(rawTarget);
   const refName = `heads/${target.branch}`.split("/").map(encodeURIComponent).join("/");
   const reference = await githubRequest(target.repository, target.token, `/git/ref/${refName}`);

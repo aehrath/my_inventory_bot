@@ -1,6 +1,6 @@
-# StockBot Inventory
+# InventoryBot Inventory
 
-StockBot is a TypeScript inventory and tax workspace for a small business. It
+InventoryBot is a TypeScript inventory and tax workspace for a small business. It
 uses Cloudflare D1, a serverless SQLite database, with indexed relational tables
 for products, activity, expenses, purchase sources, and customers. Compact
 nested settings remain JSON where extra tables would add overhead. JSON
@@ -13,14 +13,14 @@ the rows that changed.
 ## Data history and Git
 
 The Data History workspace stores immutable commit metadata in D1 and complete
-JSON snapshots in R2. The current `stockbot-data` format is version 2 and adds
+JSON snapshots in R2. The current `inventorybot-data` format is version 2 and adds
 imported-document metadata plus row-level provenance links. The comparison grid
 expands every known record field, including empty and unchanged values.
 
 Snapshots can optionally be checked into a GitHub repository as a real Git
 commit. The repository, branch, and JSON path are remembered as device-local
 preferences. A fine-grained GitHub token is used for one push only, is cleared
-from the interface immediately afterward, and is never stored in StockBot data,
+from the interface immediately afterward, and is never stored in InventoryBot data,
 history, exports, or server settings. Git pushes include the canonical JSON and
 the full collection of archived import documents under `imported-documents/`.
 
@@ -32,14 +32,14 @@ the UTC import time in `yyyymmddhhmmss` form and a detected source such as
 `amazon` or `aliexpress`. Products, customers, activity, COGS, and expenses show
 their linked source documents as downloadable links.
 
-Before a copy is stored, StockBot computes a semantic hash. JSON formatting and
+Before a copy is stored, InventoryBot computes a semantic hash. JSON formatting and
 CSV/text whitespace do not create duplicate files. A matching re-import reuses
 the existing archive object, merges any new row links, updates its last-imported
 time and import count, and explicitly tells the user that the document existed.
 
 ## Expense imports
 
-The Tax Center includes a categorized expense ledger and accepts CSV or JSON records. Every imported row must provide a stable unique key, such as an Amazon order ID, invoice ID, receipt ID, or bank transaction ID. StockBot normalizes key casing and whitespace, rejects keys already in the database, rejects duplicates within the same file, previews the result, and performs the duplicate check again when the user applies the import.
+The Tax Center includes a categorized expense ledger and accepts CSV or JSON records. Every imported row must provide a stable unique key, such as an Amazon order ID, invoice ID, receipt ID, or bank transaction ID. InventoryBot normalizes key casing and whitespace, rejects keys already in the database, rejects duplicates within the same file, previews the result, and performs the duplicate check again when the user applies the import.
 
 Supported CSV headers include:
 
@@ -51,10 +51,10 @@ category, personal, personal_use, note, description
 
 A ready-to-fill CSV template can be downloaded from the expense ledger. JSON imports can be an array of expense objects or an object containing an `expenses` array.
 
-Amazon Business order-history exports are detected automatically. Because those files can repeat one order across several item rows, StockBot groups rows by `Order ID`, imports one expense per order, uses `Order Net Total` once, carries over seller and title details, and derives an initial office-equipment or office-supplies category when the Amazon category data supports it.
+Amazon Business order-history exports are detected automatically. Because those files can repeat one order across several item rows, InventoryBot groups rows by `Order ID`, imports one expense per order, uses `Order Net Total` once, carries over seller and title details, and derives an initial office-equipment or office-supplies category when the Amazon category data supports it.
 
 During import review, assign a purchase source key such as `Amazon Business`
-or `Amazon Personal`. StockBot suggests the Amazon Account Group when it is
+or `Amazon Personal`. InventoryBot suggests the Amazon Account Group when it is
 available and saves the chosen source on every record for sorting and filtering.
 
 Set `personal` (or `personal_use`) to `true`, `yes`, or `1` to retain a
@@ -105,7 +105,7 @@ AVALARA_LICENSE_KEY=your-license-key
 AVALARA_ENVIRONMENT=production
 ```
 
-Use `sandbox` for an Avalara sandbox account. Credentials stay on the server and are never returned to the browser or included in an exported StockBot backup.
+Use `sandbox` for an Avalara sandbox account. Credentials stay on the server and are never returned to the browser or included in an exported InventoryBot backup.
 
 Rate checks are previews. Manually edited state and local rates are protected, and selected address updates are saved with their source, check time, and audit entry. Recorded sales keep the rate used at the time of the transaction.
 

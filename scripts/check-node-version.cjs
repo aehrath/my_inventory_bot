@@ -9,7 +9,7 @@ const supported =
 
 if (!supported) {
   console.error(`
-StockBot requires Node.js 22.13.0 or newer.
+InventoryBot requires Node.js 22.13.0 or newer.
 This terminal is running Node.js ${process.versions.node}.
 
 Laravel Herd:

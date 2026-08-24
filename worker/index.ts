@@ -30,7 +30,7 @@ const worker = {
     const url = new URL(request.url);
 
     // The local preview controller probes this Socket.IO endpoint even though
-    // StockBot does not use Socket.IO. Let it fail directly instead of passing
+    // InventoryBot does not use Socket.IO. Let it fail directly instead of passing
     // through vinext's trailing-slash redirect, which a WebSocket client will
     // otherwise follow in a loop until it terminates the development server.
     if (url.pathname === "/ws/socket.io" || url.pathname === "/ws/socket.io/") {

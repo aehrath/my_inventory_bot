@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to StockBot are documented here.
+All notable changes to InventoryBot are documented here.
 
 ## Unreleased
 
@@ -54,7 +54,7 @@ All notable changes to StockBot are documented here.
 - Canceled orders are retained with their imported document provenance for audit history but excluded from expense, inventory, COGS, tax, and business totals.
 - Amazon Business, Amazon consumer Order History, and generic imports now recognize both **Canceled** and **Cancelled** status spellings.
 - Existing imported records infer cancellation from saved Order Status, Shipment Status, or Status fields when the app loads.
-- Introduced **stockbot-data v3** so the full data grid and Git snapshots expose the normalized canceled field.
+- Introduced **inventorybot-data v3** so the full data grid and Git snapshots expose the normalized canceled field.
 
 ## 0.37.1 - 2026-08-22
 
@@ -106,7 +106,7 @@ All notable changes to StockBot are documented here.
 - Added a durable imported-document archive with detected source names and UTC timestamps embedded in stored filenames.
 - Added many-to-many source-document links for expenses, products, customers, inventory activity, and COGS entries.
 - Added imported documents and provenance links to the complete Data History diff grid and GitHub pushes.
-- Introduced the independently versioned **stockbot-data v2** format.
+- Introduced the independently versioned **inventorybot-data v2** format.
 
 ### Changed
 
@@ -120,7 +120,7 @@ All notable changes to StockBot are documented here.
 - Added immutable server-side data commits with complete downloadable JSON snapshots.
 - Added optional GitHub pushes that create a real Git commit without storing the one-time token.
 - Added a full-field version comparison grid that includes populated, empty, changed, and unchanged values.
-- Introduced the independently versioned **stockbot-data v1** format.
+- Introduced the independently versioned **inventorybot-data v1** format.
 
 ## 0.33.0 - 2026-07-28
 
@@ -245,12 +245,12 @@ All notable changes to StockBot are documented here.
 
 - Moved products, activity, expenses, purchase sources, and customers from one state snapshot into dedicated D1/SQLite tables.
 - Kept compact nested settings and raw import details as JSON only where that is lighter than additional relational tables.
-- Changed saving to update only records whose contents changed and to delete only records removed from StockBot.
+- Changed saving to update only records whose contents changed and to delete only records removed from InventoryBot.
 
 ### Added
 
 - Added database indexes for product SKUs, vendors, expense keys, purchase sources, categories, dates, customers, and imported invoice keys.
-- Added an automatic one-time migration that preserves existing StockBot data and retains the original snapshot as a migration safety fallback.
+- Added an automatic one-time migration that preserves existing InventoryBot data and retains the original snapshot as a migration safety fallback.
 
 ## 0.22.0 - 2026-07-28
 
@@ -447,7 +447,7 @@ All notable changes to StockBot are documented here.
 
 ### Added
 
-- Added a dedicated Changelog section to the main StockBot navigation.
+- Added a dedicated Changelog section to the main InventoryBot navigation.
 - Added this maintained project changelog for development and release history.
 
 ## 0.5.0 - 2026-07-22
@@ -506,4 +506,4 @@ All notable changes to StockBot are documented here.
 - Added customer destination-based sales tax with opt-in state collection settings.
 - Added address-based personal use tax, state and local tax layers, and source-backed rate updates.
 - Added a tax filing center plus local server storage with JSON import and export.
-- Added the StockBot robot and visual design.
+- Added the InventoryBot robot and visual design.
