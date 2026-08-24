@@ -14,7 +14,7 @@ import type { ImportDocumentIndex, ImportDocumentLinkInput } from "./import-docu
 import { SourceDocumentDateCell, SourceDocumentSellerCell, SourceDocumentsCell } from "./source-documents";
 import { defaultStateTaxSettings, stateName, stateTaxDefaults } from "./tax-data";
 import type { TaxAddress, TaxRateLookup, TaxRateLookupResponse, TaxSourceStatus } from "./tax-rate-types";
-import { compareGridValues, moveGridColumn, useUndoRedoState } from "@aehrath/bot-ui";
+import { compareGridValues, moveGridColumn, useDataGridSelection, useUndoRedoState } from "@aehrath/bot-ui";
 
 type View = "dashboard" | "products" | "customers" | "activity" | "cogs" | "expenses" | "taxes" | "history" | "data" | "changelog";
 type MovementType = "purchase" | "sale" | "production_use" | "personal_use" | "adjustment";
@@ -793,11 +793,9 @@ function Expenses({ state, setState, documents, onDocumentsChanged, onExpense, o
   const [columnQuery, setColumnQuery] = useState("");
   const [draggedExpenseColumn, setDraggedExpenseColumn] = useState<string | null>(null);
   const [expenseSort, setExpenseSort] = useState<{ key: string; direction: SortDirection }>({ key: "date", direction: "desc" });
-  const [selectedExpenseIds, setSelectedExpenseIds] = useState<string[]>([]);
   const [activeAsinPreview, setActiveAsinPreview] = useState<string | null>(null);
   const [asinPreviews, setAsinPreviews] = useState<Record<string, AsinPreviewState>>({});
   const expenseColumnWasDragged = useRef(false);
-  const expenseSelectionAnchor = useRef<string | null>(null);
   const expenseFileRef = useRef<HTMLInputElement>(null);
   const asinPreviewRequests = useRef(new Set<string>());
   const availableExpenseCategoryDefinitions = expenseCategoryDefinitionsFor(state.settings);
@@ -863,8 +861,10 @@ function Expenses({ state, setState, documents, onDocumentsChanged, onExpense, o
     const comparison = compareSortValues(expenseSortValue(left), expenseSortValue(right), expenseSort.direction);
     return comparison || left.externalKey.localeCompare(right.externalKey);
   });
-  const selectedExpenseSet = new Set(selectedExpenseIds);
   const visibleExpenseIds = visibleExpenses.map((expense) => expense.id);
+  const expenseSelection = useDataGridSelection(visibleExpenseIds);
+  const selectedExpenseIds = expenseSelection.selectedIds;
+  const selectedExpenseSet = expenseSelection.selectedSet;
   const businessExpenses = selectedExpenses.filter((expense) => !expense.personal && !expense.canceled);
   const personalExpenses = selectedExpenses.filter((expense) => expense.personal && !expense.canceled);
   const canceledExpenses = selectedExpenses.filter((expense) => expense.canceled);
@@ -1077,32 +1077,16 @@ function Expenses({ state, setState, documents, onDocumentsChanged, onExpense, o
     if (expenseCategory === name) setExpenseCategory(fallback);
     setCategoryNameDrafts({});
   };
-  const selectExpenseRow = (id: string, extendRange: boolean) => {
-    const anchorIndex = expenseSelectionAnchor.current ? visibleExpenseIds.indexOf(expenseSelectionAnchor.current) : -1;
-    const targetIndex = visibleExpenseIds.indexOf(id);
-    if (extendRange && anchorIndex >= 0 && targetIndex >= 0) {
-      const start = Math.min(anchorIndex, targetIndex);
-      const end = Math.max(anchorIndex, targetIndex);
-      const range = visibleExpenseIds.slice(start, end + 1);
-      setSelectedExpenseIds((current) => Array.from(new Set([...current, ...range])));
-    } else {
-      setSelectedExpenseIds((current) => current.includes(id) ? current.filter((expenseId) => expenseId !== id) : [...current, id]);
-    }
-    expenseSelectionAnchor.current = id;
-  };
-  const clearExpenseSelection = () => {
-    setSelectedExpenseIds([]);
-    expenseSelectionAnchor.current = null;
-  };
+  const selectExpenseRow = expenseSelection.toggle;
+  const clearExpenseSelection = expenseSelection.clear;
   const deleteSelectedExpenses = useCallback(() => {
     if (!selectedExpenseIds.length) return;
     const count = selectedExpenseIds.length;
     if (!confirm(`Delete ${count} selected expense record${count === 1 ? "" : "s"}? This cannot be undone.`)) return;
     const selected = new Set(selectedExpenseIds);
     setState((current) => ({ ...current, expenses: current.expenses.filter((expense) => !selected.has(expense.id)) }));
-    setSelectedExpenseIds([]);
-    expenseSelectionAnchor.current = null;
-  }, [selectedExpenseIds, setState]);
+    expenseSelection.clear();
+  }, [selectedExpenseIds, setState, expenseSelection.clear]);
   useEffect(() => {
     const handleDeleteKey = (event: KeyboardEvent) => {
       if ((event.key !== "Delete" && event.key !== "Backspace") || !selectedExpenseIds.length) return;
@@ -1195,7 +1179,7 @@ function Expenses({ state, setState, documents, onDocumentsChanged, onExpense, o
       {columnConfigOpen && <div className="expenseColumnConfig"><div className="expenseColumnConfigHeading"><div><strong>Display columns</strong><small>Check columns to show. Drag visible table headers to reorder them.</small></div><div><button type="button" onClick={selectAllExpenseColumns}>Select all</button><button type="button" onClick={resetExpenseColumns}>Reset</button></div></div><label className="search columnSearch"><span>{icons.search}</span><input aria-label="Search expense columns" placeholder="Find a column" value={columnQuery} onChange={(event) => setColumnQuery(event.target.value)} /></label><div className="expenseColumnChecklist">{columnOptions.map((column) => { const checked = visibleColumnKeys.includes(column.key); return <label className="expenseColumnOption" key={column.key}><input type="checkbox" checked={checked} disabled={checked && visibleColumnKeys.length === 1} onChange={() => toggleExpenseColumn(column.key)} /><span><strong>{column.label}</strong><small>{column.field ? "Imported CSV field" : "InventoryBot field"}</small></span></label>; })}</div></div>}
       <div className="expenseToolbar"><label className="search"><span>{icons.search}</span><input aria-label="Search expenses" placeholder="Search any displayed or imported field" value={expenseQuery} onChange={(event) => setExpenseQuery(event.target.value)} /></label><label>Year<select aria-label="Expense year" value={expenseYear} onChange={(event) => setExpenseYear(event.target.value)}><option value="All">All years</option>{years.map((year) => <option value={year} key={year}>{year}</option>)}</select></label><label>Accounting class<select aria-label="Expense accounting class" value={expenseAccountingClass} onChange={(event) => setExpenseAccountingClass(event.target.value as ExpenseAccountingClass | "All")}><option>All</option>{expenseAccountingClasses.map((accountingClass) => <option key={accountingClass}>{accountingClass}</option>)}</select></label><label>Cost timing<select aria-label="Expense cost timing" value={expenseCostTiming} onChange={(event) => setExpenseCostTiming(event.target.value as ExpenseCostTiming | "All")}><option>All</option>{expenseCostTimings.map((costTiming) => <option key={costTiming}>{costTiming}</option>)}</select></label><label>Category<select value={expenseCategory} onChange={(event) => setExpenseCategory(event.target.value as ExpenseCategory | "All")}><option>All</option>{availableExpenseCategories.map((category) => <option key={category}>{category}</option>)}</select></label><label>Use<select aria-label="Expense business or personal use" value={expenseUse} onChange={(event) => setExpenseUse(event.target.value as "All" | "Business" | "Personal")}><option>All</option><option>Business</option><option>Personal</option></select></label><label>Purchase source<select aria-label="Expense purchase source" value={expensePurchaseSource} onChange={(event) => setExpensePurchaseSource(event.target.value)}><option value="All">All sources</option>{purchaseSources.map((source) => <option value={source} key={source}>{source}</option>)}{hasUnassignedSource && <option value="__unassigned">Unassigned</option>}</select></label><label className="showCanceledOrders"><input type="checkbox" checked={showCanceledOrders} onChange={(event) => setShowCanceledOrders(event.target.checked)} /><span>Show canceled orders</span></label></div>
       <div className={`expenseSelectionBar ${selectedExpenseIds.length ? "active" : ""}`}><span><strong>{selectedExpenseIds.length} selected</strong><small>Click rows to toggle selection. Shift-click selects a range. Category and Personal changes apply to the entire selection.</small></span><button className="danger" disabled={!selectedExpenseIds.length} onClick={deleteSelectedExpenses}>Delete selected</button><button className="textButton" disabled={!selectedExpenseIds.length} onClick={clearExpenseSelection}>Clear selection</button></div>
-      <div className="expenseTable"><div className="expenseDataGrid" style={{ "--expense-columns": expenseGridColumns } as CSSProperties}><div className="expenseHead">{visibleColumns.map((column) => <button role="columnheader" aria-sort={expenseSort.key === column.key ? (expenseSort.direction === "asc" ? "ascending" : "descending") : "none"} type="button" key={column.key} className={`inventoryHeaderCell draggable ${expenseSort.key === column.key ? `sorted ${expenseSort.direction}` : ""} ${draggedExpenseColumn === column.key ? "dragging" : ""}`} onPointerDown={() => { expenseColumnWasDragged.current = false; setDraggedExpenseColumn(column.key); }} onPointerEnter={(event) => { if (draggedExpenseColumn && event.buttons === 1) moveExpenseColumn(draggedExpenseColumn, column.key); }} onPointerUp={() => setDraggedExpenseColumn(null)} onPointerCancel={() => setDraggedExpenseColumn(null)} onClick={() => { if (expenseColumnWasDragged.current) { expenseColumnWasDragged.current = false; return; } changeExpenseSort(column.key); }} title="Click to sort; drag to reorder"><span>{column.label}</span><span className="sortPair" aria-hidden="true"><i /><b /></span></button>)}<span className="inventoryHeaderSpacer" /></div>{visibleExpenses.map((expense) => <div role="row" tabIndex={0} aria-selected={selectedExpenseSet.has(expense.id)} aria-label={`Expense ${expense.externalKey}`} className={`expenseRow ${expense.personal ? "personal" : ""} ${expense.canceled ? "canceled" : ""} ${selectedExpenseSet.has(expense.id) ? "selected" : ""}`} key={expense.id} onClick={(event) => selectExpenseRow(expense.id, event.shiftKey)} onKeyDown={(event) => { if (event.target !== event.currentTarget || (event.key !== "Enter" && event.key !== " ")) return; event.preventDefault(); selectExpenseRow(expense.id, event.shiftKey); }}>{visibleColumns.map((column) => <span key={column.key}>{expenseCell(expense, column)}</span>)}<button aria-label={`Delete expense ${expense.externalKey}`} onClick={(event) => { event.stopPropagation(); if (!confirm(`Delete expense ${expense.externalKey}?`)) return; setSelectedExpenseIds((current) => current.filter((id) => id !== expense.id)); onDeleteExpense(expense.id); }}>×</button></div>)}{!visibleExpenses.length && <Empty text="No expense records match this view." />}</div></div>
+      <div className="expenseTable"><div className="expenseDataGrid" style={{ "--expense-columns": expenseGridColumns } as CSSProperties}><div className="expenseHead">{visibleColumns.map((column) => <button role="columnheader" aria-sort={expenseSort.key === column.key ? (expenseSort.direction === "asc" ? "ascending" : "descending") : "none"} type="button" key={column.key} className={`inventoryHeaderCell draggable ${expenseSort.key === column.key ? `sorted ${expenseSort.direction}` : ""} ${draggedExpenseColumn === column.key ? "dragging" : ""}`} onPointerDown={() => { expenseColumnWasDragged.current = false; setDraggedExpenseColumn(column.key); }} onPointerEnter={(event) => { if (draggedExpenseColumn && event.buttons === 1) moveExpenseColumn(draggedExpenseColumn, column.key); }} onPointerUp={() => setDraggedExpenseColumn(null)} onPointerCancel={() => setDraggedExpenseColumn(null)} onClick={() => { if (expenseColumnWasDragged.current) { expenseColumnWasDragged.current = false; return; } changeExpenseSort(column.key); }} title="Click to sort; drag to reorder"><span>{column.label}</span><span className="sortPair" aria-hidden="true"><i /><b /></span></button>)}<span className="inventoryHeaderSpacer" /></div>{visibleExpenses.map((expense) => <div role="row" tabIndex={0} aria-selected={selectedExpenseSet.has(expense.id)} aria-label={`Expense ${expense.externalKey}`} className={`expenseRow ${expense.personal ? "personal" : ""} ${expense.canceled ? "canceled" : ""} ${selectedExpenseSet.has(expense.id) ? "selected" : ""}`} key={expense.id} onClick={(event) => selectExpenseRow(expense.id, event.shiftKey)} onKeyDown={(event) => { if (event.target !== event.currentTarget || (event.key !== "Enter" && event.key !== " ")) return; event.preventDefault(); selectExpenseRow(expense.id, event.shiftKey); }}>{visibleColumns.map((column) => <span key={column.key}>{expenseCell(expense, column)}</span>)}<button aria-label={`Delete expense ${expense.externalKey}`} onClick={(event) => { event.stopPropagation(); if (!confirm(`Delete expense ${expense.externalKey}?`)) return; expenseSelection.remove([expense.id]); onDeleteExpense(expense.id); }}>×</button></div>)}{!visibleExpenses.length && <Empty text="No expense records match this view." />}</div></div>
     </section>
     <div className="disclaimer"><strong>Good records, calmer filing.</strong><span>The Tax center uses the selected tax year for its filing worksheet. This ledger shows all years unless you filter it.</span></div>
     {expenseImport && <Modal className="expenseImportModal" title="Review expense import" eyebrow="Duplicate-safe import" onClose={() => { setExpenseImport(null); setExpenseImportFile(null); setExpenseImportQuery(""); setImportPurchaseSource(""); }}>
