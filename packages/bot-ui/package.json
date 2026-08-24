@@ -1,0 +1,13 @@
+{
+  "name": "@aehrath/bot-ui",
+  "version": "1.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.tsx"
+  },
+  "types": "./src/index.tsx",
+  "peerDependencies": {
+    "react": ">=19"
+  }
+}

@@ -350,7 +350,7 @@ test("supports multi-select expense category changes and deletion", async () => 
   const [page, styles, botUi] = await Promise.all([
     read("app/page.tsx"),
     read("app/globals.css"),
-    read("../My Bot UI/src/index.tsx"),
+    read("packages/bot-ui/src/index.tsx"),
   ]);
   assert.match(page, /selectedExpenseIds/);
   assert.match(page, /const selectExpenseRow = expenseSelection\.toggle/);
@@ -390,7 +390,7 @@ test("offers shared bounded workspace undo and redo with visible buttons and key
     read("app/page.tsx"),
     read("app/globals.css"),
     read("app/changelog.ts"),
-    read("../My Bot UI/src/index.tsx"),
+    read("packages/bot-ui/src/index.tsx"),
   ]);
   assert.match(page, /const MAX_UNDO_STEPS = 50/);
   assert.match(page, /useUndoRedoState\(seed, MAX_UNDO_STEPS\)/);
@@ -419,10 +419,10 @@ test("offers shared bounded workspace undo and redo with visible buttons and key
   assert.match(changelog, /version: "0\.40\.0"/);
 });
 
-test("shares row selection, shift ranges, and retry-safe bulk deletion through My Bot UI", async () => {
+test("shares row selection, shift ranges, and retry-safe bulk deletion through bot-ui", async () => {
   const [page, botUi] = await Promise.all([
     read("app/page.tsx"),
-    read("../My Bot UI/src/index.tsx"),
+    read("packages/bot-ui/src/index.tsx"),
   ]);
   assert.match(page, /useDataGridSelection\(visibleExpenseIds\)/);
   assert.match(page, /const selectExpenseRow = expenseSelection\.toggle/);
@@ -430,11 +430,11 @@ test("shares row selection, shift ranges, and retry-safe bulk deletion through M
   assert.match(botUi, /export function useDataGridSelection/);
   assert.match(botUi, /visibleIds\.slice\(start, end \+ 1\)/);
   assert.match(botUi, /allVisibleSelected/);
-  assert.match(botUi, /Shift-click selects a range/);
+  assert.match(botUi, /if \(range && anchorId\)/);
   assert.match(botUi, /onClick=\{\(event\) => \{ if \(!rowClickIsInteractive\(event\.target\)\) selection\.toggle\(id, event\.shiftKey\); \}\}/);
   assert.match(botUi, /if \(deleted !== false\) selection\.remove\(ids\)/);
   assert.match(botUi, /Preserve selection for retry/);
-  assert.match(botUi, /event\.key !== "Delete" && event\.key !== "Backspace"/);
+  assert.match(botUi, /event\.key === "Delete" \|\| event\.key === "Backspace"/);
 });
 
 test("keeps personal expenses visible but out of business calculations", async () => {
