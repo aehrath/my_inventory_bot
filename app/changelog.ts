@@ -13,6 +13,28 @@ export type ChangelogRelease = {
 
 export const changelogReleases: readonly ChangelogRelease[] = [
   {
+    version: "0.41.0",
+    date: "August 24, 2026",
+    title: "AliExpress paste import",
+    summary: "Copied AliExpress order history can now become duplicate-safe expense records without preparing a file.",
+    sections: [
+      {
+        title: "Added",
+        items: [
+          "Added a paste window that reads AliExpress order status, date, reference number, supplier, item details, quantity, price, and total.",
+          "Added supplier checkboxes that hide selected vendors from the expense ledger without changing saved records or totals.",
+        ],
+      },
+      {
+        title: "Changed",
+        items: [
+          "AliExpress reference numbers now update matching expenses instead of creating duplicate orders.",
+          "Canceled AliExpress orders remain available for audit while staying excluded from business totals.",
+        ],
+      },
+    ],
+  },
+  {
     version: "0.40.0",
     date: "August 22, 2026",
     title: "Undo and redo",

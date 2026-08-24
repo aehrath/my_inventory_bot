@@ -54,6 +54,10 @@ export const amazonOrderHistoryCsvColumns = [
   "Shipping Option", "Total Amount", "Total Discounts", "Unit Price", "Unit Price Tax", "Website",
 ] as const;
 
+export const aliExpressPasteColumns = [
+  "Order Status", "Order Date", "Ref. Number", "Store", "Item Details", "Unit Price", "Quantity", "Order Total",
+] as const;
+
 export type ExpenseCategory = string;
 
 export type ImportedExpense = {
@@ -238,6 +242,53 @@ const categoryForAmazonOrder = (rows: Array<Record<string, unknown>>): ExpenseCa
   return categories.length === 1 ? categories[0] : "Review needed";
 };
 
+const aliExpressStatusPattern = "Completed|Cancel(?:l)?ed|Awaiting delivery|To ship|Shipped|Processing|Unpaid|Refund processing|Closed";
+const isAliExpressOrderText = (text: string) => new RegExp(`(?:^|\\n)\\s*(?:${aliExpressStatusPattern})\\s*\\r?\\n\\s*Date:\\s*[^\\n]+\\r?\\n\\s*Ref\\.\\s*Number:\\s*\\d+`, "i").test(text);
+
+const parseAliExpressOrders = (text: string) => {
+  const records: Array<Record<string, unknown>> = [];
+  const orderPattern = new RegExp(`(?:^|\\n)\\s*(${aliExpressStatusPattern})\\s*\\r?\\n\\s*Date:\\s*([^\\n]+)\\r?\\n\\s*Ref\\.\\s*Number:\\s*(\\d+)\\s*\\r?\\n\\s*Copy\\s*\\r?\\n\\s*Details\\s*\\r?\\n([\\s\\S]*?)(?=\\r?\\n\\s*(?:${aliExpressStatusPattern})\\s*\\r?\\n\\s*Date:|\\s*$)`, "gi");
+  for (const match of text.matchAll(orderPattern)) {
+    const [, status, rawDate, reference, rawBody] = match;
+    const lines = rawBody.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    const totalIndex = lines.findIndex((line) => /^Total\s*:\s*\$/i.test(line));
+    const totalMatch = (totalIndex >= 0 ? lines[totalIndex] : "").match(/^Total\s*:\s*\$\s*([\d,]+(?:\.\d{1,2})?)/i);
+    const vendor = lines[0] && !/^Total\s*:/i.test(lines[0]) ? lines[0] : "AliExpress";
+    const beforeTotal = lines.slice(1, totalIndex >= 0 ? totalIndex : lines.length);
+    const priceLine = beforeTotal.find((line) => /^\$\s*[\d,]+(?:\.\d{1,2})?\s+x\s*\d+/i.test(line));
+    const priceMatch = priceLine?.match(/^\$\s*([\d,]+(?:\.\d{1,2})?)\s+x\s*(\d+)/i);
+    const itemLines = beforeTotal.filter((line) => line !== priceLine
+      && !/^title img$/i.test(line)
+      && !/^\d+\s+items?$/i.test(line)
+      && !/^\$?\d+(?:\.\d+)?\s+coupon/i.test(line)
+      && !/^(?:Free returns?|Fast delivery|·)$/i.test(line));
+    const itemDetails = itemLines.join(" · ");
+    const amount = totalMatch ? Number(totalMatch[1].replace(/,/g, "")) : Number.NaN;
+    const fields = {
+      "Order Status": status,
+      "Order Date": rawDate.trim(),
+      "Ref. Number": reference,
+      Store: vendor,
+      "Item Details": itemDetails,
+      "Unit Price": priceMatch?.[1] ? `$${priceMatch[1]}` : "",
+      Quantity: priceMatch?.[2] ?? "",
+      "Order Total": totalMatch?.[0] ?? "",
+    };
+    records.push({
+      externalkey: reference,
+      purchasesource: "AliExpress",
+      vendor,
+      category: categoryForAmazonLine({ title: itemDetails }),
+      amount,
+      date: rawDate,
+      note: itemDetails,
+      canceled: isCanceledOrderStatus(status),
+      fields,
+    });
+  }
+  return records;
+};
+
 export function parseExpenseImportText(
   text: string,
   fileName: string,
@@ -248,7 +299,10 @@ export function parseExpenseImportText(
   let records: Array<Record<string, unknown>> = [];
   let sourceColumns: Array<{ key: string; label: string }> = [];
   const trimmed = text.trim();
-  if (fileName.toLowerCase().endsWith(".json") || trimmed.startsWith("[") || trimmed.startsWith("{")) {
+  if (isAliExpressOrderText(trimmed)) {
+    sourceColumns = aliExpressPasteColumns.map((label) => ({ key: canonicalField(label), label }));
+    records = parseAliExpressOrders(trimmed);
+  } else if (fileName.toLowerCase().endsWith(".json") || trimmed.startsWith("[") || trimmed.startsWith("{")) {
     const parsed = JSON.parse(text) as unknown;
     const list = Array.isArray(parsed)
       ? parsed

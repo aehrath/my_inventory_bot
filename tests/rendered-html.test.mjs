@@ -416,7 +416,7 @@ test("offers shared bounded workspace undo and redo with visible buttons and key
   assert.match(page, /if \(event\.shiftKey\) redo\(\); else undo\(\)/);
   assert.match(page, /window\.addEventListener\("keydown", handleUndoShortcut, true\)/);
   assert.match(styles, /\.topActions \.undoButton:disabled,\.topActions \.redoButton:disabled/);
-  assert.match(changelog, /version: "0\.40\.0"/);
+  assert.match(changelog, /version: "0\.41\.0"/);
 });
 
 test("shares row selection, shift ranges, and retry-safe bulk deletion through bot-ui", async () => {
@@ -435,6 +435,18 @@ test("shares row selection, shift ranges, and retry-safe bulk deletion through b
   assert.match(botUi, /if \(deleted !== false\) selection\.remove\(ids\)/);
   assert.match(botUi, /Preserve selection for retry/);
   assert.match(botUi, /event\.key === "Delete" \|\| event\.key === "Backspace"/);
+});
+
+test("offers pasted AliExpress imports and supplier visibility checkboxes", async () => {
+  const [page, styles] = await Promise.all([read("app/page.tsx"), read("app/globals.css")]);
+  assert.match(page, /Paste AliExpress orders/);
+  assert.match(page, /parseExpenseImportText\(text, file\.name/);
+  assert.match(page, /Existing reference numbers will be updated, not duplicated/);
+  assert.match(page, /Visible suppliers/);
+  assert.match(page, /checked=\{!hiddenVendorSet\.has\(vendor\)\}/);
+  assert.match(page, /const matchesVendor = !hiddenVendorSet\.has/);
+  assert.match(styles, /\.pasteOrderField textarea/);
+  assert.match(styles, /\.supplierFilterOption/);
 });
 
 test("keeps personal expenses visible but out of business calculations", async () => {

@@ -41,6 +41,8 @@ time and import count, and explicitly tells the user that the document existed.
 
 The Tax Center includes a categorized expense ledger and accepts CSV or JSON records. Every imported row must provide a stable unique key, such as an Amazon order ID, invoice ID, receipt ID, or bank transaction ID. InventoryBot normalizes key casing and whitespace, rejects keys already in the database, rejects duplicates within the same file, previews the result, and performs the duplicate check again when the user applies the import.
 
+AliExpress orders can be copied directly from the AliExpress order-history page and pasted into the Expenses import window. InventoryBot reads each order card, uses `Ref. Number` as the stable unique key, preserves canceled orders for audit, and updates existing matching references instead of duplicating them.
+
 Supported CSV headers include:
 
 ```text

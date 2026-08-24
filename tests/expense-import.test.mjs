@@ -234,3 +234,37 @@ test("preserves configured custom categories during expense import", () => {
 
   assert.equal(preview.ready[0].category, "Subscriptions");
 });
+
+test("parses copied AliExpress orders and deduplicates by reference number", () => {
+  const text = [
+    "Completed", "Date: Aug 9, 2026", "Ref. Number: 8213949817724907", "Copy", "Details",
+    "Shop1102903217 Store", "1-5PCS AS6C62256-55PCN DIP-28 memory chip", "5PCS", "$24.16   x1",
+    "$1 coupon if delayed", "Free returns", "Total:$29.92", "Write a review",
+    "Canceled", "Date: Jan 28, 2026", "Ref. Number: 8208789644244907", "Copy", "Details",
+    "LAKE Store", "5 unids/lote CY62256 DIP-28", "$3.38   x4", "Free returns", "·", "Fast delivery", "Total:$20.62",
+    "Refund complete", "Refund has been issued.",
+  ].join("\n");
+  const preview = parseExpenseImportText(text, "aliexpress-orders.txt", ["8213949817724907"], "2026-08-24T00:00:00.000Z");
+
+  assert.equal(preview.ready.length, 1);
+  assert.equal(preview.updates.length, 1);
+  assert.equal(preview.updates[0].externalKey, "8213949817724907");
+  assert.equal(preview.updates[0].purchaseSource, "AliExpress");
+  assert.equal(preview.updates[0].vendor, "Shop1102903217 Store");
+  assert.equal(preview.updates[0].amount, 29.92);
+  assert.equal(preview.updates[0].date, "2026-08-09");
+  assert.match(preview.updates[0].note, /AS6C62256/);
+  assert.equal(preview.updates[0].fields["Ref. Number"], "8213949817724907");
+  assert.equal(preview.updates[0].fields.Quantity, "1");
+  assert.equal(preview.ready[0].canceled, true);
+  assert.equal(preview.ready[0].amount, 20.62);
+  assert.equal(preview.readyTotal, 29.92);
+  assert.deepEqual(preview.years, [2026]);
+});
+
+test("skips repeated AliExpress references pasted in the same import", () => {
+  const order = ["Completed", "Date: May 31, 2026", "Ref. Number: 8211977349874907", "Copy", "Details", "EstarDyn Factory Store", "Display module", "$2.01 x5", "Total:$10.05"].join("\n");
+  const preview = parseExpenseImportText(`${order}\n${order}`, "aliexpress-orders.txt", []);
+  assert.equal(preview.ready.length, 1);
+  assert.deepEqual(preview.duplicates, ["8211977349874907"]);
+});
