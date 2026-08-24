@@ -1082,7 +1082,7 @@ function Expenses({ state, setState, documents, onDocumentsChanged, onExpense, o
   const deleteSelectedExpenses = useCallback(() => {
     if (!selectedExpenseIds.length) return;
     const count = selectedExpenseIds.length;
-    if (!confirm(`Delete ${count} selected expense record${count === 1 ? "" : "s"}? This cannot be undone.`)) return;
+    if (!confirm(`Delete ${count} selected expense record${count === 1 ? "" : "s"}? You can undo this change.`)) return;
     const selected = new Set(selectedExpenseIds);
     setState((current) => ({ ...current, expenses: current.expenses.filter((expense) => !selected.has(expense.id)) }));
     expenseSelection.clear();
