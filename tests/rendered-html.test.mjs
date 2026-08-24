@@ -389,7 +389,7 @@ test("offers shared bounded workspace undo and redo with visible buttons and key
     read("app/page.tsx"),
     read("app/globals.css"),
     read("app/changelog.ts"),
-    read("packages/workshop-data-grid/src/index.tsx"),
+    read("../My Bot UI/src/index.tsx"),
   ]);
   assert.match(page, /const MAX_UNDO_STEPS = 50/);
   assert.match(page, /useUndoRedoState\(seed, MAX_UNDO_STEPS\)/);

@@ -14,7 +14,7 @@ import type { ImportDocumentIndex, ImportDocumentLinkInput } from "./import-docu
 import { SourceDocumentDateCell, SourceDocumentSellerCell, SourceDocumentsCell } from "./source-documents";
 import { defaultStateTaxSettings, stateName, stateTaxDefaults } from "./tax-data";
 import type { TaxAddress, TaxRateLookup, TaxRateLookupResponse, TaxSourceStatus } from "./tax-rate-types";
-import { compareGridValues, moveGridColumn, useUndoRedoState } from "../packages/workshop-data-grid";
+import { compareGridValues, moveGridColumn, useUndoRedoState } from "@aehrath/bot-ui";
 
 type View = "dashboard" | "products" | "customers" | "activity" | "cogs" | "expenses" | "taxes" | "history" | "data" | "changelog";
 type MovementType = "purchase" | "sale" | "production_use" | "personal_use" | "adjustment";
