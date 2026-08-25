@@ -281,3 +281,21 @@ test("classifies 74-series logic ICs as raw materials even for a single chip", (
   assert.equal(preview.ready[0].category, "Raw materials");
   assert.equal(preview.ready[1].category, "Raw materials");
 });
+
+test("uses the selected AliExpress logic IC option instead of the full option catalog", () => {
+  const text = [
+    "Completed", "Date: Aug 24, 2026", "Ref. Number: 8214000000000003", "Copy", "Details",
+    "IC Parts Store",
+    "10PCS 74LS148 74LS151 74LS153 74LS155 74LS156 74LS157 74LS158 74LS162 74LS169 74LS170 DIP-16 SN74LS148N SN74LS151N SN74LS153N",
+    "SN74LS158N", "$3.72 x10", "Total:$37.20",
+  ].join("\n");
+  const preview = parseExpenseImportText(text, "aliexpress-orders.txt", []);
+  const expense = preview.ready[0];
+
+  assert.equal(expense.note, "10PCS SN74LS158N");
+  assert.equal(expense.fields["Selected Option"], "SN74LS158N");
+  assert.equal(expense.fields["Pack Size"], "10PCS");
+  assert.match(expense.fields["Item Details"], /74LS148 74LS151/);
+  assert.equal(expense.fields.Quantity, "10");
+  assert.equal(expense.category, "Raw materials");
+});

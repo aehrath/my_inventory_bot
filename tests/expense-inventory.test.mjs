@@ -69,6 +69,14 @@ test("expands AliExpress piece labels and multiplies by the ordered quantity", (
   });
 });
 
+test("keeps the selected AliExpress option as the inventory name while expanding its pack", () => {
+  assert.deepEqual(parseExpenseInventoryDescription("10PCS SN74LS158N", 37.2, 10), {
+    name: "SN74LS158N",
+    quantity: 100,
+    unitCost: 0.372,
+  });
+});
+
 test("reads a single imported marketplace order quantity safely", () => {
   assert.equal(importedExpenseOrderQuantity({ Quantity: "5" }), 5);
   assert.equal(importedExpenseOrderQuantity({ "Item Quantity": "100" }), 100);

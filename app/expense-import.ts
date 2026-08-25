@@ -55,7 +55,8 @@ export const amazonOrderHistoryCsvColumns = [
 ] as const;
 
 export const aliExpressPasteColumns = [
-  "Order Status", "Order Date", "Ref. Number", "Store", "Item Details", "Unit Price", "Quantity", "Order Total",
+  "Order Status", "Order Date", "Ref. Number", "Store", "Item Details", "Selected Option", "Pack Size",
+  "Unit Price", "Quantity", "Order Total",
 ] as const;
 
 export type ExpenseCategory = string;
@@ -246,6 +247,28 @@ const categoryForAmazonOrder = (rows: Array<Record<string, unknown>>): ExpenseCa
 const aliExpressStatusPattern = "Completed|Cancel(?:l)?ed|Awaiting delivery|To ship|Shipped|Processing|Unpaid|Refund processing|Closed";
 const isAliExpressOrderText = (text: string) => new RegExp(`(?:^|\\n)\\s*(?:${aliExpressStatusPattern})\\s*\\r?\\n\\s*Date:\\s*[^\\n]+\\r?\\n\\s*Ref\\.\\s*Number:\\s*\\d+`, "i").test(text);
 
+const aliExpressLogicPartPattern = /\b(?:SN)?74(?:LS|ALS|F|S|HC|HCT|AC|ACT)[A-Z0-9-]*\b/gi;
+
+const chosenAliExpressLogicOption = (itemLines: readonly string[]) => {
+  const listingTitle = itemLines[0] ?? "";
+  const listedOptions = listingTitle.match(aliExpressLogicPartPattern) ?? [];
+  if (listedOptions.length < 2) return { selectedOption: "", packSize: "", displayDetails: itemLines.join(" · ") };
+
+  const normalizePart = (part: string) => part.toUpperCase().replace(/^SN/, "");
+  const selectedOption = itemLines.slice(1).map((line) => {
+    const options = line.match(aliExpressLogicPartPattern) ?? [];
+    return options.length === 1 && line.trim().toUpperCase() === options[0].toUpperCase() ? options[0] : "";
+  }).find((option) => option && listedOptions.some((listedOption) => {
+    const selectedPart = normalizePart(option);
+    const listedPart = normalizePart(listedOption);
+    return selectedPart === listedPart || selectedPart.startsWith(listedPart) || listedPart.startsWith(selectedPart);
+  })) ?? "";
+
+  if (!selectedOption) return { selectedOption: "", packSize: "", displayDetails: itemLines.join(" · ") };
+  const packSize = listingTitle.match(/\b\d[\d,]*\s*(?:pcs?|pieces?|units?|count|ct)\b/i)?.[0].replace(/\s+/g, "") ?? "";
+  return { selectedOption, packSize, displayDetails: [packSize, selectedOption].filter(Boolean).join(" ") };
+};
+
 const parseAliExpressOrders = (text: string) => {
   const records: Array<Record<string, unknown>> = [];
   const orderPattern = new RegExp(`(?:^|\\n)\\s*(${aliExpressStatusPattern})\\s*\\r?\\n\\s*Date:\\s*([^\\n]+)\\r?\\n\\s*Ref\\.\\s*Number:\\s*(\\d+)\\s*\\r?\\n\\s*Copy\\s*\\r?\\n\\s*Details\\s*\\r?\\n([\\s\\S]*?)(?=\\r?\\n\\s*(?:${aliExpressStatusPattern})\\s*\\r?\\n\\s*Date:|\\s*$)`, "gi");
@@ -264,6 +287,7 @@ const parseAliExpressOrders = (text: string) => {
       && !/^\$?\d+(?:\.\d+)?\s+coupon/i.test(line)
       && !/^(?:Free returns?|Fast delivery|·)$/i.test(line));
     const itemDetails = itemLines.join(" · ");
+    const chosenOption = chosenAliExpressLogicOption(itemLines);
     const amount = totalMatch ? Number(totalMatch[1].replace(/,/g, "")) : Number.NaN;
     const fields = {
       "Order Status": status,
@@ -271,6 +295,8 @@ const parseAliExpressOrders = (text: string) => {
       "Ref. Number": reference,
       Store: vendor,
       "Item Details": itemDetails,
+      "Selected Option": chosenOption.selectedOption,
+      "Pack Size": chosenOption.packSize,
       "Unit Price": priceMatch?.[1] ? `$${priceMatch[1]}` : "",
       Quantity: priceMatch?.[2] ?? "",
       "Order Total": totalMatch?.[0] ?? "",
@@ -279,10 +305,10 @@ const parseAliExpressOrders = (text: string) => {
       externalkey: reference,
       purchasesource: "AliExpress",
       vendor,
-      category: categoryForAmazonLine({ title: itemDetails }),
+      category: categoryForAmazonLine({ title: chosenOption.displayDetails }),
       amount,
       date: rawDate,
-      note: itemDetails,
+      note: chosenOption.displayDetails,
       canceled: isCanceledOrderStatus(status),
       fields,
     });
