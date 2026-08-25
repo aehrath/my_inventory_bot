@@ -7,6 +7,7 @@ All notable changes to InventoryBot are documented here.
 ### Changed
 
 - AliExpress imports now recognize a clearly selected 74-series IC variant beneath a multi-option listing, display only that chosen model, and retain the listing pack size for per-piece quantity and cost calculations.
+- Quantity-only AliExpress selections such as `5PCS` now replace ambiguous listing ranges such as `1-5PCS`, keeping the product description accurate while using the chosen pack for inventory quantity and unit cost.
 
 ## 0.40.0 - 2026-08-22
 

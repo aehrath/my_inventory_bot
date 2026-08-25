@@ -249,8 +249,29 @@ const isAliExpressOrderText = (text: string) => new RegExp(`(?:^|\\n)\\s*(?:${al
 
 const aliExpressLogicPartPattern = /\b(?:SN)?74(?:LS|ALS|F|S|HC|HCT|AC|ACT)[A-Z0-9-]*\b/gi;
 
-const chosenAliExpressLogicOption = (itemLines: readonly string[]) => {
+const chosenAliExpressOption = (itemLines: readonly string[]) => {
   const listingTitle = itemLines[0] ?? "";
+  const quantitySelection = itemLines.slice(1).map((line) => {
+    const match = line.match(/^(\d[\d,]*)\s*(pcs?|pieces?|units?|count|ct)$/i);
+    const count = match ? Number(match[1].replace(/,/g, "")) : Number.NaN;
+    return match && Number.isSafeInteger(count) && count > 0
+      ? { count, label: `${match[1]}${match[2]}` }
+      : null;
+  }).find(Boolean);
+  const quantityRange = listingTitle.match(/\b(\d[\d,]*)\s*-\s*(\d[\d,]*)\s*(pcs?|pieces?|units?|count|ct)\b/i);
+  if (quantitySelection && quantityRange) {
+    const minimum = Number(quantityRange[1].replace(/,/g, ""));
+    const maximum = Number(quantityRange[2].replace(/,/g, ""));
+    if (quantitySelection.count >= minimum && quantitySelection.count <= maximum) {
+      const packSize = quantitySelection.label.replace(/\s+/g, "");
+      return {
+        selectedOption: packSize,
+        packSize,
+        displayDetails: listingTitle.replace(quantityRange[0], packSize),
+      };
+    }
+  }
+
   const listedOptions = listingTitle.match(aliExpressLogicPartPattern) ?? [];
   if (listedOptions.length < 2) return { selectedOption: "", packSize: "", displayDetails: itemLines.join(" · ") };
 
@@ -287,7 +308,7 @@ const parseAliExpressOrders = (text: string) => {
       && !/^\$?\d+(?:\.\d+)?\s+coupon/i.test(line)
       && !/^(?:Free returns?|Fast delivery|·)$/i.test(line));
     const itemDetails = itemLines.join(" · ");
-    const chosenOption = chosenAliExpressLogicOption(itemLines);
+    const chosenOption = chosenAliExpressOption(itemLines);
     const amount = totalMatch ? Number(totalMatch[1].replace(/,/g, "")) : Number.NaN;
     const fields = {
       "Order Status": status,

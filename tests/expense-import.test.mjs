@@ -253,8 +253,11 @@ test("parses copied AliExpress orders and deduplicates by reference number", () 
   assert.equal(preview.updates[0].vendor, "Shop1102903217 Store");
   assert.equal(preview.updates[0].amount, 29.92);
   assert.equal(preview.updates[0].date, "2026-08-09");
-  assert.match(preview.updates[0].note, /AS6C62256/);
+  assert.equal(preview.updates[0].note, "5PCS AS6C62256-55PCN DIP-28 memory chip");
   assert.equal(preview.updates[0].fields["Ref. Number"], "8213949817724907");
+  assert.equal(preview.updates[0].fields["Selected Option"], "5PCS");
+  assert.equal(preview.updates[0].fields["Pack Size"], "5PCS");
+  assert.match(preview.updates[0].fields["Item Details"], /1-5PCS AS6C62256/);
   assert.equal(preview.updates[0].fields.Quantity, "1");
   assert.equal(preview.ready[0].canceled, true);
   assert.equal(preview.ready[0].amount, 20.62);

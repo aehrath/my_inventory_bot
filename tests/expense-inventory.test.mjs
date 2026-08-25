@@ -77,6 +77,14 @@ test("keeps the selected AliExpress option as the inventory name while expanding
   });
 });
 
+test("uses an AliExpress quantity option to clean the product name and expand its pack", () => {
+  assert.deepEqual(parseExpenseInventoryDescription("5PCS AS6C62256-55PCN AS6C62256 in-line DIP-28 memory chip new spot", 24.16, 1), {
+    name: "AS6C62256-55PCN AS6C62256 in-line DIP-28 memory chip new spot",
+    quantity: 5,
+    unitCost: 4.832,
+  });
+});
+
 test("reads a single imported marketplace order quantity safely", () => {
   assert.equal(importedExpenseOrderQuantity({ Quantity: "5" }), 5);
   assert.equal(importedExpenseOrderQuantity({ "Item Quantity": "100" }), 100);
